@@ -1,12 +1,14 @@
 import os
-import re
-import smtplib
 from datetime import datetime
-from email.mime.text import MIMEText
+from io import BytesIO
 
 import joblib
 import pandas as pd
 import streamlit as st
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # ---------------------------------------------------------------------------
 # Page configuration
@@ -23,7 +25,6 @@ COLUMNS_PATH = "feature_columns.pkl"
 SAVE_FILE_XLSX = "saved_reports.xlsx"  # admin-only saved records (Excel)
 
 
-# Email / admin settings (read from st.secrets if available, otherwise env vars)
 def _get_secret(key: str, default: str = "") -> str:
     try:
         if key in st.secrets:
@@ -32,11 +33,6 @@ def _get_secret(key: str, default: str = "") -> str:
         pass
     return os.environ.get(key, default)
 
-
-EMAIL_ADDRESS = _get_secret("EMAIL_ADDRESS")
-EMAIL_PASSWORD = _get_secret("EMAIL_PASSWORD")
-SMTP_SERVER = _get_secret("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(_get_secret("SMTP_PORT", "587") or 587)
 
 ADMIN_PASSWORD = _get_secret("ADMIN_PASSWORD", "admin123")
 
@@ -124,7 +120,7 @@ with st.form("patient_form", clear_on_submit=False):
     with c3:
         phone = st.text_input("Phone number *")
     with c4:
-        patient_email = st.text_input("Email address *")
+        patient_email = st.text_input("Email address (optional)")
 
     address = st.text_input("Residential address (city / area) *")
 
@@ -216,15 +212,6 @@ def predict_new_patient(raw_input: dict):
     prediction = 1 if probability >= 0.50 else 0
 
     return prediction, probability
-
-
-# تعديل دالة التحقق لمنع الأخطاء الناتجة عن المسافات التلقائية للهاتف
-def is_valid_email(value: str) -> bool:
-    if not value:
-        return False
-    clean_value = value.strip()
-    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-    return bool(re.match(pattern, clean_value, re.IGNORECASE))
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +342,112 @@ def render_offline_health_guide():
 
 
 # ---------------------------------------------------------------------------
-# Report storage and email sending
+# PDF Generation Function
+# ---------------------------------------------------------------------------
+def generate_pdf_report(report_data: dict) -> bytes:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=40,
+        leftMargin=40,
+        topMargin=40,
+        bottomMargin=40,
+    )
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "DocTitle",
+        parent=styles["Title"],
+        fontSize=20,
+        textColor=colors.HexColor("#0f4c81"),
+        spaceAfter=15,
+        alignment=1,
+    )
+    heading_style = ParagraphStyle(
+        "Heading2Custom",
+        parent=styles["Heading2"],
+        fontSize=13,
+        textColor=colors.HexColor("#0f4c81"),
+        spaceBefore=12,
+        spaceAfter=6,
+    )
+    body_style = ParagraphStyle(
+        "BodyCustom",
+        parent=styles["Normal"],
+        fontSize=10,
+        leading=14,
+    )
+
+    elements = []
+
+    elements.append(Paragraph("🩺 Early Stage Diabetes Assessment Report", title_style))
+    elements.append(Paragraph(f"<b>Generated Date:</b> {report_data.get('Timestamp', '')}", body_style))
+    elements.append(Spacer(1, 15))
+
+    # Patient info table
+    elements.append(Paragraph("Patient Details", heading_style))
+    patient_info = [
+        ["Full Name:", f"{report_data.get('First name', '')} {report_data.get('Last name', '')}"],
+        ["Age / Gender:", f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"],
+        ["Phone Number:", report_data.get("Phone", "")],
+        ["Email:", report_data.get("Email", "N/A")],
+        ["Address:", report_data.get("Address", "")],
+        ["Believed Type:", report_data.get("Reported diabetes type", "")],
+    ]
+    t1 = Table(patient_info, colWidths=[120, 380])
+    t1.setStyle(
+        TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f4f8")),
+            ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+        ])
+    )
+    elements.append(t1)
+    elements.append(Spacer(1, 15))
+
+    # Result Table
+    elements.append(Paragraph("Assessment Result", heading_style))
+    is_positive = "Positive" in report_data.get("Result", "")
+    res_color = colors.HexColor("#dc2626") if is_positive else colors.HexColor("#16a34a")
+
+    res_data = [
+        ["Risk Assessment:", report_data.get("Result", "")],
+        ["Estimated Probability:", report_data.get("Probability", "")],
+        ["Additional Symptoms Present:", report_data.get("Notable extra symptoms", "")],
+    ]
+    t2 = Table(res_data, colWidths=[160, 340])
+    t2.setStyle(
+        TableStyle([
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("TEXTCOLOR", (1, 0), (1, 0), res_color),
+            ("FONTNAME", (1, 0), (1, 0), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+        ])
+    )
+    elements.append(t2)
+    elements.append(Spacer(1, 20))
+
+    # Disclaimer
+    disclaimer_text = (
+        "<b>Disclaimer:</b> This report is generated by an AI model for educational and demonstration "
+        "purposes only. It is NOT a medical diagnosis. Please consult a qualified doctor or healthcare "
+        "provider for proper clinical evaluation and diagnosis."
+    )
+    elements.append(Paragraph(disclaimer_text, body_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Report storage
 # ---------------------------------------------------------------------------
 def save_report_to_excel(report: dict):
     new_row = pd.DataFrame([report])
@@ -372,33 +464,10 @@ def save_report_to_excel(report: dict):
     combined.to_excel(SAVE_FILE_XLSX, index=False, engine="openpyxl")
 
 
-def send_report_email(to_address: str, subject: str, body: str):
-    if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
-        return False, (
-            "Email sending hasn't been configured yet. Add EMAIL_ADDRESS "
-            "and EMAIL_PASSWORD to your .streamlit/secrets.toml file to "
-            "enable this feature."
-        )
-    try:
-        msg = MIMEText(body, "plain", "utf-8")
-        msg["Subject"] = subject
-        msg["From"] = EMAIL_ADDRESS
-        msg["To"] = to_address
-
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            server.sendmail(EMAIL_ADDRESS, [to_address], msg.as_string())
-        return True, "Your report was sent successfully to your email."
-    except Exception as exc:  # noqa: BLE001
-        return False, f"Could not send the email: {exc}"
-
-
 # ---------------------------------------------------------------------------
 # Form Submission Logic
 # ---------------------------------------------------------------------------
 if submitted:
-    # إزالة المسافات الزائدة من البداية والنهاية لجميع المدخلات
     clean_first_name = first_name.strip()
     clean_last_name = last_name.strip()
     clean_phone = phone.strip()
@@ -414,8 +483,6 @@ if submitted:
         errors.append("Phone number is required.")
     if not clean_address:
         errors.append("Residential address is required.")
-    if not is_valid_email(clean_email):
-        errors.append("Please enter a valid email address.")
 
     if errors:
         for e in errors:
@@ -431,7 +498,7 @@ if submitted:
             "First name": clean_first_name,
             "Last name": clean_last_name,
             "Phone": clean_phone,
-            "Email": clean_email,
+            "Email": clean_email if clean_email else "N/A",
             "Address": clean_address,
             "Reported diabetes type": diabetes_type,
             "Age": age,
@@ -442,7 +509,6 @@ if submitted:
         }
         st.session_state["last_result"] = int(result)
         st.session_state["last_probability"] = float(probability)
-        st.session_state["email_sent"] = False
         st.session_state["report_saved"] = False
 
 # ---------------------------------------------------------------------------
@@ -494,32 +560,19 @@ if "last_report" in st.session_state:
         st.session_state["report_saved"] = True
 
     st.divider()
-    st.subheader("📧 Would you like this result emailed to you?")
-    email_choice = st.radio(
-        "Your choice:",
-        ["No", "Yes"],
-        horizontal=True,
-        key="email_choice",
-    )
+    st.subheader("📄 Download Assessment Report")
 
-    if st.button("Confirm", key="confirm_email_choice"):
-        if email_choice == "Yes":
-            subject = "Your Early-Stage Diabetes Risk Report"
-            body_lines = [f"{k}: {v}" for k, v in report.items()]
-            body = "\n".join(body_lines) + (
-                "\n\nThe app includes an offline Healthy Lifestyle & Nutrition Guide."
-            )
-            ok, msg = send_report_email(report["Email"], subject, body)
-            if ok:
-                st.success(msg)
-                st.session_state["email_sent"] = True
-            else:
-                st.error(msg)
-        else:
-            st.info(
-                "No email was sent based on your choice. A copy of your "
-                "report has still been kept in the Saved Records section below."
-            )
+    pdf_data = generate_pdf_report(report)
+    file_name_pdf = f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
+
+    st.download_button(
+        label="📥 Download Report (PDF)",
+        data=pdf_data,
+        file_name=file_name_pdf,
+        mime="application/pdf",
+        type="primary",
+        use_container_width=True,
+    )
 
 # ---------------------------------------------------------------------------
 # Admin Panel
