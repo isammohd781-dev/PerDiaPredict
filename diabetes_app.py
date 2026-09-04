@@ -5,6 +5,7 @@ from io import BytesIO
 import joblib
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -555,6 +556,16 @@ if submitted:
         st.session_state["last_result"] = int(result)
         st.session_state["last_probability"] = float(probability)
         st.session_state["report_saved"] = False
+
+        # التوجيه والتمرير للقمة في الهواتف ذكياً وبصورة سلسة
+        components.html(
+            """
+            <script>
+                window.parent.scrollTo({top: 0, behavior: 'smooth'});
+            </script>
+            """,
+            height=0,
+        )
 
 # ---------------------------------------------------------------------------
 # Results display
