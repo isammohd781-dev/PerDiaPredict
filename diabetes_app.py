@@ -111,7 +111,7 @@ st.divider()
 # ---------------------------------------------------------------------------
 # Input form
 # ---------------------------------------------------------------------------
-with st.form("patient_form"):
+with st.form("patient_form", clear_on_submit=False):
     st.subheader("Personal Information")
 
     c1, c2 = st.columns(2)
@@ -218,8 +218,13 @@ def predict_new_patient(raw_input: dict):
     return prediction, probability
 
 
+# تعديل دالة التحقق لمنع الأخطاء الناتجة عن المسافات التلقائية للهاتف
 def is_valid_email(value: str) -> bool:
-    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value or ""))
+    if not value:
+        return False
+    clean_value = value.strip()
+    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    return bool(re.match(pattern, clean_value, re.IGNORECASE))
 
 
 # ---------------------------------------------------------------------------
@@ -393,16 +398,23 @@ def send_report_email(to_address: str, subject: str, body: str):
 # Form Submission Logic
 # ---------------------------------------------------------------------------
 if submitted:
+    # إزالة المسافات الزائدة من البداية والنهاية لجميع المدخلات
+    clean_first_name = first_name.strip()
+    clean_last_name = last_name.strip()
+    clean_phone = phone.strip()
+    clean_address = address.strip()
+    clean_email = patient_email.strip()
+
     errors = []
-    if not first_name.strip():
+    if not clean_first_name:
         errors.append("First name is required.")
-    if not last_name.strip():
+    if not clean_last_name:
         errors.append("Last name is required.")
-    if not phone.strip():
+    if not clean_phone:
         errors.append("Phone number is required.")
-    if not address.strip():
+    if not clean_address:
         errors.append("Residential address is required.")
-    if not is_valid_email(patient_email):
+    if not is_valid_email(clean_email):
         errors.append("Please enter a valid email address.")
 
     if errors:
@@ -416,11 +428,11 @@ if submitted:
 
         st.session_state["last_report"] = {
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "First name": first_name.strip(),
-            "Last name": last_name.strip(),
-            "Phone": phone.strip(),
-            "Email": patient_email.strip(),
-            "Address": address.strip(),
+            "First name": clean_first_name,
+            "Last name": clean_last_name,
+            "Phone": clean_phone,
+            "Email": clean_email,
+            "Address": clean_address,
             "Reported diabetes type": diabetes_type,
             "Age": age,
             "Gender": gender,
@@ -528,7 +540,6 @@ with st.expander("🔒 Admin Panel (staff only)"):
                     history_df = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
                     st.dataframe(history_df, use_container_width=True)
 
-                    # أزرار التحميل وتنظيف البيانات بجانب بعضهما
                     col_download, col_clean = st.columns(2)
 
                     with col_download:
@@ -545,7 +556,6 @@ with st.expander("🔒 Admin Panel (staff only)"):
                         if st.button("🗑️ Clean Data", type="secondary", use_container_width=True):
                             st.session_state["confirm_clean"] = True
 
-                    # إظهار رسالة الخيار للتأكيد في حال النقر على Clean Data
                     if st.session_state.get("confirm_clean", False):
                         st.warning("⚠️ Are you sure you want to delete all saved records? This action cannot be undone!")
 
