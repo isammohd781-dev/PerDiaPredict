@@ -5,6 +5,7 @@ from io import BytesIO
 import joblib
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -15,7 +16,7 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Early Stage Diabetes Prediction",
-    page_icon="logo.png" if os.path.exists("logo.png") else "🩺",
+    page_icon="🩺",
     layout="centered",
 )
 
@@ -90,38 +91,13 @@ diabetes_types = [
 ]
 
 # ---------------------------------------------------------------------------
-# Header (Centered Logo, App Name, & Title Below) — FIXED VERSION
+# Header
 # ---------------------------------------------------------------------------
-# Use the new transparent circular logo (no baked-in text) instead of the
-# old square banner. This avoids the stretching issue caused by combining
-# a fixed width with use_container_width=True.
-logo_path = "logo_photo.png"  # <- put the new transparent circular PNG here
-
-if os.path.exists(logo_path):
-    c_left, c_center, c_right = st.columns([1, 1, 1])
-    with c_center:
-        st.image(logo_path, width=180)  # fixed width only, no use_container_width
-
-    st.markdown(
-        "<p style='text-align: center; margin-top: 8px; margin-bottom: 0; "
-        "font-size: 1.3rem; font-weight: 700; letter-spacing: 0.5px;'>"
-        "PERDIA<span style='font-weight:400;'>PREDICT</span></p>"
-        "<p style='text-align: center; margin-top: 0; margin-bottom: 15px; "
-        "font-size: 0.85rem; color: #7fd6d6; letter-spacing: 1px;'>DIABETES APP</p>",
-        unsafe_allow_html=True,
-    )
-
-st.markdown(
-    "<h1 style='text-align: center; margin-top: 5px; margin-bottom: 10px; "
-    "font-size: 2.2rem; font-weight: 700;'>Early Stage Diabetes Prediction</h1>",
-    unsafe_allow_html=True,
+st.title("🩺 Early Stage Diabetes Prediction")
+st.write(
+    "Please fill in your personal information and symptoms below, then "
+    "click **Predict** to estimate the risk of early-stage diabetes."
 )
-
-st.markdown(
-    "<p style='text-align: center;'>Please fill in your personal information and symptoms below, then click <b>Predict</b> to estimate the risk of early-stage diabetes.</p>",
-    unsafe_allow_html=True,
-)
-
 st.caption(
     "⚠️ This tool is for educational/demo purposes only and is NOT a "
     "medical diagnosis. Always consult a qualified doctor for an "
@@ -238,261 +214,6 @@ def predict_new_patient(raw_input: dict):
 
     return prediction, probability
 
-
-# ---------------------------------------------------------------------------
-# PDF Generation Function
-# ---------------------------------------------------------------------------
-def generate_pdf_report(report_data: dict) -> bytes:
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=letter,
-        rightMargin=36,
-        leftMargin=36,
-        topMargin=36,
-        bottomMargin=36,
-    )
-    styles = getSampleStyleSheet()
-
-    title_style = ParagraphStyle(
-        "DocTitle",
-        parent=styles["Title"],
-        fontSize=18,
-        textColor=colors.HexColor("#0d3b66"),
-        alignment=0,
-        spaceAfter=4,
-    )
-
-    subtitle_style = ParagraphStyle(
-        "DocSubtitle",
-        parent=styles["Normal"],
-        fontSize=11,
-        textColor=colors.HexColor("#555555"),
-        alignment=0,
-    )
-
-    heading_style = ParagraphStyle(
-        "Heading2Custom",
-        parent=styles["Heading2"],
-        fontSize=12,
-        textColor=colors.HexColor("#0d3b66"),
-        spaceBefore=10,
-        spaceAfter=6,
-    )
-
-    body_style = ParagraphStyle(
-        "BodyCustom",
-        parent=styles["Normal"],
-        fontSize=9.5,
-        leading=13,
-    )
-
-    elements = []
-
-    # Header with Logo
-    title_text = Paragraph("<b>PERDIAPREDICT</b>", title_style)
-    sub_text = Paragraph("Early Stage Diabetes Assessment Report", subtitle_style)
-
-    header_text_cell = [title_text, sub_text]
-
-    pdf_logo = "logo.png" if os.path.exists("logo.png") else logo_path
-    if os.path.exists(pdf_logo):
-        logo_img = Image(pdf_logo, width=65, height=65)
-        header_table = Table([[logo_img, header_text_cell]], colWidths=[75, 465])
-    else:
-        header_table = Table([[header_text_cell]], colWidths=[540])
-
-    header_table.setStyle(
-        TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-        ])
-    )
-    elements.append(header_table)
-
-    # Blue divider line
-    divider_table = Table([[""]], colWidths=[540], rowHeights=[2])
-    divider_table.setStyle(
-        TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#0d3b66")),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ])
-    )
-    elements.append(divider_table)
-    elements.append(Spacer(1, 12))
-
-    elements.append(Paragraph(f"<b>Generated Date:</b> {report_data.get('Timestamp', '')}", body_style))
-    elements.append(Spacer(1, 10))
-
-    # Patient info table
-    elements.append(Paragraph("Patient Details", heading_style))
-    patient_info = [
-        ["Full Name:", f"{report_data.get('First name', '')} {report_data.get('Last name', '')}"],
-        ["Age / Gender:", f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"],
-        ["Phone Number:", report_data.get("Phone", "")],
-        ["Email:", report_data.get("Email", "N/A")],
-        ["Address:", report_data.get("Address", "")],
-        ["Believed Type:", report_data.get("Reported diabetes type", "")],
-    ]
-    t1 = Table(patient_info, colWidths=[130, 410])
-    t1.setStyle(
-        TableStyle([
-            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f4f8")),
-            ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
-            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ("TOPPADDING", (0, 0), (-1, -1), 5),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
-        ])
-    )
-    elements.append(t1)
-    elements.append(Spacer(1, 12))
-
-    # Result Table
-    elements.append(Paragraph("Assessment Result", heading_style))
-    is_positive = "Positive" in report_data.get("Result", "")
-    res_color = colors.HexColor("#dc2626") if is_positive else colors.HexColor("#16a34a")
-
-    res_data = [
-        ["Risk Assessment:", report_data.get("Result", "")],
-        ["Estimated Probability:", report_data.get("Probability", "")],
-        ["Additional Symptoms Present:", report_data.get("Notable extra symptoms", "")],
-    ]
-    t2 = Table(res_data, colWidths=[170, 370])
-    t2.setStyle(
-        TableStyle([
-            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-            ("TEXTCOLOR", (1, 0), (1, 0), res_color),
-            ("FONTNAME", (1, 0), (1, 0), "Helvetica-Bold"),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 6),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
-        ])
-    )
-    elements.append(t2)
-    elements.append(Spacer(1, 18))
-
-    # Disclaimer
-    disclaimer_text = (
-        "<b>Disclaimer:</b> This report is generated by an AI model for educational and demonstration "
-        "purposes only. It is NOT a medical diagnosis. Please consult a qualified doctor or healthcare "
-        "provider for proper clinical evaluation and diagnosis."
-    )
-    elements.append(Paragraph(disclaimer_text, body_style))
-
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
-
-
-# ---------------------------------------------------------------------------
-# Report storage
-# ---------------------------------------------------------------------------
-def save_report_to_excel(report: dict):
-    new_row = pd.DataFrame([report])
-
-    if os.path.exists(SAVE_FILE_XLSX):
-        try:
-            existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
-            combined = pd.concat([existing, new_row], ignore_index=True)
-        except Exception:
-            combined = new_row
-    else:
-        combined = new_row
-
-    combined.to_excel(SAVE_FILE_XLSX, index=False, engine="openpyxl")
-
-
-# ---------------------------------------------------------------------------
-# Modal Popup Dialog Function
-# ---------------------------------------------------------------------------
-@st.dialog("📊 Prediction Result")
-def show_result_modal(report, result, probability):
-    if result == 1:
-        st.error("⚠️ High risk of early-stage diabetes")
-    else:
-        st.success("✅ Low risk of early-stage diabetes")
-
-    st.metric("Estimated probability of Positive", report["Probability"])
-    st.progress(min(max(probability, 0.0), 1.0))
-
-    if result == 1:
-        st.warning(
-            "🚨 Because your risk level is high, we strongly recommend "
-            "visiting the nearest doctor or health center as soon as "
-            "possible for an accurate diagnosis."
-        )
-    else:
-        if report["Notable extra symptoms"] == "Yes":
-            st.info(
-                "We noticed you selected 'Yes' for some additional symptoms. "
-                "Even though the result is low-risk, see a doctor if symptoms persist."
-            )
-
-    pdf_data = generate_pdf_report(report)
-    file_name_pdf = f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
-
-    st.download_button(
-        label="📥 Download Report (PDF)",
-        data=pdf_data,
-        file_name=file_name_pdf,
-        mime="application/pdf",
-        type="primary",
-        use_container_width=True,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Form Submission Logic
-# ---------------------------------------------------------------------------
-if submitted:
-    clean_first_name = first_name.strip()
-    clean_last_name = last_name.strip()
-    clean_phone = phone.strip()
-    clean_address = address.strip()
-    clean_email = patient_email.strip()
-
-    errors = []
-    if not clean_first_name:
-        errors.append("First name is required.")
-    if not clean_last_name:
-        errors.append("Last name is required.")
-    if not clean_phone:
-        errors.append("Phone number is required.")
-    if not clean_address:
-        errors.append("Residential address is required.")
-
-    if errors:
-        for e in errors:
-            st.error(e)
-    else:
-        raw_input = {"Age": age, "Gender": gender, **symptom_values}
-        result, probability = predict_new_patient(raw_input)
-
-        any_extra_symptom = any(v == "Yes" for v in extra_values.values())
-
-        report_data = {
-            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "First name": clean_first_name,
-            "Last name": clean_last_name,
-            "Phone": clean_phone,
-            "Email": clean_email if clean_email else "N/A",
-            "Address": clean_address,
-            "Reported diabetes type": diabetes_type,
-            "Age": age,
-            "Gender": gender,
-            "Result": "Positive (high risk)" if result == 1 else "Negative (low risk)",
-            "Probability": f"{probability * 100:.1f}%",
-            "Notable extra symptoms": "Yes" if any_extra_symptom else "No",
-        }
-
-        save_report_to_excel(report_data)
-
-        # Trigger Modal Dialog Popup
-        show_result_modal(report_data, int(result), float(probability))
 
 # ---------------------------------------------------------------------------
 # Weekly meal plan & Health Guide
@@ -621,7 +342,293 @@ def render_offline_health_guide():
     st.info("⚠️ This guide is educational and does not replace a doctor's advice or a personalized diabetes treatment plan.")
 
 
-render_offline_health_guide()
+# ---------------------------------------------------------------------------
+# PDF Generation Function
+# ---------------------------------------------------------------------------
+def generate_pdf_report(report_data: dict) -> bytes:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "DocTitle",
+        parent=styles["Title"],
+        fontSize=18,
+        textColor=colors.HexColor("#0d3b66"),
+        alignment=0,
+        spaceAfter=4,
+    )
+
+    subtitle_style = ParagraphStyle(
+        "DocSubtitle",
+        parent=styles["Normal"],
+        fontSize=11,
+        textColor=colors.HexColor("#555555"),
+        alignment=0,
+    )
+
+    heading_style = ParagraphStyle(
+        "Heading2Custom",
+        parent=styles["Heading2"],
+        fontSize=12,
+        textColor=colors.HexColor("#0d3b66"),
+        spaceBefore=10,
+        spaceAfter=6,
+    )
+
+    body_style = ParagraphStyle(
+        "BodyCustom",
+        parent=styles["Normal"],
+        fontSize=9.5,
+        leading=13,
+    )
+
+    elements = []
+
+    # Header with Logo
+    logo_path = "logo.png"
+
+    title_text = Paragraph("<b>PERDIAPREDICT</b>", title_style)
+    sub_text = Paragraph("Early Stage Diabetes Assessment Report", subtitle_style)
+
+    header_text_cell = [title_text, sub_text]
+
+    if os.path.exists(logo_path):
+        logo_img = Image(logo_path, width=65, height=65)
+        header_table = Table([[logo_img, header_text_cell]], colWidths=[75, 465])
+    else:
+        header_table = Table([[header_text_cell]], colWidths=[540])
+
+    header_table.setStyle(
+        TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ])
+    )
+    elements.append(header_table)
+
+    # Blue divider line
+    divider_table = Table([[""]], colWidths=[540], rowHeights=[2])
+    divider_table.setStyle(
+        TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#0d3b66")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ])
+    )
+    elements.append(divider_table)
+    elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph(f"<b>Generated Date:</b> {report_data.get('Timestamp', '')}", body_style))
+    elements.append(Spacer(1, 10))
+
+    # Patient info table
+    elements.append(Paragraph("Patient Details", heading_style))
+    patient_info = [
+        ["Full Name:", f"{report_data.get('First name', '')} {report_data.get('Last name', '')}"],
+        ["Age / Gender:", f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"],
+        ["Phone Number:", report_data.get("Phone", "")],
+        ["Email:", report_data.get("Email", "N/A")],
+        ["Address:", report_data.get("Address", "")],
+        ["Believed Type:", report_data.get("Reported diabetes type", "")],
+    ]
+    t1 = Table(patient_info, colWidths=[130, 410])
+    t1.setStyle(
+        TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f4f8")),
+            ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+        ])
+    )
+    elements.append(t1)
+    elements.append(Spacer(1, 12))
+
+    # Result Table
+    elements.append(Paragraph("Assessment Result", heading_style))
+    is_positive = "Positive" in report_data.get("Result", "")
+    res_color = colors.HexColor("#dc2626") if is_positive else colors.HexColor("#16a34a")
+
+    res_data = [
+        ["Risk Assessment:", report_data.get("Result", "")],
+        ["Estimated Probability:", report_data.get("Probability", "")],
+        ["Additional Symptoms Present:", report_data.get("Notable extra symptoms", "")],
+    ]
+    t2 = Table(res_data, colWidths=[170, 370])
+    t2.setStyle(
+        TableStyle([
+            ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+            ("TEXTCOLOR", (1, 0), (1, 0), res_color),
+            ("FONTNAME", (1, 0), (1, 0), "Helvetica-Bold"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+        ])
+    )
+    elements.append(t2)
+    elements.append(Spacer(1, 18))
+
+    # Disclaimer
+    disclaimer_text = (
+        "<b>Disclaimer:</b> This report is generated by an AI model for educational and demonstration "
+        "purposes only. It is NOT a medical diagnosis. Please consult a qualified doctor or healthcare "
+        "provider for proper clinical evaluation and diagnosis."
+    )
+    elements.append(Paragraph(disclaimer_text, body_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Report storage
+# ---------------------------------------------------------------------------
+def save_report_to_excel(report: dict):
+    new_row = pd.DataFrame([report])
+
+    if os.path.exists(SAVE_FILE_XLSX):
+        try:
+            existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
+            combined = pd.concat([existing, new_row], ignore_index=True)
+        except Exception:
+            combined = new_row
+    else:
+        combined = new_row
+
+    combined.to_excel(SAVE_FILE_XLSX, index=False, engine="openpyxl")
+
+
+# ---------------------------------------------------------------------------
+# Form Submission Logic
+# ---------------------------------------------------------------------------
+if submitted:
+    clean_first_name = first_name.strip()
+    clean_last_name = last_name.strip()
+    clean_phone = phone.strip()
+    clean_address = address.strip()
+    clean_email = patient_email.strip()
+
+    errors = []
+    if not clean_first_name:
+        errors.append("First name is required.")
+    if not clean_last_name:
+        errors.append("Last name is required.")
+    if not clean_phone:
+        errors.append("Phone number is required.")
+    if not clean_address:
+        errors.append("Residential address is required.")
+
+    if errors:
+        for e in errors:
+            st.error(e)
+    else:
+        raw_input = {"Age": age, "Gender": gender, **symptom_values}
+        result, probability = predict_new_patient(raw_input)
+
+        any_extra_symptom = any(v == "Yes" for v in extra_values.values())
+
+        st.session_state["last_report"] = {
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "First name": clean_first_name,
+            "Last name": clean_last_name,
+            "Phone": clean_phone,
+            "Email": clean_email if clean_email else "N/A",
+            "Address": clean_address,
+            "Reported diabetes type": diabetes_type,
+            "Age": age,
+            "Gender": gender,
+            "Result": "Positive (high risk)" if result == 1 else "Negative (low risk)",
+            "Probability": f"{probability * 100:.1f}%",
+            "Notable extra symptoms": "Yes" if any_extra_symptom else "No",
+        }
+        st.session_state["last_result"] = int(result)
+        st.session_state["last_probability"] = float(probability)
+        st.session_state["report_saved"] = False
+
+        # التوجيه والتمرير للقمة في الهواتف ذكياً وبصورة سلسة
+        components.html(
+            """
+            <script>
+                window.parent.scrollTo({top: 0, behavior: 'smooth'});
+            </script>
+            """,
+            height=0,
+        )
+
+# ---------------------------------------------------------------------------
+# Results display
+# ---------------------------------------------------------------------------
+if "last_report" in st.session_state:
+    report = st.session_state["last_report"]
+    result = st.session_state["last_result"]
+    probability = st.session_state["last_probability"]
+
+    st.divider()
+    st.subheader("Result")
+
+    if result == 1:
+        st.error("⚠️ High risk of early-stage diabetes")
+    else:
+        st.success("✅ Low risk of early-stage diabetes")
+
+    st.metric("Estimated probability of Positive", report["Probability"])
+    st.progress(min(max(probability, 0.0), 1.0))
+
+    st.divider()
+
+    if result == 1:
+        st.warning(
+            "🚨 Because your risk level is high, we strongly recommend "
+            "visiting the nearest doctor or health center as soon as "
+            "possible for an accurate diagnosis and your personal safety. "
+            "Please don't rely on this tool as a substitute for medical advice."
+        )
+        render_offline_health_guide()
+    else:
+        if report["Notable extra symptoms"] == "Yes":
+            st.info(
+                "We noticed you selected 'Yes' for some additional symptoms. "
+                "Even though the current result is low-risk, it's a good idea "
+                "to see a doctor if these symptoms persist."
+            )
+        render_meal_plan()
+        render_offline_health_guide()
+
+    st.caption(
+        "⚠️ This tool is for educational/demo purposes only and is NOT a "
+        "medical diagnosis. Always consult a qualified doctor for an actual diagnosis."
+    )
+
+    if not st.session_state.get("report_saved", False):
+        save_report_to_excel(report)
+        st.session_state["report_saved"] = True
+
+    st.divider()
+    st.subheader("📄 Download Assessment Report")
+
+    pdf_data = generate_pdf_report(report)
+    file_name_pdf = f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
+
+    st.download_button(
+        label="📥 Download Report (PDF)",
+        data=pdf_data,
+        file_name=file_name_pdf,
+        mime="application/pdf",
+        type="primary",
+        use_container_width=True,
+    )
 
 # ---------------------------------------------------------------------------
 # Admin Panel
