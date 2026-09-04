@@ -216,6 +216,73 @@ def predict_new_patient(raw_input: dict):
 
 
 # ---------------------------------------------------------------------------
+# Clinical-style symptom narrative builder
+# ---------------------------------------------------------------------------
+def _lowercase_first(text: str) -> str:
+    """Lower-case only the first character so the phrase reads naturally
+    inside a sentence (medical symptom names aren't proper nouns)."""
+    if not text:
+        return text
+    return text[0].lower() + text[1:]
+
+
+def _join_with_and(items: list) -> str:
+    """Join a list of phrases into a natural 'a, b, and c' clause."""
+    items = [i for i in items if i]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def build_symptom_narrative(symptom_values: dict, extra_values: dict) -> str:
+    """Turn the patient's Yes/No answers into a short clinical-style
+    narrative describing the presenting symptoms, similar to how a
+    clinician would phrase a chief-complaint / history-of-present-illness
+    line in a medical note."""
+
+    core_yes = [
+        _lowercase_first(display_labels.get(col, col))
+        for col in binary_columns
+        if symptom_values.get(col) == "Yes"
+    ]
+    extra_yes = [
+        _lowercase_first(extra_symptoms_labels.get(key, key))
+        for key in extra_symptoms_labels
+        if extra_values.get(key) == "Yes"
+    ]
+
+    if not core_yes and not extra_yes:
+        return (
+            "The patient denies all of the core and additional symptoms "
+            "assessed in this screening at the time of evaluation."
+        )
+
+    sentences = []
+
+    if core_yes:
+        sentences.append(
+            "The patient reports " + _join_with_and(core_yes) + "."
+        )
+    else:
+        sentences.append(
+            "The patient denies any of the core symptoms assessed in this screening."
+        )
+
+    if extra_yes:
+        sentences.append(
+            "On further questioning, the patient also endorses "
+            + _join_with_and(extra_yes)
+            + "."
+        )
+
+    return " ".join(sentences)
+
+
+# ---------------------------------------------------------------------------
 # Weekly meal plan & Health Guide
 # ---------------------------------------------------------------------------
 WEEKLY_MEAL_PLAN = [
@@ -455,6 +522,15 @@ def generate_pdf_report(report_data: dict) -> bytes:
     elements.append(t1)
     elements.append(Spacer(1, 12))
 
+    # Clinical presentation / symptom narrative section
+    elements.append(Paragraph("Clinical Presentation", heading_style))
+    symptom_narrative = report_data.get(
+        "Symptom narrative",
+        "No symptom information was recorded for this assessment.",
+    )
+    elements.append(Paragraph(symptom_narrative, body_style))
+    elements.append(Spacer(1, 12))
+
     # Result Table
     elements.append(Paragraph("Assessment Result", heading_style))
     is_positive = "Positive" in report_data.get("Result", "")
@@ -538,6 +614,7 @@ if submitted:
         result, probability = predict_new_patient(raw_input)
 
         any_extra_symptom = any(v == "Yes" for v in extra_values.values())
+        symptom_narrative = build_symptom_narrative(symptom_values, extra_values)
 
         st.session_state["last_report"] = {
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -552,6 +629,7 @@ if submitted:
             "Result": "Positive (high risk)" if result == 1 else "Negative (low risk)",
             "Probability": f"{probability * 100:.1f}%",
             "Notable extra symptoms": "Yes" if any_extra_symptom else "No",
+            "Symptom narrative": symptom_narrative,
         }
         st.session_state["last_result"] = int(result)
         st.session_state["last_probability"] = float(probability)
@@ -585,6 +663,9 @@ if "last_report" in st.session_state:
 
     st.metric("Estimated probability of Positive", report["Probability"])
     st.progress(min(max(probability, 0.0), 1.0))
+
+    with st.expander("🩺 Reported Symptoms Summary", expanded=True):
+        st.write(report.get("Symptom narrative", ""))
 
     st.divider()
 
