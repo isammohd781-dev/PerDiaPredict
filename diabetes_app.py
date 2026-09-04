@@ -8,7 +8,7 @@ import streamlit as st
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # ---------------------------------------------------------------------------
 # Page configuration
@@ -349,41 +349,86 @@ def generate_pdf_report(report_data: dict) -> bytes:
     doc = SimpleDocTemplate(
         buffer,
         pagesize=letter,
-        rightMargin=40,
-        leftMargin=40,
-        topMargin=40,
-        bottomMargin=40,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36,
     )
     styles = getSampleStyleSheet()
 
     title_style = ParagraphStyle(
         "DocTitle",
         parent=styles["Title"],
-        fontSize=20,
-        textColor=colors.HexColor("#0f4c81"),
-        spaceAfter=15,
-        alignment=1,
+        fontSize=18,
+        textColor=colors.HexColor("#0d3b66"),
+        alignment=0,
+        spaceAfter=4,
     )
+
+    subtitle_style = ParagraphStyle(
+        "DocSubtitle",
+        parent=styles["Normal"],
+        fontSize=11,
+        textColor=colors.HexColor("#555555"),
+        alignment=0,
+    )
+
     heading_style = ParagraphStyle(
         "Heading2Custom",
         parent=styles["Heading2"],
-        fontSize=13,
-        textColor=colors.HexColor("#0f4c81"),
-        spaceBefore=12,
+        fontSize=12,
+        textColor=colors.HexColor("#0d3b66"),
+        spaceBefore=10,
         spaceAfter=6,
     )
+
     body_style = ParagraphStyle(
         "BodyCustom",
         parent=styles["Normal"],
-        fontSize=10,
-        leading=14,
+        fontSize=9.5,
+        leading=13,
     )
 
     elements = []
 
-    elements.append(Paragraph("🩺 Early Stage Diabetes Assessment Report", title_style))
+    # Header with Logo
+    logo_path = "logo.png"
+
+    title_text = Paragraph("<b>PERDIAPREDICT</b>", title_style)
+    sub_text = Paragraph("Early Stage Diabetes Assessment Report", subtitle_style)
+
+    header_text_cell = [title_text, sub_text]
+
+    if os.path.exists(logo_path):
+        logo_img = Image(logo_path, width=65, height=65)
+        header_table = Table([[logo_img, header_text_cell]], colWidths=[75, 465])
+    else:
+        header_table = Table([[header_text_cell]], colWidths=[540])
+
+    header_table.setStyle(
+        TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ])
+    )
+    elements.append(header_table)
+
+    # Blue divider line
+    divider_table = Table([[""]], colWidths=[540], rowHeights=[2])
+    divider_table.setStyle(
+        TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#0d3b66")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ])
+    )
+    elements.append(divider_table)
+    elements.append(Spacer(1, 12))
+
     elements.append(Paragraph(f"<b>Generated Date:</b> {report_data.get('Timestamp', '')}", body_style))
-    elements.append(Spacer(1, 15))
+    elements.append(Spacer(1, 10))
 
     # Patient info table
     elements.append(Paragraph("Patient Details", heading_style))
@@ -395,7 +440,7 @@ def generate_pdf_report(report_data: dict) -> bytes:
         ["Address:", report_data.get("Address", "")],
         ["Believed Type:", report_data.get("Reported diabetes type", "")],
     ]
-    t1 = Table(patient_info, colWidths=[120, 380])
+    t1 = Table(patient_info, colWidths=[130, 410])
     t1.setStyle(
         TableStyle([
             ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f4f8")),
@@ -407,7 +452,7 @@ def generate_pdf_report(report_data: dict) -> bytes:
         ])
     )
     elements.append(t1)
-    elements.append(Spacer(1, 15))
+    elements.append(Spacer(1, 12))
 
     # Result Table
     elements.append(Paragraph("Assessment Result", heading_style))
@@ -419,7 +464,7 @@ def generate_pdf_report(report_data: dict) -> bytes:
         ["Estimated Probability:", report_data.get("Probability", "")],
         ["Additional Symptoms Present:", report_data.get("Notable extra symptoms", "")],
     ]
-    t2 = Table(res_data, colWidths=[160, 340])
+    t2 = Table(res_data, colWidths=[170, 370])
     t2.setStyle(
         TableStyle([
             ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
@@ -431,7 +476,7 @@ def generate_pdf_report(report_data: dict) -> bytes:
         ])
     )
     elements.append(t2)
-    elements.append(Spacer(1, 20))
+    elements.append(Spacer(1, 18))
 
     # Disclaimer
     disclaimer_text = (
