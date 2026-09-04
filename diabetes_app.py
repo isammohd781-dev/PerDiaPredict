@@ -90,17 +90,30 @@ diabetes_types = [
 ]
 
 # ---------------------------------------------------------------------------
-# Header (Centered Banner Logo & Title Below)
+# Header (Centered Logo, App Name, & Title Below) — FIXED VERSION
 # ---------------------------------------------------------------------------
-logo_path = "logo_photo.jfif"
+# Use the new transparent circular logo (no baked-in text) instead of the
+# old square banner. This avoids the stretching issue caused by combining
+# a fixed width with use_container_width=True.
+logo_path = "logo_photo.png"  # <- put the new transparent circular PNG here
 
 if os.path.exists(logo_path):
-    c_left, c_center, c_right = st.columns([1, 2, 1])
+    c_left, c_center, c_right = st.columns([1, 1, 1])
     with c_center:
-        st.image(logo_path, width=320, use_container_width=True)
+        st.image(logo_path, width=180)  # fixed width only, no use_container_width
+
+    st.markdown(
+        "<p style='text-align: center; margin-top: 8px; margin-bottom: 0; "
+        "font-size: 1.3rem; font-weight: 700; letter-spacing: 0.5px;'>"
+        "PERDIA<span style='font-weight:400;'>PREDICT</span></p>"
+        "<p style='text-align: center; margin-top: 0; margin-bottom: 15px; "
+        "font-size: 0.85rem; color: #7fd6d6; letter-spacing: 1px;'>DIABETES APP</p>",
+        unsafe_allow_html=True,
+    )
 
 st.markdown(
-    "<h1 style='text-align: center; margin-top: 15px; margin-bottom: 10px; font-size: 2.2rem; font-weight: 700;'>Early Stage Diabetes Prediction</h1>",
+    "<h1 style='text-align: center; margin-top: 5px; margin-bottom: 10px; "
+    "font-size: 2.2rem; font-weight: 700;'>Early Stage Diabetes Prediction</h1>",
     unsafe_allow_html=True,
 )
 
