@@ -90,26 +90,25 @@ diabetes_types = [
 ]
 
 # ---------------------------------------------------------------------------
-# Header (With Custom Logo - High Quality & Clear Size)
+# Header (Centered Banner Logo & Title Below)
 # ---------------------------------------------------------------------------
-logo_path = "logo.png"
+logo_path = "logo_photo.jfif"
 
 if os.path.exists(logo_path):
-    col_logo, col_title = st.columns([1.5, 5], vertical_alignment="center")
-    with col_logo:
-        st.image(logo_path, width=110)
-    with col_title:
-        st.markdown(
-            "<h1 style='margin: 0; padding: 0; font-size: 2.2rem; font-weight: 700; line-height: 1.2;'>Early Stage Diabetes Prediction</h1>",
-            unsafe_allow_html=True,
-        )
-else:
-    st.title("🩺 Early Stage Diabetes Prediction")
+    c_left, c_center, c_right = st.columns([1, 2, 1])
+    with c_center:
+        st.image(logo_path, width=320, use_container_width=True)
 
-st.write(
-    "Please fill in your personal information and symptoms below, then "
-    "click **Predict** to estimate the risk of early-stage diabetes."
+st.markdown(
+    "<h1 style='text-align: center; margin-top: 15px; margin-bottom: 10px; font-size: 2.2rem; font-weight: 700;'>Early Stage Diabetes Prediction</h1>",
+    unsafe_allow_html=True,
 )
+
+st.markdown(
+    "<p style='text-align: center;'>Please fill in your personal information and symptoms below, then click <b>Predict</b> to estimate the risk of early-stage diabetes.</p>",
+    unsafe_allow_html=True,
+)
+
 st.caption(
     "⚠️ This tool is for educational/demo purposes only and is NOT a "
     "medical diagnosis. Always consult a qualified doctor for an "
@@ -283,8 +282,9 @@ def generate_pdf_report(report_data: dict) -> bytes:
 
     header_text_cell = [title_text, sub_text]
 
-    if os.path.exists(logo_path):
-        logo_img = Image(logo_path, width=65, height=65)
+    pdf_logo = "logo.png" if os.path.exists("logo.png") else logo_path
+    if os.path.exists(pdf_logo):
+        logo_img = Image(pdf_logo, width=65, height=65)
         header_table = Table([[logo_img, header_text_cell]], colWidths=[75, 465])
     else:
         header_table = Table([[header_text_cell]], colWidths=[540])
