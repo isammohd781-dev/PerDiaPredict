@@ -5,7 +5,6 @@ from io import BytesIO
 import joblib
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -216,133 +215,6 @@ def predict_new_patient(raw_input: dict):
 
 
 # ---------------------------------------------------------------------------
-# Weekly meal plan & Health Guide
-# ---------------------------------------------------------------------------
-WEEKLY_MEAL_PLAN = [
-    {
-        "Day": "Saturday",
-        "Breakfast": "Boiled eggs + whole-grain bread + cucumber & tomato",
-        "Lunch": "Grilled chicken breast + brown rice + green salad",
-        "Dinner": "Grilled fish + sauteed vegetables (broccoli/green beans)",
-        "Drinks": "Water, unsweetened green tea",
-    },
-    {
-        "Day": "Sunday",
-        "Breakfast": "Oatmeal with low-fat milk + cinnamon + a handful of berries",
-        "Lunch": "Lentil soup + fattoush salad (no fried bread)",
-        "Dinner": "Lean grilled meat + roasted vegetables",
-        "Drinks": "Water, unsweetened mint tea",
-    },
-    {
-        "Day": "Monday",
-        "Breakfast": "Plain yogurt + whole-grain cereal + raw nuts",
-        "Lunch": "Tuna salad with olive oil + 1 slice whole-grain bread",
-        "Dinner": "Stuffed vegetables (peppers/zucchini) with a small amount of rice",
-        "Drinks": "Water, anise or chamomile tea",
-    },
-    {
-        "Day": "Tuesday",
-        "Breakfast": "Vegetable omelet + whole-grain bread",
-        "Lunch": "Boiled or grilled chicken + quinoa or bulgur + salad",
-        "Dinner": "Vegetable soup + a small piece of low-fat cheese",
-        "Drinks": "Water, green tea",
-    },
-    {
-        "Day": "Wednesday",
-        "Breakfast": "Greek yogurt + chia seeds + low-sugar fruit (apple/berries)",
-        "Lunch": "Grilled fish + leafy green salad + 1 tbsp olive oil",
-        "Dinner": "Cooked lentils or chickpeas + roasted vegetables",
-        "Drinks": "Water, unsweetened hibiscus tea",
-    },
-    {
-        "Day": "Thursday",
-        "Breakfast": "Whole-grain bread + low-fat cheese + fresh vegetables",
-        "Lunch": "Grilled meat or chicken + sauteed vegetables + a small portion of brown rice",
-        "Dinner": "Large salad with grilled chicken or tuna",
-        "Drinks": "Water, mint tea",
-    },
-    {
-        "Day": "Friday",
-        "Breakfast": "Oatmeal or eggs + a handful of raw nuts",
-        "Lunch": "Fish or chicken + roasted vegetables + salad",
-        "Dinner": "Light vegetable soup + a small piece of cheese",
-        "Drinks": "Water, unsweetened herbal tea",
-    },
-]
-
-GENERAL_TIPS = [
-    "Use the plate method: half the plate vegetables, a quarter lean protein, a quarter whole grains or moderate starch.",
-    "Prefer low-glycemic-index foods (whole grains, legumes) over sugar and refined white flour.",
-    "Avoid sugary drinks and packaged juices; replace them with water or unsweetened tea/herbal infusions.",
-    "Keep consistent meal times to avoid sharp swings in blood sugar.",
-    "Aim for at least 150 minutes of moderate physical activity per week (after checking with your doctor).",
-    "Stay well hydrated and monitor your blood sugar regularly as advised by your doctor.",
-]
-
-
-def render_meal_plan():
-    st.subheader("🥗 Suggested Weekly Meal Plan")
-    st.caption(
-        "This plan is built on general diabetes-management principles "
-        "(the diabetes plate method, preferring low-glycemic-index foods) "
-        "and is for guidance only."
-    )
-    df_plan = pd.DataFrame(WEEKLY_MEAL_PLAN).set_index("Day")
-    st.table(df_plan)
-
-    st.markdown("**General tips for managing your blood sugar:**")
-    for tip in GENERAL_TIPS:
-        st.markdown(f"- {tip}")
-
-
-def render_offline_health_guide():
-    st.subheader("🌿 Offline Healthy Lifestyle & Nutrition Guide")
-    st.caption("This guide is built into the application, so it works without an internet connection.")
-
-    with st.expander("🍽️ Healthy plate method", expanded=True):
-        st.markdown(
-            "- **½ plate:** non-starchy vegetables such as cucumber, tomato, broccoli, green beans and leafy vegetables.\n"
-            "- **¼ plate:** lean protein such as grilled chicken, fish, eggs or lean meat.\n"
-            "- **¼ plate:** whole grains or a moderate starch portion such as brown rice, quinoa, bulgur or whole-grain bread.\n"
-            "- Choose **water or unsweetened drinks** instead of sugary drinks."
-        )
-
-    with st.expander("🥗 Foods to prefer"):
-        st.markdown(
-            "- Vegetables and salads\n"
-            "- Beans, lentils and chickpeas\n"
-            "- Whole grains and high-fiber foods\n"
-            "- Fish, skinless chicken and other lean proteins\n"
-            "- Plain/low-sugar yogurt\n"
-            "- Small portions of nuts\n"
-            "- Whole fruit in moderate portions rather than fruit juice"
-        )
-
-    with st.expander("⚠️ Foods and drinks to limit"):
-        st.markdown(
-            "- Sugary soft drinks and packaged juices\n"
-            "- Added sugar and very sweet desserts\n"
-            "- Large portions of refined white bread/rice\n"
-            "- Highly processed foods\n"
-            "- Very large meals or frequent unnecessary snacking"
-        )
-
-    with st.expander("🏃 Daily lifestyle habits"):
-        st.markdown(
-            "- Aim for regular physical activity appropriate for your health.\n"
-            "- Keep consistent meal times.\n"
-            "- Stay hydrated.\n"
-            "- If you monitor blood glucose, follow the schedule recommended by your healthcare professional.\n"
-            "- Seek professional medical advice for persistent or concerning symptoms."
-        )
-
-    with st.expander("📅 Weekly meal plan"):
-        render_meal_plan()
-
-    st.info("⚠️ This guide is educational and does not replace a doctor's advice or a personalized diabetes treatment plan.")
-
-
-# ---------------------------------------------------------------------------
 # PDF Generation Function
 # ---------------------------------------------------------------------------
 def generate_pdf_report(report_data: dict) -> bytes:
@@ -511,6 +383,45 @@ def save_report_to_excel(report: dict):
 
 
 # ---------------------------------------------------------------------------
+# Modal Popup Dialog Function
+# ---------------------------------------------------------------------------
+@st.dialog("📊 Prediction Result")
+def show_result_modal(report, result, probability):
+    if result == 1:
+        st.error("⚠️ High risk of early-stage diabetes")
+    else:
+        st.success("✅ Low risk of early-stage diabetes")
+
+    st.metric("Estimated probability of Positive", report["Probability"])
+    st.progress(min(max(probability, 0.0), 1.0))
+
+    if result == 1:
+        st.warning(
+            "🚨 Because your risk level is high, we strongly recommend "
+            "visiting the nearest doctor or health center as soon as "
+            "possible for an accurate diagnosis."
+        )
+    else:
+        if report["Notable extra symptoms"] == "Yes":
+            st.info(
+                "We noticed you selected 'Yes' for some additional symptoms. "
+                "Even though the result is low-risk, see a doctor if symptoms persist."
+            )
+
+    pdf_data = generate_pdf_report(report)
+    file_name_pdf = f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
+
+    st.download_button(
+        label="📥 Download Report (PDF)",
+        data=pdf_data,
+        file_name=file_name_pdf,
+        mime="application/pdf",
+        type="primary",
+        use_container_width=True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Form Submission Logic
 # ---------------------------------------------------------------------------
 if submitted:
@@ -539,7 +450,7 @@ if submitted:
 
         any_extra_symptom = any(v == "Yes" for v in extra_values.values())
 
-        st.session_state["last_report"] = {
+        report_data = {
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "First name": clean_first_name,
             "Last name": clean_last_name,
@@ -553,82 +464,140 @@ if submitted:
             "Probability": f"{probability * 100:.1f}%",
             "Notable extra symptoms": "Yes" if any_extra_symptom else "No",
         }
-        st.session_state["last_result"] = int(result)
-        st.session_state["last_probability"] = float(probability)
-        st.session_state["report_saved"] = False
 
-        # التوجيه والتمرير للقمة في الهواتف ذكياً وبصورة سلسة
-        components.html(
-            """
-            <script>
-                window.parent.scrollTo({top: 0, behavior: 'smooth'});
-            </script>
-            """,
-            height=0,
-        )
+        save_report_to_excel(report_data)
+
+        # Trigger Modal Dialog Popup
+        show_result_modal(report_data, int(result), float(probability))
 
 # ---------------------------------------------------------------------------
-# Results display
+# Weekly meal plan & Health Guide
 # ---------------------------------------------------------------------------
-if "last_report" in st.session_state:
-    report = st.session_state["last_report"]
-    result = st.session_state["last_result"]
-    probability = st.session_state["last_probability"]
+WEEKLY_MEAL_PLAN = [
+    {
+        "Day": "Saturday",
+        "Breakfast": "Boiled eggs + whole-grain bread + cucumber & tomato",
+        "Lunch": "Grilled chicken breast + brown rice + green salad",
+        "Dinner": "Grilled fish + sauteed vegetables (broccoli/green beans)",
+        "Drinks": "Water, unsweetened green tea",
+    },
+    {
+        "Day": "Sunday",
+        "Breakfast": "Oatmeal with low-fat milk + cinnamon + a handful of berries",
+        "Lunch": "Lentil soup + fattoush salad (no fried bread)",
+        "Dinner": "Lean grilled meat + roasted vegetables",
+        "Drinks": "Water, unsweetened mint tea",
+    },
+    {
+        "Day": "Monday",
+        "Breakfast": "Plain yogurt + whole-grain cereal + raw nuts",
+        "Lunch": "Tuna salad with olive oil + 1 slice whole-grain bread",
+        "Dinner": "Stuffed vegetables (peppers/zucchini) with a small amount of rice",
+        "Drinks": "Water, anise or chamomile tea",
+    },
+    {
+        "Day": "Tuesday",
+        "Breakfast": "Vegetable omelet + whole-grain bread",
+        "Lunch": "Boiled or grilled chicken + quinoa or bulgur + salad",
+        "Dinner": "Vegetable soup + a small piece of low-fat cheese",
+        "Drinks": "Water, green tea",
+    },
+    {
+        "Day": "Wednesday",
+        "Breakfast": "Greek yogurt + chia seeds + low-sugar fruit (apple/berries)",
+        "Lunch": "Grilled fish + leafy green salad + 1 tbsp olive oil",
+        "Dinner": "Cooked lentils or chickpeas + roasted vegetables",
+        "Drinks": "Water, unsweetened hibiscus tea",
+    },
+    {
+        "Day": "Thursday",
+        "Breakfast": "Whole-grain bread + low-fat cheese + fresh vegetables",
+        "Lunch": "Grilled meat or chicken + sauteed vegetables + a small portion of brown rice",
+        "Dinner": "Large salad with grilled chicken or tuna",
+        "Drinks": "Water, mint tea",
+    },
+    {
+        "Day": "Friday",
+        "Breakfast": "Oatmeal or eggs + a handful of raw nuts",
+        "Lunch": "Fish or chicken + roasted vegetables + salad",
+        "Dinner": "Light vegetable soup + a small piece of cheese",
+        "Drinks": "Water, unsweetened herbal tea",
+    },
+]
 
-    st.divider()
-    st.subheader("Result")
+GENERAL_TIPS = [
+    "Use the plate method: half the plate vegetables, a quarter lean protein, a quarter whole grains or moderate starch.",
+    "Prefer low-glycemic-index foods (whole grains, legumes) over sugar and refined white flour.",
+    "Avoid sugary drinks and packaged juices; replace them with water or unsweetened tea/herbal infusions.",
+    "Keep consistent meal times to avoid sharp swings in blood sugar.",
+    "Aim for at least 150 minutes of moderate physical activity per week (after checking with your doctor).",
+    "Stay well hydrated and monitor your blood sugar regularly as advised by your doctor.",
+]
 
-    if result == 1:
-        st.error("⚠️ High risk of early-stage diabetes")
-    else:
-        st.success("✅ Low risk of early-stage diabetes")
 
-    st.metric("Estimated probability of Positive", report["Probability"])
-    st.progress(min(max(probability, 0.0), 1.0))
-
-    st.divider()
-
-    if result == 1:
-        st.warning(
-            "🚨 Because your risk level is high, we strongly recommend "
-            "visiting the nearest doctor or health center as soon as "
-            "possible for an accurate diagnosis and your personal safety. "
-            "Please don't rely on this tool as a substitute for medical advice."
-        )
-        render_offline_health_guide()
-    else:
-        if report["Notable extra symptoms"] == "Yes":
-            st.info(
-                "We noticed you selected 'Yes' for some additional symptoms. "
-                "Even though the current result is low-risk, it's a good idea "
-                "to see a doctor if these symptoms persist."
-            )
-        render_meal_plan()
-        render_offline_health_guide()
-
+def render_meal_plan():
+    st.subheader("🥗 Suggested Weekly Meal Plan")
     st.caption(
-        "⚠️ This tool is for educational/demo purposes only and is NOT a "
-        "medical diagnosis. Always consult a qualified doctor for an actual diagnosis."
+        "This plan is built on general diabetes-management principles "
+        "(the diabetes plate method, preferring low-glycemic-index foods) "
+        "and is for guidance only."
     )
+    df_plan = pd.DataFrame(WEEKLY_MEAL_PLAN).set_index("Day")
+    st.table(df_plan)
 
-    if not st.session_state.get("report_saved", False):
-        save_report_to_excel(report)
-        st.session_state["report_saved"] = True
+    st.markdown("**General tips for managing your blood sugar:**")
+    for tip in GENERAL_TIPS:
+        st.markdown(f"- {tip}")
 
-    st.divider()
-    st.subheader("📄 Download Assessment Report")
 
-    pdf_data = generate_pdf_report(report)
-    file_name_pdf = f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
+def render_offline_health_guide():
+    st.subheader("🌿 Offline Healthy Lifestyle & Nutrition Guide")
+    st.caption("This guide is built into the application, so it works without an internet connection.")
 
-    st.download_button(
-        label="📥 Download Report (PDF)",
-        data=pdf_data,
-        file_name=file_name_pdf,
-        mime="application/pdf",
-        type="primary",
-        use_container_width=True,
-    )
+    with st.expander("🍽️ Healthy plate method", expanded=True):
+        st.markdown(
+            "- **½ plate:** non-starchy vegetables such as cucumber, tomato, broccoli, green beans and leafy vegetables.\n"
+            "- **¼ plate:** lean protein such as grilled chicken, fish, eggs or lean meat.\n"
+            "- **¼ plate:** whole grains or a moderate starch portion such as brown rice, quinoa, bulgur or whole-grain bread.\n"
+            "- Choose **water or unsweetened drinks** instead of sugary drinks."
+        )
+
+    with st.expander("🥗 Foods to prefer"):
+        st.markdown(
+            "- Vegetables and salads\n"
+            "- Beans, lentils and chickpeas\n"
+            "- Whole grains and high-fiber foods\n"
+            "- Fish, skinless chicken and other lean proteins\n"
+            "- Plain/low-sugar yogurt\n"
+            "- Small portions of nuts\n"
+            "- Whole fruit in moderate portions rather than fruit juice"
+        )
+
+    with st.expander("⚠️ Foods and drinks to limit"):
+        st.markdown(
+            "- Sugary soft drinks and packaged juices\n"
+            "- Added sugar and very sweet desserts\n"
+            "- Large portions of refined white bread/rice\n"
+            "- Highly processed foods\n"
+            "- Very large meals or frequent unnecessary snacking"
+        )
+
+    with st.expander("🏃 Daily lifestyle habits"):
+        st.markdown(
+            "- Aim for regular physical activity appropriate for your health.\n"
+            "- Keep consistent meal times.\n"
+            "- Stay hydrated.\n"
+            "- If you monitor blood glucose, follow the schedule recommended by your healthcare professional.\n"
+            "- Seek professional medical advice for persistent or concerning symptoms."
+        )
+
+    with st.expander("📅 Weekly meal plan"):
+        render_meal_plan()
+
+    st.info("⚠️ This guide is educational and does not replace a doctor's advice or a personalized diabetes treatment plan.")
+
+
+render_offline_health_guide()
 
 # ---------------------------------------------------------------------------
 # Admin Panel
