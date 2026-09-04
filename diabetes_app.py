@@ -90,17 +90,17 @@ diabetes_types = [
 ]
 
 # ---------------------------------------------------------------------------
-# Header (With Custom Logo - Aligned inline)
+# Header (With Custom Logo - High Quality & Clear Size)
 # ---------------------------------------------------------------------------
 logo_path = "logo.png"
 
 if os.path.exists(logo_path):
-    col_logo, col_title = st.columns([1, 6], vertical_alignment="center")
+    col_logo, col_title = st.columns([1.5, 5], vertical_alignment="center")
     with col_logo:
-        st.image(logo_path, width=60)
+        st.image(logo_path, width=110)
     with col_title:
         st.markdown(
-            "<h1 style='margin: 0; padding: 0; font-size: 2.2rem;'>Early Stage Diabetes Prediction</h1>",
+            "<h1 style='margin: 0; padding: 0; font-size: 2.2rem; font-weight: 700; line-height: 1.2;'>Early Stage Diabetes Prediction</h1>",
             unsafe_allow_html=True,
         )
 else:
