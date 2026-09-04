@@ -15,7 +15,7 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="Early Stage Diabetes Prediction",
-    page_icon="🩺",
+    page_icon="logo.png" if os.path.exists("logo.png") else "🩺",
     layout="centered",
 )
 
@@ -90,9 +90,19 @@ diabetes_types = [
 ]
 
 # ---------------------------------------------------------------------------
-# Header
+# Header (With Custom Logo)
 # ---------------------------------------------------------------------------
-st.title("🩺 Early Stage Diabetes Prediction")
+logo_path = "logo.png"
+
+if os.path.exists(logo_path):
+    col_logo, col_title = st.columns([1, 5])
+    with col_logo:
+        st.image(logo_path, width=70)
+    with col_title:
+        st.title("Early Stage Diabetes Prediction")
+else:
+    st.title("🩺 Early Stage Diabetes Prediction")
+
 st.write(
     "Please fill in your personal information and symptoms below, then "
     "click **Predict** to estimate the risk of early-stage diabetes."
@@ -265,8 +275,6 @@ def generate_pdf_report(report_data: dict) -> bytes:
     elements = []
 
     # Header with Logo
-    logo_path = "logo.png"
-
     title_text = Paragraph("<b>PERDIAPREDICT</b>", title_style)
     sub_text = Paragraph("Early Stage Diabetes Assessment Report", subtitle_style)
 
