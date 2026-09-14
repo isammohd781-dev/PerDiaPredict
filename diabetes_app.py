@@ -12,12 +12,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-
-# =============================================================================
-# PERDIAPREDICT - POLISHED RESPONSIVE VERSION
-# Language: English only
-# =============================================================================
-
 st.set_page_config(
     page_title="PerdiaPredict",
     page_icon="🩺",
@@ -53,99 +47,105 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 # =============================================================================
 
 T = {
-    "en": {
-        "brand": "PerdiaPredict",
-        "tagline": "AI-powered early-stage diabetes screening",
-        "language": "Language",
-        "admin": "Admin Panel",
-        "back": "Back",
-        "email_title": "Early Stage Diabetes Screening",
-        "email_intro": "Enter your email address to start your assessment.",
-        "email": "Email address",
-        "email_required": "Email address is required.",
-        "email_invalid": "Please enter a valid email address.",
-        "continue": "Continue",
-        "medical_notice": "Educational screening only — this tool is not a medical diagnosis.",
-        "medical_notice_long": "This application is for educational and demonstration purposes only. It does not replace a qualified healthcare professional or a clinical diagnosis.",
-        "assessment": "Diabetes Risk Assessment",
-        "assessment_intro": "Complete the form below. Your answers are analyzed by the trained machine-learning model.",
-        "personal": "Personal Information",
-        "first_name": "First name",
-        "last_name": "Last name",
-        "phone": "Phone number",
-        "address": "Residential address (city / area)",
-        "diabetes_type": "Which type of diabetes do you believe you have?",
-        "not_sure": "Not sure / I don't know",
-        "type1": "Type 1",
-        "type2": "Type 2",
-        "gestational": "Gestational diabetes",
-        "prediabetes": "Prediabetes",
-        "basic": "Basic Information",
-        "age": "Age",
-        "gender": "Gender",
-        "male": "Male",
-        "female": "Female",
-        "core": "Core Symptoms",
-        "core_help": "Please select Yes or No for every symptom.",
-        "yes": "Yes",
-        "no": "No",
-        "additional": "Additional Symptoms",
-        "optional": "Optional — these symptoms enrich the report but do not directly change the model probability.",
-        "predict": "Predict My Risk",
-        "required_fields": "Please complete the required fields.",
-        "required": "is required.",
-        "result": "Assessment Result",
-        "high_risk": "High risk of early-stage diabetes",
-        "low_risk": "Low risk of early-stage diabetes",
-        "probability": "Estimated probability",
-        "symptom_summary": "Symptoms Summary",
-        "recommendation": "Recommendation",
-        "high_recommendation": "Because the estimated risk is high, please arrange a medical evaluation. Do not use this screening as a substitute for professional diagnosis.",
-        "low_recommendation": "The current screening result is low risk. Continue healthy habits and speak with a healthcare professional if symptoms persist or concern you.",
-        "extra_notice": "Some additional symptoms were selected. If they persist, consider speaking with a healthcare professional.",
-        "health_guide": "Healthy Lifestyle & Nutrition Guide",
-        "offline": "Built into the app — no external website is required.",
-        "plate": "Healthy Plate Method",
-        "foods": "Foods to Prefer",
-        "limit": "Foods & Drinks to Limit",
-        "habits": "Daily Lifestyle Habits",
-        "meal_plan": "Weekly Meal Plan",
-        "tips": "General Health Tips",
-        "download": "Download Assessment Report",
-        "download_pdf": "Download PDF Report",
-        "saved": "Report saved successfully.",
-        "admin_title": "Admin Panel",
-        "admin_help": "Restricted area for viewing submitted assessment records.",
-        "password": "Admin password",
-        "access": "Access granted.",
-        "incorrect": "Incorrect password.",
-        "no_records": "No saved records yet.",
-        "download_excel": "Download Excel file",
-        "clean": "Clean Data",
-        "confirm": "Are you sure you want to delete all saved records? This action cannot be undone.",
-        "delete": "Yes, Delete Data",
-        "cancel": "Cancel",
-        "deleted": "All data cleared successfully.",
-        "readiness": "Ready",
-        "model_status": "Machine-learning model loaded",
-        "privacy": "Your information is used only by this application for the assessment/report workflow.",
-        "patient_denies": "The patient denies all core and additional symptoms assessed in this screening.",
-        "patient_reports": "The patient reports",
-        "further": "On further questioning, the patient also endorses",
-        "no_core": "The patient denies any of the core symptoms assessed in this screening.",
-        "constant_fatigue": "Constant fatigue / tiredness",
-        "blurry_vision": "Blurry or unclear vision",
-        "frequent_infections": "Frequent infections (skin / gum / urinary)",
-        "tingling_numbness": "Tingling or numbness in hands or feet",
-        "polyuria": "Polyuria (excessive urination)",
-        "polydipsia": "Polydipsia (excessive thirst)",
-        "weight_loss": "Sudden weight loss",
-        "irritability": "Irritability",
-        "healing": "Delayed wound healing",
-        "paresis": "Partial paresis (partial muscle weakness)",
-        "alopecia": "Alopecia (abnormal hair loss)",
-        "itching": "Itching",
-    }
+    "en": {'brand': 'PerdiaPredict',
+ 'tagline': 'AI-powered early-stage diabetes screening',
+ 'language': 'Language',
+ 'admin': 'Admin Panel',
+ 'back': 'Back',
+ 'email_title': 'Early Stage Diabetes Screening',
+ 'email_intro': 'Enter your email address to start your assessment.',
+ 'email': 'Email address',
+ 'email_required': 'Email address is required.',
+ 'email_invalid': 'Please enter a valid email address.',
+ 'continue': 'Continue',
+ 'medical_notice': 'Educational screening only — this tool is not a medical diagnosis.',
+ 'medical_notice_long': 'This application is for educational and demonstration purposes only. It '
+                        'does not replace a qualified healthcare professional or a clinical '
+                        'diagnosis.',
+ 'assessment': 'Diabetes Risk Assessment',
+ 'assessment_intro': 'Complete the form below. Your answers are analyzed by the trained '
+                     'machine-learning model.',
+ 'personal': 'Personal Information',
+ 'first_name': 'First name',
+ 'last_name': 'Last name',
+ 'phone': 'Phone number',
+ 'address': 'Residential address (city / area)',
+ 'diabetes_type': 'Which type of diabetes do you believe you have?',
+ 'not_sure': "Not sure / I don't know",
+ 'type1': 'Type 1',
+ 'type2': 'Type 2',
+ 'gestational': 'Gestational diabetes',
+ 'prediabetes': 'Prediabetes',
+ 'basic': 'Basic Information',
+ 'age': 'Age',
+ 'gender': 'Gender',
+ 'male': 'Male',
+ 'female': 'Female',
+ 'core': 'Core Symptoms',
+ 'core_help': 'Please select Yes or No for every symptom.',
+ 'yes': 'Yes',
+ 'no': 'No',
+ 'additional': 'Additional Symptoms',
+ 'optional': 'Optional — these symptoms enrich the report but do not directly change the model '
+             'probability.',
+ 'predict': 'Predict My Risk',
+ 'required_fields': 'Please complete the required fields.',
+ 'required': 'is required.',
+ 'result': 'Assessment Result',
+ 'high_risk': 'High risk of early-stage diabetes',
+ 'low_risk': 'Low risk of early-stage diabetes',
+ 'probability': 'Estimated probability',
+ 'symptom_summary': 'Symptoms Summary',
+ 'recommendation': 'Recommendation',
+ 'high_recommendation': 'Because the estimated risk is high, please arrange a medical evaluation. '
+                        'Do not use this screening as a substitute for professional diagnosis.',
+ 'low_recommendation': 'The current screening result is low risk. Continue healthy habits and '
+                       'speak with a healthcare professional if symptoms persist or concern you.',
+ 'extra_notice': 'Some additional symptoms were selected. If they persist, consider speaking with '
+                 'a healthcare professional.',
+ 'health_guide': 'Healthy Lifestyle & Nutrition Guide',
+ 'offline': 'Built into the app — no external website is required.',
+ 'plate': 'Healthy Plate Method',
+ 'foods': 'Foods to Prefer',
+ 'limit': 'Foods & Drinks to Limit',
+ 'habits': 'Daily Lifestyle Habits',
+ 'meal_plan': 'Weekly Meal Plan',
+ 'tips': 'General Health Tips',
+ 'download': 'Download Assessment Report',
+ 'download_pdf': 'Download PDF Report',
+ 'saved': 'Report saved successfully.',
+ 'admin_title': 'Admin Panel',
+ 'admin_help': 'Restricted area for viewing submitted assessment records.',
+ 'password': 'Admin password',
+ 'access': 'Access granted.',
+ 'incorrect': 'Incorrect password.',
+ 'no_records': 'No saved records yet.',
+ 'download_excel': 'Download Excel file',
+ 'clean': 'Clean Data',
+ 'confirm': 'Are you sure you want to delete all saved records? This action cannot be undone.',
+ 'delete': 'Yes, Delete Data',
+ 'cancel': 'Cancel',
+ 'deleted': 'All data cleared successfully.',
+ 'readiness': 'Ready',
+ 'model_status': 'Machine-learning model loaded',
+ 'privacy': 'Your information is used only by this application for the assessment/report workflow.',
+ 'patient_denies': 'The patient denies all core and additional symptoms assessed in this '
+                   'screening.',
+ 'patient_reports': 'The patient reports',
+ 'further': 'On further questioning, the patient also endorses',
+ 'no_core': 'The patient denies any of the core symptoms assessed in this screening.',
+ 'constant_fatigue': 'Constant fatigue / tiredness',
+ 'blurry_vision': 'Blurry or unclear vision',
+ 'frequent_infections': 'Frequent infections (skin / gum / urinary)',
+ 'tingling_numbness': 'Tingling or numbness in hands or feet',
+ 'polyuria': 'Polyuria (excessive urination)',
+ 'polydipsia': 'Polydipsia (excessive thirst)',
+ 'weight_loss': 'Sudden weight loss',
+ 'irritability': 'Irritability',
+ 'healing': 'Delayed wound healing',
+ 'paresis': 'Partial paresis (partial muscle weakness)',
+ 'alopecia': 'Alopecia (abnormal hair loss)',
+ 'itching': 'Itching'},
 }
 
 
@@ -180,24 +180,8 @@ DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"
 # =============================================================================
 
 def inject_css():
-    dark_mode = st.session_state.get("dark_mode", True)
-    theme_vars = (
-        """
-        --primary: #60a5fa; --primary-dark: #3b82f6; --text: #f8fafc; --muted: #94a3b8;
-        --surface: #111827; --surface-2: #172033; --surface-soft: #0f172a; --border: #334155;
-        --input: #0b1220; --success: #4ade80; --danger: #f87171; --warning-bg: #422006;
-        --warning-border: #92400e; --warning-text: #fde68a; --info-bg: #172554;
-        --info-border: #1d4ed8; --info-text: #bfdbfe; --shadow: 0 16px 42px rgba(0,0,0,.28);
-        """
-        if dark_mode else
-        """
-        --primary: #2563eb; --primary-dark: #1d4ed8; --text: #172033; --muted: #64748b;
-        --surface: #ffffff; --surface-2: #f8fafc; --surface-soft: #f1f5f9; --border: #e2e8f0;
-        --input: #ffffff; --success: #16a34a; --danger: #dc2626; --warning-bg: #fffbeb;
-        --warning-border: #fde68a; --warning-text: #713f12; --info-bg: #eff6ff;
-        --info-border: #dbeafe; --info-text: #1e40af; --shadow: 0 10px 35px rgba(15,23,42,.08);
-        """
-    )
+    direction = "ltr"
+    theme = "dark" if st.session_state.get("dark_mode", True) else "light"
 
     st.markdown(
         f"""
@@ -209,7 +193,45 @@ def inject_css():
            ================================================================ */
 
         :root {{
-            {theme_vars}
+            --primary: #60a5fa;
+            --primary-dark: #3b82f6;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --surface: #111827;
+            --surface-2: #172033;
+            --surface-soft: #0f172a;
+            --border: #334155;
+            --input: #0b1220;
+            --success: #4ade80;
+            --danger: #f87171;
+            --warning-bg: #422006;
+            --warning-border: #92400e;
+            --warning-text: #fde68a;
+            --info-bg: #172554;
+            --info-border: #1d4ed8;
+            --info-text: #bfdbfe;
+            --shadow: 0 16px 42px rgba(0,0,0,.28);
+        }}
+
+        html[data-perdia-theme="light"] {{
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --text: #172033;
+            --muted: #64748b;
+            --surface: #ffffff;
+            --surface-2: #f8fafc;
+            --surface-soft: #f1f5f9;
+            --border: #e2e8f0;
+            --input: #ffffff;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --warning-bg: #fffbeb;
+            --warning-border: #fde68a;
+            --warning-text: #713f12;
+            --info-bg: #eff6ff;
+            --info-border: #dbeafe;
+            --info-text: #1e40af;
+            --shadow: 0 10px 35px rgba(15,23,42,.08);
         }}
 
         html, body, [class*="css"] {{
@@ -217,9 +239,16 @@ def inject_css():
                          "Noto Sans", Arial, sans-serif;
         }}
 
-        html, body {{
-            color-scheme: {"dark" if dark_mode else "light"};
-            background: var(--surface-soft) !important;
+        html[data-perdia-theme="dark"],
+        html[data-perdia-theme="dark"] body {{
+            color-scheme: dark;
+            background: #080d18 !important;
+        }}
+
+        html[data-perdia-theme="light"],
+        html[data-perdia-theme="light"] body {{
+            color-scheme: light;
+            background: #f6f8fc !important;
         }}
 
         /* Main page */
@@ -241,7 +270,7 @@ def inject_css():
 
         .block-container {{
             max-width: 980px !important;
-            padding: 3rem 1rem 4rem !important;
+            padding: 2.2rem 1rem 4rem !important;
         }}
 
         /* Streamlit top bar / toolbar */
@@ -313,18 +342,38 @@ def inject_css():
         }}
 
         .hero h1 {{
-            color:white !important;
+            color:#ffffff !important;
+            -webkit-text-fill-color:#ffffff !important;
             font-size:clamp(1.75rem,4vw,2.65rem);
             line-height:1.12;
             margin:0 0 10px;
             letter-spacing:-.035em;
+            font-weight:800 !important;
         }}
 
         .hero p {{
-            color:rgba(255,255,255,.82) !important;
+            color:rgba(255,255,255,.90) !important;
+            -webkit-text-fill-color:rgba(255,255,255,.90) !important;
             margin:0;
             max-width:720px;
             line-height:1.65;
+        }}
+
+        /* Keep every element inside the dark hero readable in Light Mode. */
+        .hero,
+        .hero *,
+        .hero div,
+        .hero span,
+        .hero strong,
+        .hero h1,
+        .hero p {{
+            color:#ffffff !important;
+            -webkit-text-fill-color:#ffffff !important;
+        }}
+
+        .hero p {{
+            color:rgba(255,255,255,.90) !important;
+            -webkit-text-fill-color:rgba(255,255,255,.90) !important;
         }}
 
         .pill {{
@@ -449,7 +498,7 @@ def inject_css():
         [data-testid="stWidgetLabel"],
         [data-testid="stWidgetLabel"] p,
         label, p, li, span {{
-            color:var(--text);
+            color:var(--text) !important;
         }}
 
         [data-testid="stCaptionContainer"],
@@ -596,7 +645,7 @@ def inject_css():
         /* Mobile */
         @media (max-width:640px) {{
             .block-container {{
-                padding:2rem .7rem 3rem !important;
+                padding:1.25rem .7rem 3rem !important;
             }}
 
             .hero {{
@@ -644,6 +693,11 @@ def inject_css():
         }}
 
         </style>
+        <script>
+        const root = window.parent.document.documentElement;
+        root.setAttribute("dir", "{direction}");
+        root.setAttribute("data-perdia-theme", "{theme}");
+        </script>
         """,
         unsafe_allow_html=True,
     )
@@ -678,6 +732,7 @@ binary_columns = [c for c in feature_columns if c not in ("Age", "Gender")]
 # Session state
 # =============================================================================
 
+st.session_state["lang"] = "en"
 if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = True
 if "page" not in st.session_state:
@@ -702,12 +757,32 @@ def go_to(page_name: str):
 # =============================================================================
 
 def render_header():
-    left, theme_col, admin_col = st.columns([4.2, 1.2, 1.6], vertical_alignment="center")
+    left, theme_col, right = st.columns([3.0, 1.0, 1.45], vertical_alignment="center")
+
     with left:
-        st.markdown(f"""<div class="brand"><div class="brand-icon">🩺</div><div><div class="brand-name">{tr('brand')}</div><div class="brand-tagline">{tr('tagline')}</div></div></div>""", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div class="brand">
+                <div class="brand-icon">🩺</div>
+                <div>
+                    <div class="brand-name">{tr('brand')}</div>
+                    <div class="brand-tagline">{tr('tagline')}</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     with theme_col:
-        st.toggle("🌙 Dark", key="dark_mode", help="Switch between dark and light mode")
-    with admin_col:
+        # Streamlit automatically reruns when this value changes.
+        st.toggle(
+            "🌙 Dark mode",
+            value=st.session_state.get("dark_mode", True),
+            key="dark_mode",
+            help="Switch between dark and light mode",
+        )
+
+    with right:
         if st.session_state["page"] == "admin":
             if st.button(f"⬅️ {tr('back')}", use_container_width=True):
                 go_to("main" if st.session_state["user_email"] else "email_gate")
@@ -784,14 +859,34 @@ def _join(items):
 
 
 def build_symptom_narrative(symptom_values: dict, extra_values: dict) -> str:
-    core_keys = {"Polyuria":"polyuria","Polydipsia":"polydipsia","sudden weight loss":"weight_loss","Irritability":"irritability","delayed healing":"healing","partial paresis":"paresis","Alopecia":"alopecia","Itching":"itching"}
-    core_yes = [tr(key) for col, key in core_keys.items() if symptom_values.get(col) == "Yes"]
-    extra_yes = [tr(key) for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
+    lang = "en"
+
+    core_keys = {
+        "Polyuria": "polyuria",
+        "Polydipsia": "polydipsia",
+        "sudden weight loss": "weight_loss",
+        "Irritability": "irritability",
+        "delayed healing": "healing",
+        "partial paresis": "paresis",
+        "Alopecia": "alopecia",
+        "Itching": "itching",
+    }
+
+    core_yes = [T["en"][key] for col, key in core_keys.items() if symptom_values.get(col) == "Yes"]
+    extra_yes = [T["en"][key] for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
+
     if not core_yes and not extra_yes:
         return tr("patient_denies")
-    sentences = [tr("patient_reports") + " " + _join(core_yes) + "."] if core_yes else [tr("no_core")]
+
+    sentences = []
+    if core_yes:
+        sentences.append(tr("patient_reports") + " " + _join(core_yes) + ".")
+    else:
+        sentences.append(tr("no_core"))
+
     if extra_yes:
         sentences.append(tr("further") + " " + _join(extra_yes) + ".")
+
     return " ".join(sentences)
 
 
@@ -812,10 +907,12 @@ def render_meal_plan():
         ["Friday", "Oatmeal or eggs + raw nuts", "Fish/chicken + vegetables + salad", "Light vegetable soup + cheese", "Water / herbal tea"],
     ]
 
+
     df = pd.DataFrame(
         plans,
         columns=[tr("meal_plan"), "Breakfast", "Lunch", "Dinner", "Drinks"],
     )
+    df[tr("meal_plan")] = [row[0] for row in plans]
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 
