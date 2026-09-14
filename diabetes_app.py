@@ -187,18 +187,13 @@ DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"
 
 def inject_css():
     direction = "ltr"
-    theme = "dark" if st.session_state.get("dark_mode", True) else "light"
+    is_dark = st.session_state.get("dark_mode", True)
 
-    st.markdown(
-        f"""
-        <style>
-        /* ================================================================
-           PerdiaPredict complete theme
-           The theme is applied to the whole Streamlit interface, not only
-           to text. This fixes the mixed light/dark appearance.
-           ================================================================ */
-
-        :root {{
+    # Keep the theme entirely in Streamlit/Python so the toggle reliably
+    # changes the CSS on every rerun. Do not depend on JavaScript setting
+    # attributes on Streamlit's parent document.
+    if is_dark:
+        theme_vars = """
             --primary: #60a5fa;
             --primary-dark: #3b82f6;
             --text: #f8fafc;
@@ -217,9 +212,10 @@ def inject_css():
             --info-border: #1d4ed8;
             --info-text: #bfdbfe;
             --shadow: 0 16px 42px rgba(0,0,0,.28);
-        }}
-
-        html[data-perdia-theme="light"] {{
+        """
+        page_bg = "#080d18"
+    else:
+        theme_vars = """
             --primary: #2563eb;
             --primary-dark: #1d4ed8;
             --text: #172033;
@@ -238,6 +234,20 @@ def inject_css():
             --info-border: #dbeafe;
             --info-text: #1e40af;
             --shadow: 0 10px 35px rgba(15,23,42,.08);
+        """
+        page_bg = "#f6f8fc"
+
+    st.markdown(
+        f"""
+        <style>
+        /* ================================================================
+           PerdiaPredict complete theme
+           The theme is applied to the whole Streamlit interface, not only
+           to text. This fixes the mixed light/dark appearance.
+           ================================================================ */
+
+        :root {{
+            {theme_vars}
         }}
 
         html, body, [class*="css"] {{
@@ -245,16 +255,9 @@ def inject_css():
                          "Noto Sans", Arial, sans-serif;
         }}
 
-        html[data-perdia-theme="dark"],
-        html[data-perdia-theme="dark"] body {{
-            color-scheme: dark;
-            background: #080d18 !important;
-        }}
-
-        html[data-perdia-theme="light"],
-        html[data-perdia-theme="light"] body {{
-            color-scheme: light;
-            background: #f6f8fc !important;
+        html, body {{
+            color-scheme: {"dark" if is_dark else "light"};
+            background: {page_bg} !important;
         }}
 
         /* Main page */
@@ -276,7 +279,7 @@ def inject_css():
 
         .block-container {{
             max-width: 980px !important;
-            padding: 2.2rem 1rem 4rem !important;
+            padding: 3.2rem 1rem 4rem !important;
         }}
 
         /* Streamlit top bar / toolbar */
@@ -702,7 +705,6 @@ def inject_css():
         <script>
         const root = window.parent.document.documentElement;
         root.setAttribute("dir", "{direction}");
-        root.setAttribute("data-perdia-theme", "{theme}");
         </script>
         """,
         unsafe_allow_html=True,
@@ -782,7 +784,7 @@ def render_header():
     with theme_col:
         # Streamlit automatically reruns when this value changes.
         st.toggle(
-            "🌙 Dark mode",
+            "🌙 Dark mode / ☀️ Light mode",
             value=st.session_state.get("dark_mode", True),
             key="dark_mode",
             help="Switch between dark and light mode",
