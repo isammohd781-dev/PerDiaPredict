@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime
 from io import BytesIO
 
@@ -36,6 +37,8 @@ def _get_secret(key: str, default: str = "") -> str:
 
 
 ADMIN_PASSWORD = _get_secret("ADMIN_PASSWORD", "admin123")
+
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 # ---------------------------------------------------------------------------
@@ -91,76 +94,64 @@ diabetes_types = [
 ]
 
 # ---------------------------------------------------------------------------
-# Header
+# Session state / navigation setup
 # ---------------------------------------------------------------------------
-st.title("🩺 Early Stage Diabetes Prediction")
-st.write(
-    "Please fill in your personal information and symptoms below, then "
-    "click **Predict** to estimate the risk of early-stage diabetes."
-)
-st.caption(
-    "⚠️ This tool is for educational/demo purposes only and is NOT a "
-    "medical diagnosis. Always consult a qualified doctor for an "
-    "actual diagnosis."
-)
+if "page" not in st.session_state:
+    st.session_state["page"] = "email_gate"  # email_gate -> main -> admin
+if "user_email" not in st.session_state:
+    st.session_state["user_email"] = None
+
+
+def go_to(page_name: str):
+    st.session_state["page"] = page_name
+    st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Top bar: title on the left, Admin Panel button on the top-right corner
+# ---------------------------------------------------------------------------
+top_left, top_right = st.columns([5, 1.3])
+with top_left:
+    st.markdown("### 🩺 PerdiaPredict")
+with top_right:
+    if st.session_state["page"] == "admin":
+        if st.button("⬅️ Back", use_container_width=True):
+            go_to("main" if st.session_state["user_email"] else "email_gate")
+    else:
+        if st.button("🔒 Admin Panel", use_container_width=True):
+            go_to("admin")
+
 st.divider()
 
+
 # ---------------------------------------------------------------------------
-# Input form
+# Screen 1: Email gate
 # ---------------------------------------------------------------------------
-with st.form("patient_form", clear_on_submit=False):
-    st.subheader("Personal Information")
-
-    c1, c2 = st.columns(2)
-    with c1:
-        first_name = st.text_input("First name *")
-    with c2:
-        last_name = st.text_input("Last name *")
-
-    c3, c4 = st.columns(2)
-    with c3:
-        phone = st.text_input("Phone number *")
-    with c4:
-        patient_email = st.text_input("Email address (optional)")
-
-    address = st.text_input("Residential address (city / area) *")
-
-    diabetes_type = st.selectbox("Which type of diabetes do you believe you have?", diabetes_types)
-
-    st.divider()
-    st.subheader("Basic Information")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        age = st.number_input("Age", min_value=1, max_value=120, value=40, step=1)
-    with col2:
-        gender = st.selectbox("Gender", ["Male", "Female"])
-
-    st.subheader("Core Symptoms")
-    st.caption("Select Yes or No for each symptom below.")
-
-    symptom_values = {}
-    s_col1, s_col2 = st.columns(2)
-    for i, col in enumerate(binary_columns):
-        label = display_labels.get(col, col)
-        target_col = s_col1 if i % 2 == 0 else s_col2
-        with target_col:
-            symptom_values[col] = st.selectbox(label, ["No", "Yes"], key=col)
-
-    st.subheader("Additional Symptoms (optional)")
-    st.caption(
-        "These symptoms don't directly affect the predicted percentage "
-        "(the model was not trained on them), but they help enrich your "
-        "final report and its recommendations."
+def render_email_gate():
+    st.title("🩺 Early Stage Diabetes Prediction")
+    st.write(
+        "Before we begin, please enter your email address to continue to "
+        "the assessment form."
     )
-    extra_values = {}
-    e_col1, e_col2 = st.columns(2)
-    for i, (key, label) in enumerate(extra_symptoms_labels.items()):
-        target_col = e_col1 if i % 2 == 0 else e_col2
-        with target_col:
-            extra_values[key] = st.selectbox(label, ["No", "Yes"], key=f"extra_{key}")
+    st.caption(
+        "⚠️ This tool is for educational/demo purposes only and is NOT a "
+        "medical diagnosis. Always consult a qualified doctor for an "
+        "actual diagnosis."
+    )
 
-    submitted = st.form_submit_button("🔍 Predict", use_container_width=True)
+    with st.form("email_gate_form", clear_on_submit=False):
+        email_input = st.text_input("Email address *", placeholder="you@example.com")
+        continue_clicked = st.form_submit_button("Continue ➡️", use_container_width=True)
+
+    if continue_clicked:
+        cleaned_email = email_input.strip()
+        if not cleaned_email:
+            st.error("Email address is required.")
+        elif not EMAIL_REGEX.match(cleaned_email):
+            st.error("Please enter a valid email address.")
+        else:
+            st.session_state["user_email"] = cleaned_email
+            go_to("main")
 
 
 # ---------------------------------------------------------------------------
@@ -587,135 +578,208 @@ def save_report_to_excel(report: dict):
 
 
 # ---------------------------------------------------------------------------
-# Form Submission Logic
+# Screen 2: Main assessment app (form + results)
 # ---------------------------------------------------------------------------
-if submitted:
-    clean_first_name = first_name.strip()
-    clean_last_name = last_name.strip()
-    clean_phone = phone.strip()
-    clean_address = address.strip()
-    clean_email = patient_email.strip()
-
-    errors = []
-    if not clean_first_name:
-        errors.append("First name is required.")
-    if not clean_last_name:
-        errors.append("Last name is required.")
-    if not clean_phone:
-        errors.append("Phone number is required.")
-    if not clean_address:
-        errors.append("Residential address is required.")
-
-    if errors:
-        for e in errors:
-            st.error(e)
-    else:
-        raw_input = {"Age": age, "Gender": gender, **symptom_values}
-        result, probability = predict_new_patient(raw_input)
-
-        any_extra_symptom = any(v == "Yes" for v in extra_values.values())
-        symptom_narrative = build_symptom_narrative(symptom_values, extra_values)
-
-        st.session_state["last_report"] = {
-            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "First name": clean_first_name,
-            "Last name": clean_last_name,
-            "Phone": clean_phone,
-            "Email": clean_email if clean_email else "N/A",
-            "Address": clean_address,
-            "Reported diabetes type": diabetes_type,
-            "Age": age,
-            "Gender": gender,
-            "Result": "Positive (high risk)" if result == 1 else "Negative (low risk)",
-            "Probability": f"{probability * 100:.1f}%",
-            "Notable extra symptoms": "Yes" if any_extra_symptom else "No",
-            "Symptom narrative": symptom_narrative,
-        }
-        st.session_state["last_result"] = int(result)
-        st.session_state["last_probability"] = float(probability)
-        st.session_state["report_saved"] = False
-
-        # التوجيه والتمرير للقمة في الهواتف ذكياً وبصورة سلسة
-        components.html(
-            """
-            <script>
-                window.parent.scrollTo({top: 0, behavior: 'smooth'});
-            </script>
-            """,
-            height=0,
-        )
-
-# ---------------------------------------------------------------------------
-# Results display
-# ---------------------------------------------------------------------------
-if "last_report" in st.session_state:
-    report = st.session_state["last_report"]
-    result = st.session_state["last_result"]
-    probability = st.session_state["last_probability"]
-
-    st.divider()
-    st.subheader("Result")
-
-    if result == 1:
-        st.error("⚠️ High risk of early-stage diabetes")
-    else:
-        st.success("✅ Low risk of early-stage diabetes")
-
-    st.metric("Estimated probability of Positive", report["Probability"])
-    st.progress(min(max(probability, 0.0), 1.0))
-
-    with st.expander("🩺 Reported Symptoms Summary", expanded=True):
-        st.write(report.get("Symptom narrative", ""))
-
-    st.divider()
-
-    if result == 1:
-        st.warning(
-            "🚨 Because your risk level is high, we strongly recommend "
-            "visiting the nearest doctor or health center as soon as "
-            "possible for an accurate diagnosis and your personal safety. "
-            "Please don't rely on this tool as a substitute for medical advice."
-        )
-        render_offline_health_guide()
-    else:
-        if report["Notable extra symptoms"] == "Yes":
-            st.info(
-                "We noticed you selected 'Yes' for some additional symptoms. "
-                "Even though the current result is low-risk, it's a good idea "
-                "to see a doctor if these symptoms persist."
-            )
-        render_meal_plan()
-        render_offline_health_guide()
-
+def render_main_app():
+    st.title("🩺 Early Stage Diabetes Prediction")
+    st.write(
+        "Please fill in your personal information and symptoms below, then "
+        "click **Predict** to estimate the risk of early-stage diabetes."
+    )
     st.caption(
         "⚠️ This tool is for educational/demo purposes only and is NOT a "
-        "medical diagnosis. Always consult a qualified doctor for an actual diagnosis."
+        "medical diagnosis. Always consult a qualified doctor for an "
+        "actual diagnosis."
     )
-
-    if not st.session_state.get("report_saved", False):
-        save_report_to_excel(report)
-        st.session_state["report_saved"] = True
-
     st.divider()
-    st.subheader("📄 Download Assessment Report")
 
-    pdf_data = generate_pdf_report(report)
-    file_name_pdf = f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
+    with st.form("patient_form", clear_on_submit=False):
+        st.subheader("Personal Information")
 
-    st.download_button(
-        label="📥 Download Report (PDF)",
-        data=pdf_data,
-        file_name=file_name_pdf,
-        mime="application/pdf",
-        type="primary",
-        use_container_width=True,
-    )
+        c1, c2 = st.columns(2)
+        with c1:
+            first_name = st.text_input("First name *")
+        with c2:
+            last_name = st.text_input("Last name *")
+
+        c3, c4 = st.columns(2)
+        with c3:
+            phone = st.text_input("Phone number *")
+        with c4:
+            patient_email = st.text_input(
+                "Email address", value=st.session_state.get("user_email", "")
+            )
+
+        address = st.text_input("Residential address (city / area) *")
+
+        diabetes_type = st.selectbox("Which type of diabetes do you believe you have?", diabetes_types)
+
+        st.divider()
+        st.subheader("Basic Information")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            age = st.number_input("Age", min_value=1, max_value=120, value=40, step=1)
+        with col2:
+            gender = st.selectbox("Gender", ["Male", "Female"])
+
+        st.subheader("Core Symptoms")
+        st.caption("Select Yes or No for each symptom below.")
+
+        symptom_values = {}
+        s_col1, s_col2 = st.columns(2)
+        for i, col in enumerate(binary_columns):
+            label = display_labels.get(col, col)
+            target_col = s_col1 if i % 2 == 0 else s_col2
+            with target_col:
+                symptom_values[col] = st.selectbox(label, ["No", "Yes"], key=col)
+
+        st.subheader("Additional Symptoms (optional)")
+        st.caption(
+            "These symptoms don't directly affect the predicted percentage "
+            "(the model was not trained on them), but they help enrich your "
+            "final report and its recommendations."
+        )
+        extra_values = {}
+        e_col1, e_col2 = st.columns(2)
+        for i, (key, label) in enumerate(extra_symptoms_labels.items()):
+            target_col = e_col1 if i % 2 == 0 else e_col2
+            with target_col:
+                extra_values[key] = st.selectbox(label, ["No", "Yes"], key=f"extra_{key}")
+
+        submitted = st.form_submit_button("🔍 Predict", use_container_width=True)
+
+    # -----------------------------------------------------------------
+    # Form submission logic
+    # -----------------------------------------------------------------
+    if submitted:
+        clean_first_name = first_name.strip()
+        clean_last_name = last_name.strip()
+        clean_phone = phone.strip()
+        clean_address = address.strip()
+        clean_email = patient_email.strip()
+
+        errors = []
+        if not clean_first_name:
+            errors.append("First name is required.")
+        if not clean_last_name:
+            errors.append("Last name is required.")
+        if not clean_phone:
+            errors.append("Phone number is required.")
+        if not clean_address:
+            errors.append("Residential address is required.")
+
+        if errors:
+            for e in errors:
+                st.error(e)
+        else:
+            raw_input = {"Age": age, "Gender": gender, **symptom_values}
+            result, probability = predict_new_patient(raw_input)
+
+            any_extra_symptom = any(v == "Yes" for v in extra_values.values())
+            symptom_narrative = build_symptom_narrative(symptom_values, extra_values)
+
+            st.session_state["last_report"] = {
+                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "First name": clean_first_name,
+                "Last name": clean_last_name,
+                "Phone": clean_phone,
+                "Email": clean_email if clean_email else "N/A",
+                "Address": clean_address,
+                "Reported diabetes type": diabetes_type,
+                "Age": age,
+                "Gender": gender,
+                "Result": "Positive (high risk)" if result == 1 else "Negative (low risk)",
+                "Probability": f"{probability * 100:.1f}%",
+                "Notable extra symptoms": "Yes" if any_extra_symptom else "No",
+                "Symptom narrative": symptom_narrative,
+            }
+            st.session_state["last_result"] = int(result)
+            st.session_state["last_probability"] = float(probability)
+            st.session_state["report_saved"] = False
+
+            # التوجيه والتمرير للقمة في الهواتف ذكياً وبصورة سلسة
+            components.html(
+                """
+                <script>
+                    window.parent.scrollTo({top: 0, behavior: 'smooth'});
+                </script>
+                """,
+                height=0,
+            )
+
+    # -----------------------------------------------------------------
+    # Results display
+    # -----------------------------------------------------------------
+    if "last_report" in st.session_state:
+        report = st.session_state["last_report"]
+        result = st.session_state["last_result"]
+        probability = st.session_state["last_probability"]
+
+        st.divider()
+        st.subheader("Result")
+
+        if result == 1:
+            st.error("⚠️ High risk of early-stage diabetes")
+        else:
+            st.success("✅ Low risk of early-stage diabetes")
+
+        st.metric("Estimated probability of Positive", report["Probability"])
+        st.progress(min(max(probability, 0.0), 1.0))
+
+        with st.expander("🩺 Reported Symptoms Summary", expanded=True):
+            st.write(report.get("Symptom narrative", ""))
+
+        st.divider()
+
+        if result == 1:
+            st.warning(
+                "🚨 Because your risk level is high, we strongly recommend "
+                "visiting the nearest doctor or health center as soon as "
+                "possible for an accurate diagnosis and your personal safety. "
+                "Please don't rely on this tool as a substitute for medical advice."
+            )
+            render_offline_health_guide()
+        else:
+            if report["Notable extra symptoms"] == "Yes":
+                st.info(
+                    "We noticed you selected 'Yes' for some additional symptoms. "
+                    "Even though the current result is low-risk, it's a good idea "
+                    "to see a doctor if these symptoms persist."
+                )
+            render_meal_plan()
+            render_offline_health_guide()
+
+        st.caption(
+            "⚠️ This tool is for educational/demo purposes only and is NOT a "
+            "medical diagnosis. Always consult a qualified doctor for an actual diagnosis."
+        )
+
+        if not st.session_state.get("report_saved", False):
+            save_report_to_excel(report)
+            st.session_state["report_saved"] = True
+
+        st.divider()
+        st.subheader("📄 Download Assessment Report")
+
+        pdf_data = generate_pdf_report(report)
+        file_name_pdf = f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
+
+        st.download_button(
+            label="📥 Download Report (PDF)",
+            data=pdf_data,
+            file_name=file_name_pdf,
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True,
+        )
+
 
 # ---------------------------------------------------------------------------
-# Admin Panel
+# Screen 3: Admin Panel (separate page)
 # ---------------------------------------------------------------------------
-st.divider()
-with st.expander("🔒 Admin Panel (staff only)"):
+def render_admin_page():
+    st.title("🔒 Admin Panel")
     st.caption(
         "This section is restricted. Patients should not be given this "
         "password. It gives access to every patient's submitted data."
@@ -772,3 +836,16 @@ with st.expander("🔒 Admin Panel (staff only)"):
                 st.caption("No saved records yet.")
         else:
             st.error("Incorrect password.")
+
+
+# ---------------------------------------------------------------------------
+# Router: decide which screen to render
+# ---------------------------------------------------------------------------
+current_page = st.session_state["page"]
+
+if current_page == "admin":
+    render_admin_page()
+elif current_page == "email_gate":
+    render_email_gate()
+else:
+    render_main_app()
