@@ -16,7 +16,7 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 
 # =============================================================================
 # PERDIAPREDICT - POLISHED RESPONSIVE VERSION
-# Languages: English, Arabic, Hindi, Spanish
+# Languages: English and Arabic only
 # =============================================================================
 
 st.set_page_config(
@@ -413,7 +413,7 @@ binary_columns = [c for c in feature_columns if c not in ("Age", "Gender")]
 if "lang" not in st.session_state:
     st.session_state["lang"] = "en"
 if "dark_mode" not in st.session_state:
-    st.session_state["dark_mode"] = True
+    st.session_state["dark_mode"] = False
 if "page" not in st.session_state:
     st.session_state["page"] = "email_gate"
 if "user_email" not in st.session_state:
@@ -447,23 +447,23 @@ def inject_css():
         <style>
         :root {{
             --primary:#2563eb;
-            --primary-2:#06b6d4;
-            --text:#0f172a;
+            --primary-2:#0891b2;
+            --text:#172033;
             --muted:#64748b;
             --surface:#ffffff;
-            --surface-2:#f8fafc;
-            --surface-soft:#eef4ff;
-            --border:#dbe3ef;
+            --surface-2:#f7f9fc;
+            --surface-soft:#edf4ff;
+            --border:#d8e1ee;
             --input:#ffffff;
             --success:#16a34a;
             --danger:#dc2626;
-            --warning-bg:#fff7ed;
-            --warning-border:#fed7aa;
+            --warning-bg:#fff8ef;
+            --warning-border:#f5c98b;
             --warning-text:#9a3412;
             --info-bg:#eff6ff;
             --info-border:#bfdbfe;
             --info-text:#1e40af;
-            --shadow:0 18px 45px rgba(15,23,42,.08);
+            --shadow:0 14px 35px rgba(30,64,175,.08);
         }}
         html[data-perdia-theme="dark"] {{
             --text:#f8fafc;
@@ -490,14 +490,14 @@ def inject_css():
         }}
         html[data-perdia-theme="light"], html[data-perdia-theme="light"] body {{
             color-scheme:light;
-            background:#f3f7fc !important;
+            background:#eef4fb !important;
         }}
         .stApp {{
             min-height:100vh;
             background:
-                radial-gradient(circle at 5% 0%, rgba(37,99,235,.14), transparent 28%),
-                radial-gradient(circle at 100% 8%, rgba(6,182,212,.10), transparent 25%),
-                var(--surface-soft) !important;
+                radial-gradient(circle at 0% 0%, rgba(59,130,246,.11), transparent 30%),
+                radial-gradient(circle at 100% 0%, rgba(14,165,233,.09), transparent 28%),
+                linear-gradient(180deg,#f8fbff 0%,#edf4fb 52%,#e9f1f9 100%) !important;
             color:var(--text) !important;
         }}
         [data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stMainBlockContainer"] {{
@@ -517,9 +517,9 @@ def inject_css():
         .brand-name {{ font-size:1.2rem;font-weight:850;letter-spacing:-.025em;color:var(--text) !important; }}
         .brand-tagline {{ font-size:.78rem;color:var(--muted) !important;margin-top:2px; }}
         .hero {{
-            background:linear-gradient(135deg,#071226 0%,#172554 55%,#075985 100%);
-            color:#fff !important;border-radius:28px;padding:34px 30px;margin:18px 0;
-            box-shadow:0 20px 50px rgba(2,6,23,.28);overflow:hidden;position:relative;
+            background:linear-gradient(135deg,#ffffff 0%,#eef6ff 48%,#e0f2fe 100%);
+            color:#172033 !important;border:1px solid #d7e5f5;border-radius:28px;padding:34px 30px;margin:18px 0;
+            box-shadow:0 20px 45px rgba(30,64,175,.12);overflow:hidden;position:relative;
         }}
         .hero:after {{
             content:"";position:absolute;width:240px;height:240px;border-radius:50%;
@@ -529,8 +529,9 @@ def inject_css():
             content:"";position:absolute;width:120px;height:120px;border-radius:50%;
             border:1px solid rgba(255,255,255,.10);right:55px;bottom:-65px;
         }}
-        .hero h1 {{ color:#fff !important;font-size:clamp(1.8rem,4vw,2.75rem);line-height:1.12;margin:0 0 10px;letter-spacing:-.04em;position:relative;z-index:1; }}
-        .hero p {{ color:rgba(255,255,255,.84) !important;margin:0;max-width:760px;line-height:1.7;position:relative;z-index:1; }}
+        .hero h1 {{ color:#13213a !important;-webkit-text-fill-color:#13213a !important;font-size:clamp(1.8rem,4vw,2.75rem);line-height:1.12;margin:0 0 10px;letter-spacing:-.04em;position:relative;z-index:1; }}
+        .hero p {{ color:#52647d !important;-webkit-text-fill-color:#52647d !important;margin:0;max-width:760px;line-height:1.7;position:relative;z-index:1; }}
+        .hero .pill {{ color:#17426b !important;background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.16); }}
         .pill {{
             display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;
             background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);
@@ -591,6 +592,17 @@ def inject_css():
         .stExpander details,.stExpander summary {{ background:var(--surface) !important;color:var(--text) !important; }}
         [data-testid="stAlert"] {{ background:var(--surface) !important;border:1px solid var(--border) !important;color:var(--text) !important; }}
         [data-testid="stDataFrame"],[data-testid="stTable"] {{ background:var(--surface) !important;color:var(--text) !important; }}
+        html[data-perdia-theme="dark"] .hero {{
+            background:linear-gradient(135deg,#071226 0%,#172554 55%,#075985 100%);
+            color:#fff !important;border-color:transparent;box-shadow:0 20px 50px rgba(2,6,23,.28);
+        }}
+        html[data-perdia-theme="dark"] .hero h1 {{ color:#fff !important;-webkit-text-fill-color:#fff !important; }}
+        html[data-perdia-theme="dark"] .hero p {{ color:rgba(255,255,255,.84) !important;-webkit-text-fill-color:rgba(255,255,255,.84) !important; }}
+        html[data-perdia-theme="dark"] .hero .pill {{ color:#f8fafc !important;background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.18); }}
+        .header-language {{ display:flex;align-items:center;gap:6px;min-height:40px;padding-top:7px;white-space:nowrap; }}
+        .header-language-label {{ font-size:.82rem;font-weight:650;color:var(--text) !important; }}
+        .header-language-label span {{ color:#0ea5e9 !important; }}
+        .header-admin button {{ margin-top:7px !important; }}
         @media (max-width:640px) {{
             .block-container {{ padding:.65rem .7rem 3rem !important; }}
             .hero {{ border-radius:21px;padding:24px 19px;margin:10px 0 14px; }}
@@ -627,7 +639,11 @@ def inject_css():
 # =============================================================================
 
 def render_header():
-    left, theme_col, right = st.columns([2.5, 1.2, 2.0], vertical_alignment="center")
+    # Keep all header controls on one horizontal line.
+    left, theme_col, language_col, admin_col = st.columns(
+        [2.65, 1.15, 1.75, 0.85],
+        vertical_alignment="center",
+    )
 
     with left:
         st.markdown(
@@ -646,31 +662,40 @@ def render_header():
     with theme_col:
         st.toggle(
             f"🌙 {tr('theme')}",
-            value=st.session_state.get("dark_mode", True),
+            value=st.session_state.get("dark_mode", False),
             key="dark_mode",
             help=tr("theme"),
         )
 
-    with right:
-        options = list(LANGUAGES.keys())
-        current_label = next(k for k, v in LANGUAGES.items() if v == st.session_state["lang"])
-        selected = st.selectbox(
-            f"🌐 {tr('language')}",
-            options,
-            index=options.index(current_label),
-            key="language_selector",
-        )
-        new_lang = LANGUAGES[selected]
-        if new_lang != st.session_state["lang"]:
-            st.session_state["lang"] = new_lang
-            st.rerun()
+    with language_col:
+        label_col, select_col = st.columns([0.72, 1.28], vertical_alignment="center")
+        with label_col:
+            st.markdown(
+                f'<div class="header-language"><div class="header-language-label">🌐 <span>{tr("language")}</span></div></div>',
+                unsafe_allow_html=True,
+            )
+        with select_col:
+            options = list(LANGUAGES.keys())
+            current_label = next(k for k, v in LANGUAGES.items() if v == st.session_state["lang"])
+            selected = st.selectbox(
+                tr("language"),
+                options,
+                index=options.index(current_label),
+                key="language_selector",
+                label_visibility="collapsed",
+            )
+            new_lang = LANGUAGES[selected]
+            if new_lang != st.session_state["lang"]:
+                st.session_state["lang"] = new_lang
+                st.rerun()
 
-    if st.session_state["page"] == "admin":
-        if st.button(f"⬅️ {tr('back')}", use_container_width=True):
-            go_to("main" if st.session_state["user_email"] else "email_gate")
-    else:
-        if st.button(f"🔒 {tr('admin')}", use_container_width=True):
-            go_to("admin")
+    with admin_col:
+        if st.session_state["page"] == "admin":
+            if st.button("⬅️", key="header_back", help=tr("back"), use_container_width=True):
+                go_to("main" if st.session_state["user_email"] else "email_gate")
+        else:
+            if st.button("🔒", key="header_admin", help=tr("admin"), use_container_width=True):
+                go_to("admin")
 
 
 # =============================================================================
