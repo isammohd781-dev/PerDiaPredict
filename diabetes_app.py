@@ -918,6 +918,19 @@ def inject_css():
             margin-bottom:3px;
         }}
 
+        /* Language selector wrapper - shows the icon+label clearly */
+        .lang-select-wrap {{
+            margin-top:-4px;
+        }}
+
+        .lang-select-wrap [data-testid="stWidgetLabel"] {{
+            font-size:.72rem;
+            font-weight:700;
+            color:var(--muted) !important;
+            margin-bottom:2px;
+            text-align:{'right' if rtl else 'left'};
+        }}
+
         /* Mobile */
         @media (max-width:640px) {{
             .block-container {{
@@ -1064,15 +1077,17 @@ def render_header():
         )
 
     with right:
+        st.markdown('<div class="lang-select-wrap">', unsafe_allow_html=True)
         options = list(LANGUAGES.keys())
         current_label = next(k for k, v in LANGUAGES.items() if v == st.session_state["lang"])
         selected = st.selectbox(
-            tr("language"),
+            f"🌐 {tr('language')}",
             options,
             index=options.index(current_label),
             key="language_selector",
-            label_visibility="collapsed",
+            label_visibility="visible",
         )
+        st.markdown('</div>', unsafe_allow_html=True)
         new_lang = LANGUAGES[selected]
         if new_lang != st.session_state["lang"]:
             st.session_state["lang"] = new_lang
