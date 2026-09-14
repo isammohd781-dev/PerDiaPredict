@@ -12,6 +12,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+
 st.set_page_config(
     page_title="PerdiaPredict",
     page_icon="🩺",
@@ -1150,17 +1151,21 @@ def render_email_gate():
         unsafe_allow_html=True,
     )
 
-    with st.form("email_gate_form", clear_on_submit=False):
-        email_input = st.text_input(
-            tr("email"),
-            value=st.session_state.get("user_email") or "",
-            placeholder="you@example.com",
-        )
-        continue_clicked = st.form_submit_button(
-            f"🚀 {tr('continue')}",
-            use_container_width=True,
-            type="primary",
-        )
+    # Keep the email gate outside a Streamlit form.
+    # This makes the Continue button respond reliably after theme/CSS changes.
+    email_input = st.text_input(
+        tr("email"),
+        value=st.session_state.get("user_email") or "",
+        placeholder="you@example.com",
+        key="email_gate_input",
+    )
+
+    continue_clicked = st.button(
+        f"🚀 {tr('continue')}",
+        use_container_width=True,
+        type="primary",
+        key="email_continue_button",
+    )
 
     if continue_clicked:
         cleaned_email = email_input.strip()
