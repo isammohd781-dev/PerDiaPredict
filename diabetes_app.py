@@ -286,6 +286,18 @@ def inject_css():
             margin-right: auto !important;
         }}
 
+        /* Header layout */
+        .perdia-header-brand {{
+            width: 100%;
+        }}
+        .perdia-header-actions {{
+            width: 100%;
+        }}
+        .perdia-header-actions [data-testid="stHorizontalBlock"] {{
+            width: 100% !important;
+            align-items: center !important;
+        }}
+
         /* Prevent the page from becoming wider than the browser window. */
         html, body, .stApp, [data-testid="stAppViewContainer"] {{
             max-width: 100% !important;
@@ -721,7 +733,44 @@ def inject_css():
         /* Mobile */
         @media (max-width:640px) {{
             .block-container {{
-                padding:1.25rem .7rem 3rem !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                padding: 1.0rem .7rem 3rem !important;
+                overflow-x: hidden !important;
+            }}
+
+            .perdia-header-brand {{
+                margin-bottom: 8px !important;
+            }}
+
+            .perdia-header-actions [data-testid="stHorizontalBlock"] {{
+                display: flex !important;
+                flex-wrap: nowrap !important;
+                gap: 8px !important;
+            }}
+
+            .perdia-header-actions [data-testid="stColumn"] {{
+                min-width: 0 !important;
+            }}
+
+            .perdia-header-actions [data-testid="stToggle"] {{
+                width: 100% !important;
+                box-sizing: border-box !important;
+                min-height: 44px !important;
+                padding: 5px 7px !important;
+            }}
+
+            .perdia-header-actions [data-testid="stToggle"] label {{
+                white-space: nowrap !important;
+                font-size: 0.9rem !important;
+            }}
+
+            .perdia-header-actions .stButton > button {{
+                width: 100% !important;
+                min-height: 44px !important;
+                padding: 7px 8px !important;
+                white-space: nowrap !important;
+                font-size: 0.9rem !important;
             }}
 
             .hero {{
@@ -832,11 +881,10 @@ def go_to(page_name: str):
 # =============================================================================
 
 def render_header():
-    left, theme_col, right = st.columns([2.55, 1.65, 1.45], vertical_alignment="center", gap="small")
-
-    with left:
-        st.markdown(
-            f"""
+    # Keep the brand on its own row so it never collides with controls on phones.
+    st.markdown(
+        f"""
+        <div class="perdia-header-brand">
             <div class="brand">
                 <div class="brand-icon">🩺</div>
                 <div>
@@ -844,18 +892,20 @@ def render_header():
                     <div class="brand-tagline">{tr('tagline')}</div>
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # The controls share a separate row. This is much safer on small screens.
+    st.markdown('<div class="perdia-header-actions">', unsafe_allow_html=True)
+    theme_col, right = st.columns([1.05, 0.95], vertical_alignment="center", gap="small")
 
     with theme_col:
-        # Streamlit automatically reruns when this value changes.
         st.toggle(
             "🌙 Dark / ☀️ Light",
             value=st.session_state.get("dark_mode", True),
             key="dark_mode",
-            # No help tooltip here: it can cover the header and is unnecessary
-            # because the label already explains the control.
         )
 
     with right:
@@ -865,6 +915,8 @@ def render_header():
         else:
             if st.button(f"🔒 {tr('admin')}", use_container_width=True):
                 go_to("admin")
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # =============================================================================
