@@ -2,6 +2,7 @@ import os
 import re
 from datetime import datetime
 from io import BytesIO
+from html import escape
 
 import joblib
 import pandas as pd
@@ -48,15 +49,14 @@ ADMIN_PASSWORD = _get_secret("ADMIN_PASSWORD", "admin123")
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
+
 # =============================================================================
-# Translation system
+# Translation system — English / Arabic only
 # =============================================================================
 
 LANGUAGES = {
     "English": "en",
     "العربية": "ar",
-    "हिन्दी": "hi",
-    "Español": "es",
 }
 
 T = {
@@ -66,7 +66,7 @@ T = {
         "language": "Language",
         "admin": "Admin Panel",
         "back": "Back",
-        "email_title": "Early Stage Diabetes Screening",
+        "email_title": "Early-Stage Diabetes Screening",
         "email_intro": "Enter your email address to start your assessment.",
         "email": "Email address",
         "email_required": "Email address is required.",
@@ -93,7 +93,7 @@ T = {
         "male": "Male",
         "female": "Female",
         "core": "Core Symptoms",
-        "core_help": "Please select Yes or No for every symptom.",
+        "core_help": "Select Yes or No for every symptom.",
         "yes": "Yes",
         "no": "No",
         "additional": "Additional Symptoms",
@@ -102,8 +102,8 @@ T = {
         "required_fields": "Please complete the required fields.",
         "required": "is required.",
         "result": "Assessment Result",
-        "high_risk": "High risk of early-stage diabetes",
-        "low_risk": "Low risk of early-stage diabetes",
+        "high_risk": "Higher estimated risk of early-stage diabetes",
+        "low_risk": "Lower estimated risk based on this screening",
         "probability": "Estimated probability",
         "symptom_summary": "Symptoms Summary",
         "recommendation": "Recommendation",
@@ -128,35 +128,87 @@ T = {
         "incorrect": "Incorrect password.",
         "no_records": "No saved records yet.",
         "download_excel": "Download Excel file",
-        "clean": "Clean Data",
+        "clean": "Clear Data",
         "confirm": "Are you sure you want to delete all saved records? This action cannot be undone.",
         "delete": "Yes, Delete Data",
         "cancel": "Cancel",
         "deleted": "All data cleared successfully.",
-        "theme": "Theme",
+        "theme": "Dark mode",
         "readiness": "Ready",
         "model_status": "Machine-learning model loaded",
         "privacy": "Your information is used only by this application for the assessment/report workflow.",
         "patient_denies": "The patient denies all core and additional symptoms assessed in this screening.",
         "patient_reports": "The patient reports",
-        "further": "On further questioning, the patient also endorses",
+        "further": "On further questioning, the patient also reports",
         "no_core": "The patient denies any of the core symptoms assessed in this screening.",
         "constant_fatigue": "Constant fatigue / tiredness",
         "blurry_vision": "Blurry or unclear vision",
         "frequent_infections": "Frequent infections (skin / gum / urinary)",
         "tingling_numbness": "Tingling or numbness in hands or feet",
-        "polyuria": "Polyuria (excessive urination)",
-        "polydipsia": "Polydipsia (excessive thirst)",
+        "polyuria": "Frequent urination",
+        "polydipsia": "Excessive thirst",
         "weight_loss": "Sudden weight loss",
         "irritability": "Irritability",
         "healing": "Delayed wound healing",
-        "paresis": "Partial paresis (partial muscle weakness)",
-        "alopecia": "Alopecia (abnormal hair loss)",
+        "paresis": "Partial muscle weakness",
+        "alopecia": "Abnormal hair loss",
         "itching": "Itching",
+        "breakfast": "Breakfast",
+        "lunch": "Lunch",
+        "dinner": "Dinner",
+        "drinks": "Drinks",
+        "saturday": "Saturday",
+        "sunday": "Sunday",
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "half_vegetables": "½ vegetables",
+        "quarter_protein": "¼ lean protein",
+        "quarter_grains": "¼ whole grains or a moderate starch portion",
+        "water_unsweetened": "Water or unsweetened drinks instead of sugary drinks",
+        "food_vegetables": "Vegetables and salads",
+        "food_legumes": "Beans, lentils and chickpeas",
+        "food_grains": "Whole grains and high-fiber foods",
+        "food_protein": "Fish, skinless chicken and lean proteins",
+        "food_yogurt": "Plain / low-sugar yogurt",
+        "food_nuts": "Small portions of nuts",
+        "food_fruit": "Whole fruit in moderate portions rather than juice",
+        "limit_soft": "Sugary soft drinks and packaged juices",
+        "limit_sugar": "Added sugar and very sweet desserts",
+        "limit_refined": "Large portions of refined white bread or rice",
+        "limit_processed": "Highly processed foods",
+        "limit_meals": "Very large meals or unnecessary snacking",
+        "habit_activity": "Aim for regular physical activity appropriate for your health.",
+        "habit_meals": "Keep consistent meal times.",
+        "habit_hydration": "Stay hydrated.",
+        "habit_glucose": "If you monitor blood glucose, follow your healthcare professional's advice.",
+        "habit_help": "Seek professional advice for persistent or concerning symptoms.",
+        "pdf_title": "Early-Stage Diabetes Assessment Report",
+        "generated": "Generated",
+        "patient_details": "Patient Details",
+        "name": "Name",
+        "age_gender": "Age / Gender",
+        "reported_type": "Reported Type",
+        "clinical_presentation": "Clinical Presentation",
+        "assessment_result": "Assessment Result",
+        "risk_assessment": "Risk Assessment",
+        "additional_symptoms": "Additional Symptoms",
+        "yes_value": "Yes",
+        "no_value": "No",
+        "positive_high": "Positive (higher risk)",
+        "negative_low": "Negative (lower risk)",
+        "disclaimer": "Disclaimer: This report is generated by a machine-learning model for educational and demonstration purposes only. It is NOT a medical diagnosis. Consult a qualified healthcare professional for clinical evaluation.",
+        "could_not_save": "Could not save the report.",
+        "could_not_read": "Could not read saved records.",
+        "missing_files": "Missing required file(s):",
+        "missing_files_suffix": "Put the model files in the same folder as the Streamlit app.",
+        "email_placeholder": "you@example.com",
     },
     "ar": {
         "brand": "PerdiaPredict",
-        "tagline": "فحص مبكر للسكري مدعوم بالذكاء الاصطناعي",
+        "tagline": "فحص مبكر لخطر السكري مدعوم بالذكاء الاصطناعي",
         "language": "اللغة",
         "admin": "لوحة الإدارة",
         "back": "رجوع",
@@ -196,8 +248,8 @@ T = {
         "required_fields": "يرجى إكمال الحقول المطلوبة.",
         "required": "مطلوب.",
         "result": "نتيجة التقييم",
-        "high_risk": "خطر مرتفع للإصابة بالسكري في مرحلة مبكرة",
-        "low_risk": "خطر منخفض وفقًا للفحص الحالي",
+        "high_risk": "احتمالية مرتفعة وفقًا للفحص الحالي",
+        "low_risk": "احتمالية منخفضة وفقًا للفحص الحالي",
         "probability": "الاحتمالية المقدرة",
         "symptom_summary": "ملخص الأعراض",
         "recommendation": "التوصية",
@@ -227,7 +279,7 @@ T = {
         "delete": "نعم، احذف البيانات",
         "cancel": "إلغاء",
         "deleted": "تم حذف جميع البيانات بنجاح.",
-        "theme": "المظهر",
+        "theme": "الوضع الداكن",
         "readiness": "جاهز",
         "model_status": "نموذج التعلم الآلي محمل",
         "privacy": "تُستخدم معلوماتك داخل التطبيق فقط لأغراض التقييم والتقرير.",
@@ -247,200 +299,65 @@ T = {
         "paresis": "ضعف جزئي في العضلات",
         "alopecia": "تساقط الشعر غير الطبيعي",
         "itching": "الحكة",
-    },
-    "hi": {
-        "brand": "PerdiaPredict",
-        "tagline": "AI-संचालित प्रारंभिक मधुमेह स्क्रीनिंग",
-        "language": "भाषा",
-        "admin": "एडमिन पैनल",
-        "back": "वापस",
-        "email_title": "प्रारंभिक मधुमेह स्क्रीनिंग",
-        "email_intro": "अपना ईमेल दर्ज करके आकलन शुरू करें।",
-        "email": "ईमेल पता",
-        "email_required": "ईमेल पता आवश्यक है।",
-        "email_invalid": "कृपया मान्य ईमेल पता दर्ज करें।",
-        "continue": "जारी रखें",
-        "medical_notice": "केवल शैक्षिक स्क्रीनिंग — यह चिकित्सा निदान नहीं है।",
-        "medical_notice_long": "यह ऐप केवल शैक्षिक और प्रदर्शन उद्देश्यों के लिए है। यह डॉक्टर या क्लिनिकल निदान का विकल्प नहीं है।",
-        "assessment": "मधुमेह जोखिम आकलन",
-        "assessment_intro": "नीचे दिया गया फॉर्म भरें। प्रशिक्षित मशीन-लर्निंग मॉडल आपके उत्तरों का विश्लेषण करेगा।",
-        "personal": "व्यक्तिगत जानकारी",
-        "first_name": "पहला नाम",
-        "last_name": "उपनाम",
-        "phone": "फोन नंबर",
-        "address": "निवास पता (शहर / क्षेत्र)",
-        "diabetes_type": "आपको कौन सा मधुमेह है ऐसा आपको लगता है?",
-        "not_sure": "पता नहीं / निश्चित नहीं",
-        "type1": "टाइप 1",
-        "type2": "टाइप 2",
-        "gestational": "गर्भावधि मधुमेह",
-        "prediabetes": "प्रीडायबिटीज",
-        "basic": "मूल जानकारी",
-        "age": "आयु",
-        "gender": "लिंग",
-        "male": "पुरुष",
-        "female": "महिला",
-        "core": "मुख्य लक्षण",
-        "core_help": "हर लक्षण के लिए हाँ या नहीं चुनें।",
-        "yes": "हाँ",
-        "no": "नहीं",
-        "additional": "अतिरिक्त लक्षण",
-        "optional": "वैकल्पिक — ये रिपोर्ट को बेहतर बनाते हैं, लेकिन मॉडल की संभावना को सीधे नहीं बदलते।",
-        "predict": "जोखिम की गणना करें",
-        "required_fields": "कृपया आवश्यक जानकारी पूरी करें।",
-        "required": "आवश्यक है।",
-        "result": "आकलन परिणाम",
-        "high_risk": "प्रारंभिक मधुमेह का उच्च जोखिम",
-        "low_risk": "वर्तमान स्क्रीनिंग में कम जोखिम",
-        "probability": "अनुमानित संभावना",
-        "symptom_summary": "लक्षणों का सारांश",
-        "recommendation": "सिफारिश",
-        "high_recommendation": "अनुमानित जोखिम अधिक है। कृपया चिकित्सकीय जांच करवाएं। इस स्क्रीनिंग को पेशेवर निदान का विकल्प न मानें।",
-        "low_recommendation": "वर्तमान स्क्रीनिंग में जोखिम कम है। स्वस्थ आदतें जारी रखें और लक्षण बने रहने पर स्वास्थ्य विशेषज्ञ से बात करें।",
-        "extra_notice": "कुछ अतिरिक्त लक्षण चुने गए हैं। यदि वे बने रहें, तो स्वास्थ्य विशेषज्ञ से बात करें।",
-        "health_guide": "स्वस्थ जीवनशैली और पोषण गाइड",
-        "offline": "ऐप में ही उपलब्ध — बाहरी वेबसाइट की आवश्यकता नहीं।",
-        "plate": "स्वस्थ प्लेट विधि",
-        "foods": "पसंदीदा खाद्य पदार्थ",
-        "limit": "सीमित करने वाले खाद्य पदार्थ और पेय",
-        "habits": "दैनिक स्वस्थ आदतें",
-        "meal_plan": "साप्ताहिक भोजन योजना",
-        "tips": "सामान्य स्वास्थ्य सुझाव",
-        "download": "आकलन रिपोर्ट डाउनलोड करें",
-        "download_pdf": "PDF रिपोर्ट डाउनलोड करें",
-        "saved": "रिपोर्ट सफलतापूर्वक सहेजी गई।",
-        "admin_title": "एडमिन पैनल",
-        "admin_help": "सबमिट किए गए आकलन रिकॉर्ड देखने का प्रतिबंधित क्षेत्र।",
-        "password": "एडमिन पासवर्ड",
-        "access": "प्रवेश की अनुमति है।",
-        "incorrect": "गलत पासवर्ड।",
-        "no_records": "अभी कोई रिकॉर्ड नहीं है।",
-        "download_excel": "Excel फ़ाइल डाउनलोड करें",
-        "clean": "डेटा साफ करें",
-        "confirm": "क्या आप सभी रिकॉर्ड हटाना चाहते हैं? यह कार्रवाई वापस नहीं की जा सकती।",
-        "delete": "हाँ, डेटा हटाएं",
-        "cancel": "रद्द करें",
-        "deleted": "सभी डेटा सफलतापूर्वक हटा दिया गया।",
-        "theme": "थीम",
-        "readiness": "तैयार",
-        "model_status": "मशीन-लर्निंग मॉडल लोड है",
-        "privacy": "आपकी जानकारी का उपयोग इस ऐप में केवल आकलन/रिपोर्ट के लिए किया जाता है।",
-        "patient_denies": "रोगी ने इस स्क्रीनिंग में जांचे गए सभी मुख्य और अतिरिक्त लक्षणों से इनकार किया।",
-        "patient_reports": "रोगी ने बताया कि उसे",
-        "further": "अतिरिक्त पूछताछ में रोगी ने बताया कि उसे",
-        "no_core": "रोगी ने जांचे गए किसी भी मुख्य लक्षण से इनकार किया।",
-        "constant_fatigue": "लगातार थकान",
-        "blurry_vision": "धुंधली या अस्पष्ट दृष्टि",
-        "frequent_infections": "बार-बार संक्रमण (त्वचा / मसूड़े / मूत्र)",
-        "tingling_numbness": "हाथों या पैरों में झुनझुनी या सुन्नपन",
-        "polyuria": "अत्यधिक पेशाब",
-        "polydipsia": "अत्यधिक प्यास",
-        "weight_loss": "अचानक वजन कम होना",
-        "irritability": "चिड़चिड़ापन",
-        "healing": "घाव भरने में देरी",
-        "paresis": "आंशिक मांसपेशी कमजोरी",
-        "alopecia": "असामान्य बाल झड़ना",
-        "itching": "खुजली",
-    },
-    "es": {
-        "brand": "PerdiaPredict",
-        "tagline": "Detección temprana de diabetes con IA",
-        "language": "Idioma",
-        "admin": "Panel de administración",
-        "back": "Volver",
-        "email_title": "Evaluación temprana de diabetes",
-        "email_intro": "Introduce tu correo electrónico para comenzar.",
-        "email": "Correo electrónico",
-        "email_required": "El correo electrónico es obligatorio.",
-        "email_invalid": "Introduce un correo electrónico válido.",
-        "continue": "Continuar",
-        "medical_notice": "Solo para fines educativos — no es un diagnóstico médico.",
-        "medical_notice_long": "Esta aplicación es solo educativa y de demostración. No sustituye a un profesional sanitario ni a un diagnóstico clínico.",
-        "assessment": "Evaluación del riesgo de diabetes",
-        "assessment_intro": "Completa el formulario. El modelo de aprendizaje automático analizará tus respuestas.",
-        "personal": "Información personal",
-        "first_name": "Nombre",
-        "last_name": "Apellido",
-        "phone": "Número de teléfono",
-        "address": "Dirección de residencia (ciudad / zona)",
-        "diabetes_type": "¿Qué tipo de diabetes crees que tienes?",
-        "not_sure": "No estoy seguro / No sé",
-        "type1": "Tipo 1",
-        "type2": "Tipo 2",
-        "gestational": "Diabetes gestacional",
-        "prediabetes": "Prediabetes",
-        "basic": "Información básica",
-        "age": "Edad",
-        "gender": "Sexo",
-        "male": "Hombre",
-        "female": "Mujer",
-        "core": "Síntomas principales",
-        "core_help": "Selecciona Sí o No para cada síntoma.",
-        "yes": "Sí",
-        "no": "No",
-        "additional": "Síntomas adicionales",
-        "optional": "Opcional — enriquecen el informe, pero no cambian directamente la probabilidad del modelo.",
-        "predict": "Calcular mi riesgo",
-        "required_fields": "Completa los campos obligatorios.",
-        "required": "es obligatorio.",
-        "result": "Resultado de la evaluación",
-        "high_risk": "Alto riesgo de diabetes en etapa temprana",
-        "low_risk": "Bajo riesgo según la evaluación actual",
-        "probability": "Probabilidad estimada",
-        "symptom_summary": "Resumen de síntomas",
-        "recommendation": "Recomendación",
-        "high_recommendation": "El riesgo estimado es alto. Se recomienda una evaluación médica. No utilices esta herramienta como sustituto de un diagnóstico profesional.",
-        "low_recommendation": "La evaluación actual indica un riesgo bajo. Mantén hábitos saludables y consulta a un profesional si los síntomas persisten.",
-        "extra_notice": "Se seleccionaron algunos síntomas adicionales. Si persisten, considera consultar a un profesional sanitario.",
-        "health_guide": "Guía de nutrición y estilo de vida saludable",
-        "offline": "Integrada en la aplicación — no requiere un sitio web externo.",
-        "plate": "Método del plato saludable",
-        "foods": "Alimentos recomendados",
-        "limit": "Alimentos y bebidas que conviene limitar",
-        "habits": "Hábitos diarios saludables",
-        "meal_plan": "Plan semanal de comidas",
-        "tips": "Consejos generales de salud",
-        "download": "Descargar informe de evaluación",
-        "download_pdf": "Descargar informe PDF",
-        "saved": "Informe guardado correctamente.",
-        "admin_title": "Panel de administración",
-        "admin_help": "Área restringida para ver los registros enviados.",
-        "password": "Contraseña de administrador",
-        "access": "Acceso concedido.",
-        "incorrect": "Contraseña incorrecta.",
-        "no_records": "Todavía no hay registros guardados.",
-        "download_excel": "Descargar archivo Excel",
-        "clean": "Borrar datos",
-        "confirm": "¿Seguro que quieres eliminar todos los registros? Esta acción no se puede deshacer.",
-        "delete": "Sí, eliminar datos",
-        "cancel": "Cancelar",
-        "deleted": "Todos los datos se eliminaron correctamente.",
-        "theme": "Tema",
-        "readiness": "Listo",
-        "model_status": "Modelo de aprendizaje automático cargado",
-        "privacy": "Tu información se utiliza dentro de esta aplicación para el flujo de evaluación/informe.",
-        "patient_denies": "El paciente niega todos los síntomas principales y adicionales evaluados en esta prueba.",
-        "patient_reports": "El paciente informa de",
-        "further": "En preguntas adicionales, el paciente también refiere",
-        "no_core": "El paciente niega los síntomas principales evaluados.",
-        "constant_fatigue": "Fatiga o cansancio constante",
-        "blurry_vision": "Visión borrosa o poco clara",
-        "frequent_infections": "Infecciones frecuentes (piel / encías / urinarias)",
-        "tingling_numbness": "Hormigueo o entumecimiento en manos o pies",
-        "polyuria": "Micción excesiva",
-        "polydipsia": "Sed excesiva",
-        "weight_loss": "Pérdida repentina de peso",
-        "irritability": "Irritabilidad",
-        "healing": "Cicatrización lenta de heridas",
-        "paresis": "Debilidad muscular parcial",
-        "alopecia": "Pérdida anormal de cabello",
-        "itching": "Picor",
+        "breakfast": "الإفطار",
+        "lunch": "الغداء",
+        "dinner": "العشاء",
+        "drinks": "المشروبات",
+        "saturday": "السبت",
+        "sunday": "الأحد",
+        "monday": "الاثنين",
+        "tuesday": "الثلاثاء",
+        "wednesday": "الأربعاء",
+        "thursday": "الخميس",
+        "friday": "الجمعة",
+        "half_vegetables": "½ خضروات",
+        "quarter_protein": "¼ بروتين قليل الدهون",
+        "quarter_grains": "¼ حبوب كاملة أو كمية معتدلة من النشويات",
+        "water_unsweetened": "الماء أو المشروبات غير المحلاة بدلًا من المشروبات السكرية",
+        "food_vegetables": "الخضروات والسلطات",
+        "food_legumes": "الفاصوليا والعدس والحمص",
+        "food_grains": "الحبوب الكاملة والأطعمة الغنية بالألياف",
+        "food_protein": "السمك والدجاج منزوع الجلد والبروتينات قليلة الدهون",
+        "food_yogurt": "الزبادي الطبيعي أو قليل السكر",
+        "food_nuts": "كميات صغيرة من المكسرات",
+        "food_fruit": "الفاكهة الكاملة بكميات معتدلة بدلًا من العصير",
+        "limit_soft": "المشروبات الغازية السكرية والعصائر المعلبة",
+        "limit_sugar": "السكر المضاف والحلويات شديدة الحلاوة",
+        "limit_refined": "الكميات الكبيرة من الخبز الأبيض أو الأرز المكرر",
+        "limit_processed": "الأطعمة شديدة التصنيع",
+        "limit_meals": "الوجبات الكبيرة جدًا أو تناول الوجبات الخفيفة دون حاجة",
+        "habit_activity": "مارس نشاطًا بدنيًا منتظمًا ومناسبًا لحالتك الصحية.",
+        "habit_meals": "حافظ على أوقات منتظمة للوجبات.",
+        "habit_hydration": "احرص على شرب كمية كافية من السوائل.",
+        "habit_glucose": "إذا كنت تراقب مستوى سكر الدم، فاتبع إرشادات المختص الصحي.",
+        "habit_help": "اطلب المشورة الطبية إذا استمرت الأعراض أو كانت مقلقة.",
+        "pdf_title": "تقرير تقييم خطر السكري في مراحله المبكرة",
+        "generated": "تاريخ الإنشاء",
+        "patient_details": "بيانات المريض",
+        "name": "الاسم",
+        "age_gender": "العمر / الجنس",
+        "reported_type": "النوع المذكور",
+        "clinical_presentation": "الأعراض والحالة المبلغ عنها",
+        "assessment_result": "نتيجة التقييم",
+        "risk_assessment": "تقييم الخطر",
+        "additional_symptoms": "أعراض إضافية",
+        "yes_value": "نعم",
+        "no_value": "لا",
+        "positive_high": "إيجابي (احتمالية أعلى)",
+        "negative_low": "سلبي (احتمالية أقل)",
+        "disclaimer": "تنبيه: تم إنشاء هذا التقرير بواسطة نموذج تعلم آلي لأغراض تعليمية وتجريبية فقط. لا يُعد تشخيصًا طبيًا. يُرجى استشارة مختص صحي لإجراء التقييم السريري.",
+        "could_not_save": "تعذر حفظ التقرير.",
+        "could_not_read": "تعذر قراءة السجلات المحفوظة.",
+        "missing_files": "الملفات المطلوبة غير موجودة:",
+        "missing_files_suffix": "ضع ملفات النموذج في المجلد نفسه مع تطبيق Streamlit.",
+        "email_placeholder": "you@example.com",
     },
 }
 
 
 def tr(key: str) -> str:
-    return T[st.session_state.get("lang", "en")].get(key, T["en"].get(key, key))
+    lang = st.session_state.get("lang", "en")
+    return T.get(lang, T["en"]).get(key, T["en"].get(key, key))
 
 
 # Keep model feature names in the training language/format.
@@ -464,586 +381,6 @@ extra_symptom_keys = {
 
 DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"]
 
-
-# =============================================================================
-# Responsive / modern UI
-# =============================================================================
-
-def inject_css():
-    rtl = st.session_state.get("lang", "en") == "ar"
-    direction = "rtl" if rtl else "ltr"
-    theme = "dark" if st.session_state.get("dark_mode", True) else "light"
-
-    st.markdown(
-        f"""
-        <style>
-        /* ================================================================
-           PerdiaPredict complete theme
-           The theme is applied to the whole Streamlit interface, not only
-           to text. This fixes the mixed light/dark appearance.
-           ================================================================ */
-
-        :root {{
-            --primary: #60a5fa;
-            --primary-dark: #3b82f6;
-            --text: #f8fafc;
-            --muted: #94a3b8;
-            --surface: #111827;
-            --surface-2: #172033;
-            --surface-soft: #0f172a;
-            --border: #334155;
-            --input: #0b1220;
-            --success: #4ade80;
-            --danger: #f87171;
-            --warning-bg: #422006;
-            --warning-border: #92400e;
-            --warning-text: #fde68a;
-            --info-bg: #172554;
-            --info-border: #1d4ed8;
-            --info-text: #bfdbfe;
-            --shadow: 0 16px 42px rgba(0,0,0,.28);
-        }}
-
-        html[data-perdia-theme="light"] {{
-            --primary: #2563eb;
-            --primary-dark: #1d4ed8;
-            --text: #172033;
-            --muted: #64748b;
-            --surface: #ffffff;
-            --surface-2: #f8fafc;
-            --surface-soft: #f1f5f9;
-            --border: #e2e8f0;
-            --input: #ffffff;
-            --success: #16a34a;
-            --danger: #dc2626;
-            --warning-bg: #fffbeb;
-            --warning-border: #fde68a;
-            --warning-text: #713f12;
-            --info-bg: #eff6ff;
-            --info-border: #dbeafe;
-            --info-text: #1e40af;
-            --shadow: 0 10px 35px rgba(15,23,42,.08);
-        }}
-
-        html, body, [class*="css"] {{
-            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
-                         "Noto Sans", Arial, sans-serif;
-        }}
-
-        html[data-perdia-theme="dark"],
-        html[data-perdia-theme="dark"] body {{
-            color-scheme: dark;
-            background: #080d18 !important;
-        }}
-
-        html[data-perdia-theme="light"],
-        html[data-perdia-theme="light"] body {{
-            color-scheme: light;
-            background: #f6f8fc !important;
-        }}
-
-        /* Main page */
-        .stApp {{
-            min-height: 100vh;
-            background:
-                radial-gradient(circle at 8% 0%, rgba(59,130,246,.13), transparent 30%),
-                radial-gradient(circle at 100% 12%, rgba(14,165,233,.10), transparent 28%),
-                var(--surface-soft) !important;
-            color: var(--text) !important;
-        }}
-
-        [data-testid="stAppViewContainer"],
-        [data-testid="stMain"],
-        [data-testid="stMainBlockContainer"] {{
-            background: transparent !important;
-            color: var(--text) !important;
-        }}
-
-        .block-container {{
-            max-width: 980px !important;
-            padding: 1.2rem 1rem 4rem !important;
-        }}
-
-        /* Streamlit top bar / toolbar */
-        header[data-testid="stHeader"] {{
-            background: color-mix(in srgb, var(--surface-soft) 88%, transparent) !important;
-            color: var(--text) !important;
-        }}
-
-        [data-testid="stToolbar"],
-        [data-testid="stDecoration"] {{
-            color: var(--text) !important;
-        }}
-
-        /* Brand */
-        .brand {{
-            display:flex;
-            align-items:center;
-            gap:12px;
-            padding:8px 2px 2px;
-        }}
-
-        .brand-icon {{
-            width:48px;
-            height:48px;
-            border-radius:15px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            background:linear-gradient(135deg,#2563eb,#0ea5e9);
-            color:white !important;
-            font-size:25px;
-            box-shadow:0 8px 22px rgba(37,99,235,.25);
-        }}
-
-        .brand-name {{
-            font-size:1.15rem;
-            font-weight:800;
-            letter-spacing:-.02em;
-            color:var(--text) !important;
-        }}
-
-        .brand-tagline {{
-            font-size:.78rem;
-            color:var(--muted) !important;
-            margin-top:1px;
-        }}
-
-        /* Hero */
-        .hero {{
-            background:linear-gradient(135deg,#020617 0%,#172554 56%,#075985 100%);
-            color:white !important;
-            border-radius:26px;
-            padding:30px 28px;
-            margin:18px 0;
-            box-shadow:0 18px 45px rgba(0,0,0,.32);
-            overflow:hidden;
-            position:relative;
-        }}
-
-        .hero:after {{
-            content:"";
-            position:absolute;
-            width:190px;
-            height:190px;
-            border-radius:50%;
-            background:rgba(96,165,250,.14);
-            right:-55px;
-            top:-65px;
-        }}
-
-        .hero h1 {{
-            color:white !important;
-            font-size:clamp(1.75rem,4vw,2.65rem);
-            line-height:1.12;
-            margin:0 0 10px;
-            letter-spacing:-.035em;
-        }}
-
-        .hero p {{
-            color:rgba(255,255,255,.82) !important;
-            margin:0;
-            max-width:720px;
-            line-height:1.65;
-        }}
-
-        .pill {{
-            display:inline-flex;
-            align-items:center;
-            gap:7px;
-            padding:7px 11px;
-            border-radius:999px;
-            background:rgba(255,255,255,.10);
-            border:1px solid rgba(255,255,255,.18);
-            color:#f8fafc !important;
-            font-size:.78rem;
-            margin-bottom:14px;
-        }}
-
-        /* Cards */
-        .section-card,
-        .result-card {{
-            background:var(--surface) !important;
-            border:1px solid var(--border) !important;
-            color:var(--text) !important;
-            box-shadow:var(--shadow) !important;
-        }}
-
-        .section-card {{
-            border-radius:22px;
-            padding:20px;
-            margin:14px 0;
-        }}
-
-        .section-title {{
-            font-size:1.12rem;
-            font-weight:800;
-            color:var(--text) !important;
-            margin-bottom:3px;
-        }}
-
-        .section-subtitle {{
-            color:var(--muted) !important;
-            font-size:.86rem;
-            line-height:1.5;
-            margin-bottom:14px;
-        }}
-
-        .status-card {{
-            display:flex;
-            align-items:center;
-            gap:10px;
-            padding:11px 13px;
-            border-radius:15px;
-            background:var(--info-bg) !important;
-            border:1px solid var(--info-border) !important;
-            color:var(--info-text) !important;
-            font-size:.85rem;
-            margin:10px 0 16px;
-        }}
-
-        .result-card {{
-            border-radius:24px;
-            padding:24px;
-            margin:14px 0;
-        }}
-
-        .result-high {{
-            border-left:6px solid var(--danger) !important;
-        }}
-
-        .result-low {{
-            border-left:6px solid var(--success) !important;
-        }}
-
-        .result-label {{
-            color:var(--muted) !important;
-            font-size:.82rem;
-            font-weight:700;
-            text-transform:uppercase;
-            letter-spacing:.06em;
-        }}
-
-        .result-title {{
-            font-size:clamp(1.2rem,3vw,1.55rem);
-            font-weight:850;
-            margin:5px 0 16px;
-            color:var(--text) !important;
-        }}
-
-        .score {{
-            font-size:clamp(2.1rem,7vw,3.5rem);
-            line-height:1;
-            font-weight:900;
-            letter-spacing:-.05em;
-            color:var(--text) !important;
-        }}
-
-        .score-caption {{
-            color:var(--muted) !important;
-            font-size:.82rem;
-            margin-top:5px;
-        }}
-
-        .notice {{
-            border-radius:16px;
-            padding:13px 15px;
-            background:var(--warning-bg) !important;
-            border:1px solid var(--warning-border) !important;
-            color:var(--warning-text) !important;
-            font-size:.84rem;
-            line-height:1.55;
-            margin:12px 0;
-        }}
-
-        .footer {{
-            text-align:center;
-            color:var(--muted) !important;
-            font-size:.75rem;
-            padding:24px 0 4px;
-        }}
-
-        /* ALL normal Streamlit text */
-        .stMarkdown, .stText, .stCaption,
-        [data-testid="stMarkdownContainer"],
-        [data-testid="stWidgetLabel"],
-        [data-testid="stWidgetLabel"] p,
-        label, p, li, span {{
-            color:var(--text);
-        }}
-
-        [data-testid="stCaptionContainer"],
-        [data-testid="stCaptionContainer"] p {{
-            color:var(--muted) !important;
-        }}
-
-        /* Inputs */
-        input, textarea,
-        div[data-baseweb="select"] > div,
-        div[data-baseweb="input"] > div,
-        [data-testid="stNumberInput"] input,
-        [data-testid="stTextInput"] input {{
-            background:var(--input) !important;
-            color:var(--text) !important;
-            border:1px solid var(--border) !important;
-            border-radius:12px !important;
-            caret-color:var(--primary) !important;
-        }}
-
-        input::placeholder,
-        textarea::placeholder {{
-            color:#64748b !important;
-            opacity:1 !important;
-        }}
-
-        input:focus, textarea:focus,
-        div[data-baseweb="select"] > div:focus-within {{
-            border-color:var(--primary) !important;
-            box-shadow:0 0 0 2px rgba(96,165,250,.18) !important;
-        }}
-
-        /* Selectbox text + dropdown */
-        [data-baseweb="select"] *,
-        [role="listbox"] *,
-        [role="option"] {{
-            color:var(--text) !important;
-        }}
-
-        div[data-baseweb="popover"],
-        div[data-baseweb="menu"],
-        [role="listbox"] {{
-            background:var(--surface) !important;
-            border:1px solid var(--border) !important;
-            color:var(--text) !important;
-        }}
-
-        [role="option"]:hover,
-        [role="option"][aria-selected="true"] {{
-            background:var(--surface-2) !important;
-        }}
-
-        /* Radio buttons / checkboxes / toggles */
-        [data-testid="stRadio"],
-        [data-testid="stCheckbox"],
-        [data-testid="stToggle"] {{
-            color:var(--text) !important;
-        }}
-
-        [data-testid="stRadio"] label,
-        [data-testid="stCheckbox"] label,
-        [data-testid="stToggle"] label {{
-            color:var(--text) !important;
-        }}
-
-        /* Buttons */
-        .stButton > button,
-        .stDownloadButton > button,
-        button[kind="primary"] {{
-            border-radius:14px !important;
-            min-height:46px !important;
-            font-weight:750 !important;
-            color:var(--text) !important;
-            background:var(--surface) !important;
-            border:1px solid var(--border) !important;
-            transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
-        }}
-
-        .stButton > button:hover,
-        .stDownloadButton > button:hover {{
-            transform:translateY(-1px);
-            border-color:var(--primary) !important;
-            box-shadow:0 8px 18px rgba(0,0,0,.20) !important;
-        }}
-
-        .stButton > button[kind="primary"],
-        button[kind="primary"] {{
-            background:linear-gradient(135deg,#2563eb,#0284c7) !important;
-            color:white !important;
-            border:none !important;
-        }}
-
-        /* Metrics */
-        [data-testid="stMetric"] {{
-            background:var(--surface) !important;
-            border:1px solid var(--border) !important;
-            border-radius:18px;
-            padding:14px;
-            color:var(--text) !important;
-        }}
-
-        [data-testid="stMetricValue"],
-        [data-testid="stMetricLabel"],
-        [data-testid="stMetricDelta"] {{
-            color:var(--text) !important;
-        }}
-
-        /* Expanders */
-        .stExpander,
-        [data-testid="stExpander"] {{
-            border-radius:16px !important;
-            border:1px solid var(--border) !important;
-            background:var(--surface) !important;
-            color:var(--text) !important;
-        }}
-
-        .stExpander details,
-        .stExpander summary {{
-            background:var(--surface) !important;
-            color:var(--text) !important;
-        }}
-
-        /* Alerts */
-        [data-testid="stAlert"] {{
-            background:var(--surface) !important;
-            border:1px solid var(--border) !important;
-            color:var(--text) !important;
-        }}
-
-        /* Dataframes / tables */
-        [data-testid="stDataFrame"],
-        [data-testid="stTable"] {{
-            background:var(--surface) !important;
-            color:var(--text) !important;
-        }}
-
-        /* File uploader */
-        [data-testid="stFileUploaderDropzone"] {{
-            background:var(--surface) !important;
-            border:1px dashed var(--border) !important;
-            color:var(--text) !important;
-        }}
-
-        /* Language label */
-        .lang-label {{
-            text-align:{'right' if rtl else 'left'};
-            color:var(--muted) !important;
-            font-size:.76rem;
-            font-weight:700;
-            margin-bottom:3px;
-        }}
-
-        /* Language selector wrapper - shows the icon+label clearly */
-        .lang-select-wrap {{
-            margin-top:-4px;
-        }}
-
-        .lang-select-wrap [data-testid="stWidgetLabel"] {{
-            font-size:.72rem;
-            font-weight:700;
-            color:var(--muted) !important;
-            margin-bottom:2px;
-            text-align:{'right' if rtl else 'left'};
-        }}
-
-        /* Theme toggle wrapper - matches the language selector's label
-           style/position so both controls look symmetric in the header */
-        .theme-select-wrap {{
-            margin-top:-4px;
-            white-space:nowrap;
-        }}
-
-        .theme-select-wrap [data-testid="stWidgetLabel"] {{
-            font-size:.72rem;
-            font-weight:700;
-            color:var(--muted) !important;
-            margin-bottom:2px;
-            text-align:{'right' if rtl else 'left'};
-            white-space:nowrap;
-        }}
-
-        .theme-select-wrap [data-testid="stWidgetLabel"] p {{
-            white-space:nowrap;
-        }}
-
-        /* Inline label placed beside the language selectbox so it sits on
-           the same row as the theme toggle's inline label */
-        .inline-field-label {{
-            font-size:.72rem;
-            font-weight:700;
-            color:var(--muted) !important;
-            white-space:nowrap;
-            display:flex;
-            align-items:center;
-            height:38px;
-            text-align:{'right' if rtl else 'left'};
-            justify-content:{'flex-end' if rtl else 'flex-start'};
-        }}
-
-        /* Mobile */
-        @media (max-width:640px) {{
-            .block-container {{
-                padding:.65rem .7rem 3rem !important;
-            }}
-
-            .hero {{
-                border-radius:20px;
-                padding:23px 19px;
-                margin:10px 0 13px;
-            }}
-
-            .hero h1 {{
-                font-size:1.75rem;
-            }}
-
-            .section-card {{
-                border-radius:18px;
-                padding:15px;
-                margin:10px 0;
-            }}
-
-            .brand-icon {{
-                width:42px;
-                height:42px;
-                border-radius:13px;
-            }}
-
-            .brand-name {{
-                font-size:1rem;
-            }}
-
-            .brand-tagline {{
-                font-size:.69rem;
-            }}
-
-            .stButton > button,
-            .stDownloadButton > button {{
-                min-height:50px !important;
-            }}
-
-            div[data-testid="stHorizontalBlock"] {{
-                gap:.55rem !important;
-            }}
-
-            .score {{
-                font-size:2.6rem;
-            }}
-        }}
-
-        [dir="rtl"], .rtl {{
-            direction:rtl;
-            text-align:right;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # NOTE: a <script> tag injected through st.markdown(unsafe_allow_html=True)
-    # is set via innerHTML and browsers never execute scripts added that way,
-    # so the dir/theme attributes were never actually applied. components.html
-    # renders inside a real iframe document, so its <script> actually runs.
-    components.html(
-        f"""
-        <script>
-        const root = window.parent.document.documentElement;
-        root.setAttribute("dir", "{direction}");
-        root.setAttribute("data-perdia-theme", "{theme}");
-        </script>
-        """,
-        height=0,
-    )
-
-
 # =============================================================================
 # Model
 # =============================================================================
@@ -1053,9 +390,9 @@ def load_artifacts():
     missing = [p for p in [MODEL_PATH, SCALER_PATH, COLUMNS_PATH] if not os.path.exists(p)]
     if missing:
         st.error(
-            "Missing required file(s): "
-            + ", ".join(missing)
-            + ". Put the model files in the same folder as the Streamlit app."
+            tr("missing_files") + " "
+            + ", ".join(missing) + ". "
+            + tr("missing_files_suffix")
         )
         st.stop()
 
@@ -1094,12 +431,203 @@ def go_to(page_name: str):
     st.rerun()
 
 
+
+
+# =============================================================================
+# Responsive / modern UI
+# =============================================================================
+
+def inject_css():
+    rtl = st.session_state.get("lang", "en") == "ar"
+    direction = "rtl" if rtl else "ltr"
+    theme = "dark" if st.session_state.get("dark_mode", True) else "light"
+
+    st.markdown(
+        f"""
+        <style>
+        :root {{
+            --primary:#2563eb;
+            --primary-2:#06b6d4;
+            --text:#0f172a;
+            --muted:#64748b;
+            --surface:#ffffff;
+            --surface-2:#f8fafc;
+            --surface-soft:#eef4ff;
+            --border:#dbe3ef;
+            --input:#ffffff;
+            --success:#16a34a;
+            --danger:#dc2626;
+            --warning-bg:#fff7ed;
+            --warning-border:#fed7aa;
+            --warning-text:#9a3412;
+            --info-bg:#eff6ff;
+            --info-border:#bfdbfe;
+            --info-text:#1e40af;
+            --shadow:0 18px 45px rgba(15,23,42,.08);
+        }}
+        html[data-perdia-theme="dark"] {{
+            --text:#f8fafc;
+            --muted:#94a3b8;
+            --surface:#111827;
+            --surface-2:#172033;
+            --surface-soft:#070d18;
+            --border:#334155;
+            --input:#0b1220;
+            --warning-bg:#422006;
+            --warning-border:#92400e;
+            --warning-text:#fde68a;
+            --info-bg:#172554;
+            --info-border:#1d4ed8;
+            --info-text:#bfdbfe;
+            --shadow:0 18px 45px rgba(0,0,0,.28);
+        }}
+        html, body, [class*="css"] {{
+            font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans","Noto Sans Arabic",Arial,sans-serif;
+        }}
+        html[data-perdia-theme="dark"], html[data-perdia-theme="dark"] body {{
+            color-scheme:dark;
+            background:#070d18 !important;
+        }}
+        html[data-perdia-theme="light"], html[data-perdia-theme="light"] body {{
+            color-scheme:light;
+            background:#f3f7fc !important;
+        }}
+        .stApp {{
+            min-height:100vh;
+            background:
+                radial-gradient(circle at 5% 0%, rgba(37,99,235,.14), transparent 28%),
+                radial-gradient(circle at 100% 8%, rgba(6,182,212,.10), transparent 25%),
+                var(--surface-soft) !important;
+            color:var(--text) !important;
+        }}
+        [data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stMainBlockContainer"] {{
+            background:transparent !important;
+            color:var(--text) !important;
+        }}
+        .block-container {{ max-width:1040px !important; padding:1.1rem 1rem 4rem !important; }}
+        header[data-testid="stHeader"] {{
+            background:color-mix(in srgb,var(--surface-soft) 90%,transparent) !important;
+        }}
+        .brand {{ display:flex; align-items:center; gap:12px; padding:8px 2px 4px; }}
+        .brand-icon {{
+            width:50px;height:50px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+            background:linear-gradient(135deg,#2563eb,#06b6d4);color:#fff !important;font-size:25px;
+            box-shadow:0 10px 24px rgba(37,99,235,.22);
+        }}
+        .brand-name {{ font-size:1.2rem;font-weight:850;letter-spacing:-.025em;color:var(--text) !important; }}
+        .brand-tagline {{ font-size:.78rem;color:var(--muted) !important;margin-top:2px; }}
+        .hero {{
+            background:linear-gradient(135deg,#071226 0%,#172554 55%,#075985 100%);
+            color:#fff !important;border-radius:28px;padding:34px 30px;margin:18px 0;
+            box-shadow:0 20px 50px rgba(2,6,23,.28);overflow:hidden;position:relative;
+        }}
+        .hero:after {{
+            content:"";position:absolute;width:240px;height:240px;border-radius:50%;
+            background:rgba(125,211,252,.12);right:-80px;top:-95px;
+        }}
+        .hero:before {{
+            content:"";position:absolute;width:120px;height:120px;border-radius:50%;
+            border:1px solid rgba(255,255,255,.10);right:55px;bottom:-65px;
+        }}
+        .hero h1 {{ color:#fff !important;font-size:clamp(1.8rem,4vw,2.75rem);line-height:1.12;margin:0 0 10px;letter-spacing:-.04em;position:relative;z-index:1; }}
+        .hero p {{ color:rgba(255,255,255,.84) !important;margin:0;max-width:760px;line-height:1.7;position:relative;z-index:1; }}
+        .pill {{
+            display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;
+            background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);
+            color:#f8fafc !important;font-size:.76rem;font-weight:700;margin-bottom:15px;position:relative;z-index:1;
+        }}
+        .section-card,.result-card {{
+            background:var(--surface) !important;border:1px solid var(--border) !important;
+            color:var(--text) !important;box-shadow:var(--shadow) !important;
+        }}
+        .section-card {{ border-radius:22px;padding:22px;margin:14px 0; }}
+        .section-title {{ font-size:1.14rem;font-weight:850;color:var(--text) !important;margin-bottom:4px; }}
+        .section-subtitle {{ color:var(--muted) !important;font-size:.86rem;line-height:1.6;margin-bottom:14px; }}
+        .status-card {{
+            display:flex;align-items:center;gap:10px;padding:13px 15px;border-radius:16px;
+            background:var(--info-bg) !important;border:1px solid var(--info-border) !important;
+            color:var(--info-text) !important;font-size:.84rem;line-height:1.5;margin:12px 0 18px;
+        }}
+        .result-card {{ border-radius:24px;padding:26px;margin:14px 0; }}
+        .result-high {{ border-left:6px solid var(--danger) !important; }}
+        .result-low {{ border-left:6px solid var(--success) !important; }}
+        .result-label {{ color:var(--muted) !important;font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em; }}
+        .result-title {{ font-size:clamp(1.2rem,3vw,1.6rem);font-weight:850;margin:6px 0 16px;color:var(--text) !important; }}
+        .score {{ font-size:clamp(2.2rem,7vw,3.7rem);line-height:1;font-weight:900;letter-spacing:-.055em;color:var(--text) !important; }}
+        .score-caption {{ color:var(--muted) !important;font-size:.82rem;margin-top:7px; }}
+        .notice {{ border-radius:16px;padding:14px 16px;background:var(--warning-bg) !important;border:1px solid var(--warning-border) !important;color:var(--warning-text) !important;font-size:.84rem;line-height:1.6;margin:12px 0; }}
+        .footer {{ text-align:center;color:var(--muted) !important;font-size:.74rem;padding:26px 0 4px; }}
+        .stMarkdown,[data-testid="stMarkdownContainer"],[data-testid="stWidgetLabel"],label,p,li,span {{ color:var(--text); }}
+        [data-testid="stCaptionContainer"],[data-testid="stCaptionContainer"] p {{ color:var(--muted) !important; }}
+        input,textarea,div[data-baseweb="select"] > div,div[data-baseweb="input"] > div,
+        [data-testid="stNumberInput"] input,[data-testid="stTextInput"] input {{
+            background:var(--input) !important;color:var(--text) !important;border:1px solid var(--border) !important;
+            border-radius:13px !important;caret-color:var(--primary) !important;
+        }}
+        input::placeholder,textarea::placeholder {{ color:#64748b !important;opacity:1 !important; }}
+        input:focus,textarea:focus,div[data-baseweb="select"] > div:focus-within {{
+            border-color:var(--primary) !important;box-shadow:0 0 0 3px rgba(37,99,235,.14) !important;
+        }}
+        [data-baseweb="select"] *,[role="listbox"] *,[role="option"] {{ color:var(--text) !important; }}
+        div[data-baseweb="popover"],div[data-baseweb="menu"],[role="listbox"] {{
+            background:var(--surface) !important;border:1px solid var(--border) !important;
+        }}
+        [role="option"]:hover,[role="option"][aria-selected="true"] {{ background:var(--surface-2) !important; }}
+        [data-testid="stRadio"],[data-testid="stCheckbox"],[data-testid="stToggle"] {{ color:var(--text) !important; }}
+        [data-testid="stRadio"] label,[data-testid="stCheckbox"] label,[data-testid="stToggle"] label {{ color:var(--text) !important; }}
+        .stButton > button,.stDownloadButton > button,button[kind="primary"] {{
+            border-radius:14px !important;min-height:46px !important;font-weight:750 !important;
+            transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;
+        }}
+        .stButton > button:hover,.stDownloadButton > button:hover {{
+            transform:translateY(-1px);border-color:var(--primary) !important;box-shadow:0 9px 20px rgba(0,0,0,.14) !important;
+        }}
+        .stButton > button[kind="primary"],button[kind="primary"] {{
+            background:linear-gradient(135deg,#2563eb,#0284c7) !important;color:#fff !important;border:none !important;
+        }}
+        [data-testid="stMetric"] {{ background:var(--surface) !important;border:1px solid var(--border) !important;border-radius:18px;padding:14px;color:var(--text) !important; }}
+        [data-testid="stMetricValue"],[data-testid="stMetricLabel"],[data-testid="stMetricDelta"] {{ color:var(--text) !important; }}
+        .stExpander,[data-testid="stExpander"] {{ border-radius:16px !important;border:1px solid var(--border) !important;background:var(--surface) !important;color:var(--text) !important; }}
+        .stExpander details,.stExpander summary {{ background:var(--surface) !important;color:var(--text) !important; }}
+        [data-testid="stAlert"] {{ background:var(--surface) !important;border:1px solid var(--border) !important;color:var(--text) !important; }}
+        [data-testid="stDataFrame"],[data-testid="stTable"] {{ background:var(--surface) !important;color:var(--text) !important; }}
+        @media (max-width:640px) {{
+            .block-container {{ padding:.65rem .7rem 3rem !important; }}
+            .hero {{ border-radius:21px;padding:24px 19px;margin:10px 0 14px; }}
+            .hero h1 {{ font-size:1.75rem; }}
+            .section-card {{ border-radius:18px;padding:16px;margin:10px 0; }}
+            .brand-icon {{ width:43px;height:43px;border-radius:13px;font-size:22px; }}
+            .brand-name {{ font-size:1rem; }}
+            .brand-tagline {{ font-size:.68rem; }}
+            .stButton > button,.stDownloadButton > button {{ min-height:50px !important; }}
+            div[data-testid="stHorizontalBlock"] {{ gap:.55rem !important; }}
+            .score {{ font-size:2.65rem; }}
+        }}
+        [dir="rtl"],.rtl {{ direction:rtl;text-align:right; }}
+        [dir="rtl"] .hero,[dir="rtl"] .status-card,[dir="rtl"] .section-card,[dir="rtl"] .result-card {{ text-align:right; }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    components.html(
+        f"""
+        <script>
+        const root = window.parent.document.documentElement;
+        root.setAttribute("dir", "{direction}");
+        root.setAttribute("data-perdia-theme", "{theme}");
+        </script>
+        """,
+        height=0,
+    )
+
+
 # =============================================================================
 # Header
 # =============================================================================
 
 def render_header():
-    left, theme_col, right = st.columns([2.4, 1.15, 2.1], vertical_alignment="center")
+    left, theme_col, right = st.columns([2.5, 1.2, 2.0], vertical_alignment="center")
 
     with left:
         st.markdown(
@@ -1116,33 +644,22 @@ def render_header():
         )
 
     with theme_col:
-        st.markdown('<div class="theme-select-wrap">', unsafe_allow_html=True)
         st.toggle(
             f"🌙 {tr('theme')}",
             value=st.session_state.get("dark_mode", True),
             key="dark_mode",
-            help="Toggle complete dark/light appearance",
-            label_visibility="visible",
+            help=tr("theme"),
         )
-        st.markdown('</div>', unsafe_allow_html=True)
 
     with right:
-        lbl_col, sel_col = st.columns([0.9, 1.6], gap="small", vertical_alignment="center")
-        with lbl_col:
-            st.markdown(
-                f'<div class="inline-field-label">🌐 {tr("language")}</div>',
-                unsafe_allow_html=True,
-            )
-        with sel_col:
-            options = list(LANGUAGES.keys())
-            current_label = next(k for k, v in LANGUAGES.items() if v == st.session_state["lang"])
-            selected = st.selectbox(
-                tr("language"),
-                options,
-                index=options.index(current_label),
-                key="language_selector",
-                label_visibility="collapsed",
-            )
+        options = list(LANGUAGES.keys())
+        current_label = next(k for k, v in LANGUAGES.items() if v == st.session_state["lang"])
+        selected = st.selectbox(
+            f"🌐 {tr('language')}",
+            options,
+            index=options.index(current_label),
+            key="language_selector",
+        )
         new_lang = LANGUAGES[selected]
         if new_lang != st.session_state["lang"]:
             st.session_state["lang"] = new_lang
@@ -1154,59 +671,6 @@ def render_header():
     else:
         if st.button(f"🔒 {tr('admin')}", use_container_width=True):
             go_to("admin")
-
-
-# =============================================================================
-# Prediction
-# =============================================================================
-
-def _model_probability(raw_input: dict) -> float:
-    df_new = pd.DataFrame([raw_input])
-    df_new["Gender"] = df_new["Gender"].map({"Male": 1, "Female": 0})
-
-    for col in binary_columns:
-        df_new[col] = df_new[col].map({"Yes": 1, "No": 0})
-
-    df_new["Age"] = scaler.transform(df_new[["Age"]])
-    df_new = df_new[feature_columns]
-    return float(model.predict_proba(df_new)[0][1])
-
-
-def predict_new_patient(raw_input: dict):
-    # Important: all "No" answers must produce exactly 0%.
-    yes_symptoms = [c for c in binary_columns if raw_input.get(c) == "Yes"]
-
-    if not yes_symptoms:
-        return 0, 0.0
-
-    actual_probability = _model_probability(raw_input)
-
-    baseline_input = dict(raw_input)
-    for col in binary_columns:
-        baseline_input[col] = "No"
-
-    baseline_probability = _model_probability(baseline_input)
-
-    contributions = []
-    for col in yes_symptoms:
-        one_symptom_input = dict(baseline_input)
-        one_symptom_input[col] = "Yes"
-        symptom_probability = _model_probability(one_symptom_input)
-        contribution = max(0.0, symptom_probability - baseline_probability)
-        contributions.append(contribution)
-
-    total_positive_evidence = sum(contributions)
-
-    if total_positive_evidence <= 0:
-        symptom_factor = len(yes_symptoms) / max(len(binary_columns), 1)
-    else:
-        symptom_factor = min(total_positive_evidence / 0.50, 1.0)
-
-    probability = actual_probability * symptom_factor
-    probability = max(0.0, min(1.0, probability))
-    prediction = 1 if probability >= 0.50 else 0
-
-    return prediction, probability
 
 
 # =============================================================================
@@ -1237,8 +701,8 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict) -> str:
         "Itching": "itching",
     }
 
-    core_yes = [T[lang][key] for col, key in core_keys.items() if symptom_values.get(col) == "Yes"]
-    extra_yes = [T[lang][key] for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
+    core_yes = [tr(key) for col, key in core_keys.items() if symptom_values.get(col) == "Yes"]
+    extra_yes = [tr(key) for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
 
     if not core_yes and not extra_yes:
         return tr("patient_denies")
@@ -1247,10 +711,6 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict) -> str:
     if core_yes:
         if lang == "ar":
             sentences.append(tr("patient_reports") + " " + "، ".join(core_yes) + ".")
-        elif lang == "es":
-            sentences.append(tr("patient_reports") + " " + ", ".join(core_yes) + ".")
-        elif lang == "hi":
-            sentences.append(tr("patient_reports") + " " + ", ".join(core_yes) + "।")
         else:
             sentences.append(tr("patient_reports") + " " + _join(core_yes) + ".")
     else:
@@ -1259,8 +719,6 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict) -> str:
     if extra_yes:
         if lang == "ar":
             sentences.append(tr("further") + " " + "، ".join(extra_yes) + ".")
-        elif lang == "hi":
-            sentences.append(tr("further") + " " + ", ".join(extra_yes) + "।")
         else:
             sentences.append(tr("further") + " " + _join(extra_yes) + ".")
 
@@ -1271,31 +729,41 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict) -> str:
 # Health guide
 # =============================================================================
 
+MEAL_PLANS = {
+    "en": [
+        ("saturday", "Boiled eggs + whole-grain bread + cucumber & tomato", "Grilled chicken + brown rice + green salad", "Grilled fish + vegetables", "Water / unsweetened tea"),
+        ("sunday", "Oatmeal + low-fat milk + berries", "Lentil soup + fresh salad", "Lean grilled meat + vegetables", "Water / mint tea"),
+        ("monday", "Plain yogurt + whole-grain cereal + nuts", "Tuna salad + whole-grain bread", "Stuffed peppers/zucchini + small rice portion", "Water / herbal tea"),
+        ("tuesday", "Vegetable omelet + whole-grain bread", "Chicken + quinoa/bulgur + salad", "Vegetable soup + low-fat cheese", "Water / green tea"),
+        ("wednesday", "Greek yogurt + chia + low-sugar fruit", "Grilled fish + leafy salad", "Lentils/chickpeas + vegetables", "Water / hibiscus tea"),
+        ("thursday", "Whole-grain bread + low-fat cheese + vegetables", "Lean meat/chicken + vegetables + brown rice", "Large salad + chicken/tuna", "Water / mint tea"),
+        ("friday", "Oatmeal or eggs + raw nuts", "Fish/chicken + vegetables + salad", "Light vegetable soup + cheese", "Water / herbal tea"),
+    ],
+    "ar": [
+        ("saturday", "بيض مسلوق + خبز كامل الحبوب + خيار وطماطم", "دجاج مشوي + أرز بني + سلطة خضراء", "سمك مشوي + خضروات", "ماء / شاي غير محلى"),
+        ("sunday", "شوفان + حليب قليل الدسم + توت", "شوربة عدس + سلطة طازجة", "لحم مشوي قليل الدهون + خضروات", "ماء / شاي بالنعناع"),
+        ("monday", "زبادي طبيعي + حبوب كاملة + مكسرات", "سلطة تونة + خبز كامل الحبوب", "فلفل أو كوسا محشية + كمية صغيرة من الأرز", "ماء / شاي أعشاب"),
+        ("tuesday", "عجة بالخضروات + خبز كامل الحبوب", "دجاج + كينوا أو برغل + سلطة", "شوربة خضروات + جبن قليل الدسم", "ماء / شاي أخضر"),
+        ("wednesday", "زبادي يوناني + بذور الشيا + فاكهة قليلة السكر", "سمك مشوي + سلطة ورقية", "عدس أو حمص + خضروات", "ماء / كركديه غير محلى"),
+        ("thursday", "خبز كامل الحبوب + جبن قليل الدسم + خضروات", "لحم أو دجاج قليل الدهون + خضروات + أرز بني", "سلطة كبيرة + دجاج أو تونة", "ماء / شاي بالنعناع"),
+        ("friday", "شوفان أو بيض + مكسرات غير مملحة", "سمك أو دجاج + خضروات + سلطة", "شوربة خضروات خفيفة + جبن", "ماء / شاي أعشاب"),
+    ],
+}
+
+
 def render_meal_plan():
     st.markdown(f'<div class="section-title">📅 {tr("meal_plan")}</div>', unsafe_allow_html=True)
 
-    plans = [
-        ["Saturday", "Boiled eggs + whole-grain bread + cucumber & tomato", "Grilled chicken + brown rice + green salad", "Grilled fish + vegetables", "Water / unsweetened tea"],
-        ["Sunday", "Oatmeal + low-fat milk + berries", "Lentil soup + fresh salad", "Lean grilled meat + vegetables", "Water / mint tea"],
-        ["Monday", "Plain yogurt + whole-grain cereal + nuts", "Tuna salad + whole-grain bread", "Stuffed peppers/zucchini + small rice portion", "Water / herbal tea"],
-        ["Tuesday", "Vegetable omelet + whole-grain bread", "Chicken + quinoa/bulgur + salad", "Vegetable soup + low-fat cheese", "Water / green tea"],
-        ["Wednesday", "Greek yogurt + chia + low-sugar fruit", "Grilled fish + leafy salad", "Lentils/chickpeas + vegetables", "Water / hibiscus tea"],
-        ["Thursday", "Whole-grain bread + low-fat cheese + vegetables", "Lean meat/chicken + vegetables + brown rice", "Large salad + chicken/tuna", "Water / mint tea"],
-        ["Friday", "Oatmeal or eggs + raw nuts", "Fish/chicken + vegetables + salad", "Light vegetable soup + cheese", "Water / herbal tea"],
-    ]
-
-    day_names = {
-        "en": ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-        "ar": ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"],
-        "hi": ["शनिवार", "रविवार", "सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार"],
-        "es": ["Sábado", "Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes"],
-    }
+    rows = []
+    for day_key, breakfast, lunch, dinner, drinks in MEAL_PLANS[st.session_state["lang"]]:
+        rows.append([
+            tr(day_key), breakfast, lunch, dinner, drinks
+        ])
 
     df = pd.DataFrame(
-        plans,
-        columns=[tr("meal_plan"), "Breakfast", "Lunch", "Dinner", "Drinks"],
+        rows,
+        columns=[tr("meal_plan"), tr("breakfast"), tr("lunch"), tr("dinner"), tr("drinks")],
     )
-    df[tr("meal_plan")] = day_names[st.session_state["lang"]]
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 
@@ -1312,39 +780,39 @@ def render_offline_health_guide():
 
     with st.expander(f"🍽️ {tr('plate')}", expanded=True):
         st.markdown(
-            "- **½** vegetables\n"
-            "- **¼** lean protein\n"
-            "- **¼** whole grains or moderate starch\n"
-            "- Water or unsweetened drinks instead of sugary drinks"
+            f"- {tr('half_vegetables')}\n"
+            f"- {tr('quarter_protein')}\n"
+            f"- {tr('quarter_grains')}\n"
+            f"- {tr('water_unsweetened')}"
         )
 
     with st.expander(f"🥗 {tr('foods')}"):
         st.markdown(
-            "- Vegetables and salads\n"
-            "- Beans, lentils and chickpeas\n"
-            "- Whole grains and high-fiber foods\n"
-            "- Fish, skinless chicken and lean proteins\n"
-            "- Plain / low-sugar yogurt\n"
-            "- Small portions of nuts\n"
-            "- Whole fruit in moderate portions rather than juice"
+            f"- {tr('food_vegetables')}\n"
+            f"- {tr('food_legumes')}\n"
+            f"- {tr('food_grains')}\n"
+            f"- {tr('food_protein')}\n"
+            f"- {tr('food_yogurt')}\n"
+            f"- {tr('food_nuts')}\n"
+            f"- {tr('food_fruit')}"
         )
 
     with st.expander(f"⚠️ {tr('limit')}"):
         st.markdown(
-            "- Sugary soft drinks and packaged juices\n"
-            "- Added sugar and very sweet desserts\n"
-            "- Large portions of refined white bread/rice\n"
-            "- Highly processed foods\n"
-            "- Very large meals or unnecessary snacking"
+            f"- {tr('limit_soft')}\n"
+            f"- {tr('limit_sugar')}\n"
+            f"- {tr('limit_refined')}\n"
+            f"- {tr('limit_processed')}\n"
+            f"- {tr('limit_meals')}"
         )
 
     with st.expander(f"🏃 {tr('habits')}"):
         st.markdown(
-            "- Aim for regular physical activity appropriate for your health.\n"
-            "- Keep consistent meal times.\n"
-            "- Stay hydrated.\n"
-            "- If you monitor blood glucose, follow your healthcare professional's advice.\n"
-            "- Seek professional advice for persistent or concerning symptoms."
+            f"- {tr('habit_activity')}\n"
+            f"- {tr('habit_meals')}\n"
+            f"- {tr('habit_hydration')}\n"
+            f"- {tr('habit_glucose')}\n"
+            f"- {tr('habit_help')}"
         )
 
     with st.expander(f"📅 {tr('meal_plan')}"):
@@ -1355,6 +823,11 @@ def render_offline_health_guide():
 # PDF
 # =============================================================================
 
+def _pdf_text(value):
+    """Escape text before inserting user/content values into ReportLab Paragraphs."""
+    return escape(str(value or "")).replace("\n", "<br/>")
+
+
 def generate_pdf_report(report_data: dict) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -1364,40 +837,46 @@ def generate_pdf_report(report_data: dict) -> bytes:
         leftMargin=36,
         topMargin=36,
         bottomMargin=36,
+        title=tr("pdf_title"),
+        author=tr("brand"),
     )
 
     styles = getSampleStyleSheet()
+    pdf_font = "Helvetica"
+    if st.session_state.get("lang") == "ar":
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        arabic_font_path = "/usr/share/fonts/truetype/noto/NotoSansArabicUI-Regular.ttf"
+        arabic_bold_path = "/usr/share/fonts/truetype/noto/NotoSansArabicUI-Bold.ttf"
+        if os.path.exists(arabic_font_path):
+            pdfmetrics.registerFont(TTFont("PerdiaArabic", arabic_font_path))
+            pdf_font = "PerdiaArabic"
+        if os.path.exists(arabic_bold_path):
+            pdfmetrics.registerFont(TTFont("PerdiaArabicBold", arabic_bold_path))
+
+    bold_font = "PerdiaArabicBold" if pdf_font == "PerdiaArabic" and os.path.exists("/usr/share/fonts/truetype/noto/NotoSansArabicUI-Bold.ttf") else pdf_font
+    align = 2 if st.session_state.get("lang") == "ar" else 0
+
     title_style = ParagraphStyle(
-        "DocTitle",
-        parent=styles["Title"],
-        fontSize=18,
-        textColor=colors.HexColor("#0d3b66"),
-        spaceAfter=4,
+        "DocTitle", parent=styles["Title"], fontName=bold_font, fontSize=18,
+        textColor=colors.HexColor("#0d3b66"), spaceAfter=4, alignment=align
     )
     subtitle_style = ParagraphStyle(
-        "DocSubtitle",
-        parent=styles["Normal"],
-        fontSize=11,
-        textColor=colors.HexColor("#555555"),
+        "DocSubtitle", parent=styles["Normal"], fontName=pdf_font, fontSize=11,
+        textColor=colors.HexColor("#555555"), alignment=align
     )
     heading_style = ParagraphStyle(
-        "Heading2Custom",
-        parent=styles["Heading2"],
-        fontSize=12,
-        textColor=colors.HexColor("#0d3b66"),
-        spaceBefore=10,
-        spaceAfter=6,
+        "Heading2Custom", parent=styles["Heading2"], fontName=bold_font, fontSize=12,
+        textColor=colors.HexColor("#0d3b66"), spaceBefore=10, spaceAfter=6, alignment=align
     )
     body_style = ParagraphStyle(
-        "BodyCustom",
-        parent=styles["Normal"],
-        fontSize=9.5,
-        leading=13,
+        "BodyCustom", parent=styles["Normal"], fontName=pdf_font, fontSize=9.5,
+        leading=14, alignment=align
     )
 
     elements = []
-    title = Paragraph("<b>PERDIAPREDICT</b>", title_style)
-    subtitle = Paragraph("Early Stage Diabetes Assessment Report", subtitle_style)
+    title = Paragraph(f"<b>{_pdf_text(tr('brand'))}</b>", title_style)
+    subtitle = Paragraph(_pdf_text(tr("pdf_title")), subtitle_style)
 
     if os.path.exists(LOGO_PATH):
         logo = Image(LOGO_PATH, width=55, height=55)
@@ -1406,14 +885,12 @@ def generate_pdf_report(report_data: dict) -> bytes:
         header = Table([[[title, subtitle]]], colWidths=[540])
 
     header.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ]
-        )
+        TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ])
     )
     elements.append(header)
 
@@ -1422,71 +899,68 @@ def generate_pdf_report(report_data: dict) -> bytes:
     elements.append(divider)
     elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph(f"<b>Generated:</b> {report_data.get('Timestamp', '')}", body_style))
+    elements.append(Paragraph(
+        f"<b>{_pdf_text(tr('generated'))}:</b> {_pdf_text(report_data.get('Timestamp', ''))}",
+        body_style
+    ))
     elements.append(Spacer(1, 10))
-    elements.append(Paragraph("Patient Details", heading_style))
+    elements.append(Paragraph(_pdf_text(tr("patient_details")), heading_style))
 
     patient_info = [
-        ["Name:", f"{report_data.get('First name', '')} {report_data.get('Last name', '')}"],
-        ["Age / Gender:", f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"],
-        ["Phone:", report_data.get("Phone", "")],
-        ["Email:", report_data.get("Email", "N/A")],
-        ["Address:", report_data.get("Address", "")],
-        ["Reported Type:", report_data.get("Reported diabetes type", "")],
+        [f"{tr('name')}:", _pdf_text(f"{report_data.get('First name', '')} {report_data.get('Last name', '')}")],
+        [f"{tr('age_gender')}:", _pdf_text(f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}")],
+        [f"{tr('phone')}:", _pdf_text(report_data.get("Phone", ""))],
+        [f"{tr('email')}:", _pdf_text(report_data.get("Email", "N/A"))],
+        [f"{tr('address')}:", _pdf_text(report_data.get("Address", ""))],
+        [f"{tr('reported_type')}:", _pdf_text(report_data.get("Reported diabetes type", ""))],
     ]
 
-    t1 = Table(patient_info, colWidths=[130, 410])
-    t1.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f4f8")),
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
-            ]
-        )
-    )
+    # Use Paragraphs in table cells so Arabic text uses the selected font.
+    patient_info = [
+        [Paragraph(_pdf_text(a), body_style), Paragraph(_pdf_text(b), body_style)]
+        for a, b in patient_info
+    ]
+    t1 = Table(patient_info, colWidths=[145, 395])
+    t1.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f4f8")),
+        ("FONTNAME", (0, 0), (0, -1), bold_font),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
     elements.append(t1)
     elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph("Clinical Presentation", heading_style))
-    elements.append(Paragraph(report_data.get("Symptom narrative", ""), body_style))
+    elements.append(Paragraph(_pdf_text(tr("clinical_presentation")), heading_style))
+    elements.append(Paragraph(_pdf_text(report_data.get("Symptom narrative", "")), body_style))
     elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph("Assessment Result", heading_style))
+    elements.append(Paragraph(_pdf_text(tr("assessment_result")), heading_style))
     is_positive = "Positive" in report_data.get("Result", "")
     result_color = colors.HexColor("#dc2626") if is_positive else colors.HexColor("#16a34a")
+    display_result = tr("positive_high") if is_positive else tr("negative_low")
 
     t2 = Table(
         [
-            ["Risk Assessment:", report_data.get("Result", "")],
-            ["Estimated Probability:", report_data.get("Probability", "")],
-            ["Additional Symptoms:", report_data.get("Notable extra symptoms", "")],
+            [Paragraph(_pdf_text(tr("risk_assessment")), body_style), Paragraph(_pdf_text(display_result), body_style)],
+            [Paragraph(_pdf_text(tr("probability")), body_style), Paragraph(_pdf_text(report_data.get("Probability", "")), body_style)],
+            [Paragraph(_pdf_text(tr("additional_symptoms")), body_style), Paragraph(_pdf_text(tr("yes_value") if report_data.get("Notable extra symptoms") == "Yes" else tr("no_value")), body_style)],
         ],
-        colWidths=[170, 370],
+        colWidths=[175, 365],
     )
-    t2.setStyle(
-        TableStyle(
-            [
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("TEXTCOLOR", (1, 0), (1, 0), result_color),
-                ("FONTNAME", (1, 0), (1, 0), "Helvetica-Bold"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
-            ]
-        )
-    )
+    t2.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (0, -1), bold_font),
+        ("TEXTCOLOR", (1, 0), (1, 0), result_color),
+        ("FONTNAME", (1, 0), (1, 0), bold_font),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
+    ]))
     elements.append(t2)
     elements.append(Spacer(1, 18))
 
-    elements.append(
-        Paragraph(
-            "<b>Disclaimer:</b> This report is generated by a machine-learning model for educational and demonstration purposes only. It is NOT a medical diagnosis. Consult a qualified healthcare professional for clinical evaluation.",
-            body_style,
-        )
-    )
+    elements.append(Paragraph(f"<b>{_pdf_text(tr('disclaimer'))}</b>", body_style))
 
     doc.build(elements)
     buffer.seek(0)
@@ -1499,7 +973,6 @@ def generate_pdf_report(report_data: dict) -> bytes:
 
 def save_report_to_excel(report: dict):
     new_row = pd.DataFrame([report])
-
     if os.path.exists(SAVE_FILE_XLSX):
         try:
             existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
@@ -1508,7 +981,6 @@ def save_report_to_excel(report: dict):
             combined = new_row
     else:
         combined = new_row
-
     combined.to_excel(SAVE_FILE_XLSX, index=False, engine="openpyxl")
 
 
@@ -1537,7 +1009,7 @@ def render_email_gate():
         email_input = st.text_input(
             tr("email"),
             value=st.session_state.get("user_email") or "",
-            placeholder="you@example.com",
+            placeholder=tr("email_placeholder"),
         )
         continue_clicked = st.form_submit_button(
             f"🚀 {tr('continue')}",
@@ -1579,7 +1051,7 @@ def render_main_app():
 
     with st.form("patient_form", clear_on_submit=False):
         st.markdown(f'<div class="section-title">👤 {tr("personal")}</div>', unsafe_allow_html=True)
-        st.markdown("<div class='section-subtitle'></div>", unsafe_allow_html=True)
+        st.markdown(f'<div class="section-subtitle">{tr("email_intro")}</div>', unsafe_allow_html=True)
 
         c1, c2 = st.columns(2)
         with c1:
@@ -1682,7 +1154,6 @@ def render_main_app():
 
             any_extra_symptom = any(v == "Yes" for v in extra_values.values())
             symptom_narrative = build_symptom_narrative(symptom_values, extra_values)
-
             type_key = DIABETES_TYPE_KEYS[[tr(k) for k in DIABETES_TYPE_KEYS].index(diabetes_type)]
 
             st.session_state["last_report"] = {
@@ -1714,7 +1185,6 @@ def render_main_app():
                 height=0,
             )
 
-    # Results
     if st.session_state.get("last_report"):
         report = st.session_state["last_report"]
         result = st.session_state["last_result"]
@@ -1758,17 +1228,17 @@ def render_main_app():
             try:
                 save_report_to_excel(report)
                 st.session_state["report_saved"] = True
-            except Exception as exc:
-                st.warning(f"Could not save the report: {exc}")
+                st.success(tr("saved"))
+            except Exception:
+                st.warning(tr("could_not_save"))
 
         st.markdown("---")
         st.markdown(f'<div class="section-title">📄 {tr("download")}</div>', unsafe_allow_html=True)
 
         pdf_data = generate_pdf_report(report)
-        file_name_pdf = (
-            f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
-            .replace(" ", "_")
-        )
+        safe_first = re.sub(r"[^\w\-]+", "_", report["First name"]).strip("_") or "Patient"
+        safe_last = re.sub(r"[^\w\-]+", "_", report["Last name"]).strip("_") or "Report"
+        file_name_pdf = f"Diabetes_Report_{safe_first}_{safe_last}.pdf"
 
         st.download_button(
             label=f"📥 {tr('download_pdf')}",
@@ -1847,8 +1317,8 @@ def render_admin_page():
                                 st.session_state["confirm_clean"] = False
                                 st.rerun()
 
-                except Exception as exc:
-                    st.warning(f"Could not read saved records: {exc}")
+                except Exception:
+                    st.warning(tr("could_not_read"))
             else:
                 st.info(tr("no_records"))
         else:
