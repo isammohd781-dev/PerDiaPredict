@@ -15,7 +15,7 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 
 # =============================================================================
 # PERDIAPREDICT - POLISHED RESPONSIVE VERSION
-# Languages: English, Arabic, Hindi, Spanish
+# Language: English only
 # =============================================================================
 
 st.set_page_config(
@@ -49,15 +49,8 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 # =============================================================================
-# Translation system
+# English-only text
 # =============================================================================
-
-LANGUAGES = {
-    "English": "en",
-    "العربية": "ar",
-    "हिन्दी": "hi",
-    "Español": "es",
-}
 
 T = {
     "en": {
@@ -152,291 +145,12 @@ T = {
         "paresis": "Partial paresis (partial muscle weakness)",
         "alopecia": "Alopecia (abnormal hair loss)",
         "itching": "Itching",
-    },
-    "ar": {
-        "brand": "PerdiaPredict",
-        "tagline": "فحص مبكر للسكري مدعوم بالذكاء الاصطناعي",
-        "language": "اللغة",
-        "admin": "لوحة الإدارة",
-        "back": "رجوع",
-        "email_title": "الفحص المبكر لخطر السكري",
-        "email_intro": "أدخل بريدك الإلكتروني لبدء التقييم.",
-        "email": "البريد الإلكتروني",
-        "email_required": "البريد الإلكتروني مطلوب.",
-        "email_invalid": "يرجى إدخال بريد إلكتروني صحيح.",
-        "continue": "متابعة",
-        "medical_notice": "للتثقيف والفحص الأولي فقط — هذا النظام لا يقدم تشخيصًا طبيًا.",
-        "medical_notice_long": "هذا التطبيق لأغراض تعليمية وتجريبية فقط، ولا يحل محل الطبيب أو التشخيص السريري.",
-        "assessment": "تقييم خطر السكري",
-        "assessment_intro": "أكمل النموذج أدناه. يقوم نموذج التعلم الآلي المدرب بتحليل إجاباتك.",
-        "personal": "المعلومات الشخصية",
-        "first_name": "الاسم الأول",
-        "last_name": "اسم العائلة",
-        "phone": "رقم الهاتف",
-        "address": "عنوان السكن (المدينة / المنطقة)",
-        "diabetes_type": "ما نوع السكري الذي تعتقد أنك مصاب به؟",
-        "not_sure": "غير متأكد / لا أعرف",
-        "type1": "النوع الأول",
-        "type2": "النوع الثاني",
-        "gestational": "سكري الحمل",
-        "prediabetes": "مقدمات السكري",
-        "basic": "المعلومات الأساسية",
-        "age": "العمر",
-        "gender": "الجنس",
-        "male": "ذكر",
-        "female": "أنثى",
-        "core": "الأعراض الأساسية",
-        "core_help": "اختر نعم أو لا لكل عرض.",
-        "yes": "نعم",
-        "no": "لا",
-        "additional": "أعراض إضافية",
-        "optional": "اختياري — هذه الأعراض تثري التقرير لكنها لا تغير احتمالية النموذج مباشرة.",
-        "predict": "احسب مستوى الخطر",
-        "required_fields": "يرجى إكمال الحقول المطلوبة.",
-        "required": "مطلوب.",
-        "result": "نتيجة التقييم",
-        "high_risk": "خطر مرتفع للإصابة بالسكري في مرحلة مبكرة",
-        "low_risk": "خطر منخفض وفقًا للفحص الحالي",
-        "probability": "الاحتمالية المقدرة",
-        "symptom_summary": "ملخص الأعراض",
-        "recommendation": "التوصية",
-        "high_recommendation": "نظرًا لارتفاع مستوى الخطر المقدر، يُنصح بإجراء تقييم طبي. لا تعتمد على هذا الفحص بدل التشخيص الطبي.",
-        "low_recommendation": "نتيجة الفحص الحالية تشير إلى خطر منخفض. استمر في العادات الصحية واستشر الطبيب إذا استمرت الأعراض أو كان لديك قلق.",
-        "extra_notice": "تم اختيار بعض الأعراض الإضافية. إذا استمرت، فكر في استشارة مختص صحي.",
-        "health_guide": "دليل التغذية ونمط الحياة الصحي",
-        "offline": "مدمج داخل التطبيق — لا يحتاج إلى موقع خارجي.",
-        "plate": "طريقة الطبق الصحي",
-        "foods": "أطعمة يُفضل تناولها",
-        "limit": "أطعمة ومشروبات يُفضل الحد منها",
-        "habits": "عادات يومية صحية",
-        "meal_plan": "خطة الوجبات الأسبوعية",
-        "tips": "نصائح صحية عامة",
-        "download": "تحميل تقرير التقييم",
-        "download_pdf": "تحميل تقرير PDF",
-        "saved": "تم حفظ التقرير بنجاح.",
-        "admin_title": "لوحة الإدارة",
-        "admin_help": "منطقة مقيدة لعرض سجلات التقييمات المرسلة.",
-        "password": "كلمة مرور الإدارة",
-        "access": "تم السماح بالدخول.",
-        "incorrect": "كلمة المرور غير صحيحة.",
-        "no_records": "لا توجد سجلات محفوظة حتى الآن.",
-        "download_excel": "تحميل ملف Excel",
-        "clean": "مسح البيانات",
-        "confirm": "هل أنت متأكد من حذف جميع السجلات؟ لا يمكن التراجع عن هذا الإجراء.",
-        "delete": "نعم، احذف البيانات",
-        "cancel": "إلغاء",
-        "deleted": "تم حذف جميع البيانات بنجاح.",
-        "readiness": "جاهز",
-        "model_status": "نموذج التعلم الآلي محمل",
-        "privacy": "تُستخدم معلوماتك داخل التطبيق فقط لأغراض التقييم والتقرير.",
-        "patient_denies": "ينفي المريض جميع الأعراض الأساسية والإضافية التي تم تقييمها في هذا الفحص.",
-        "patient_reports": "يفيد المريض بوجود",
-        "further": "وعند السؤال بشكل إضافي، أفاد المريض بوجود",
-        "no_core": "ينفي المريض وجود أي من الأعراض الأساسية التي تم تقييمها.",
-        "constant_fatigue": "التعب أو الإرهاق المستمر",
-        "blurry_vision": "تشوش أو ضبابية الرؤية",
-        "frequent_infections": "التهابات متكررة (الجلد / اللثة / المسالك البولية)",
-        "tingling_numbness": "وخز أو تنميل في اليدين أو القدمين",
-        "polyuria": "كثرة التبول",
-        "polydipsia": "العطش الشديد",
-        "weight_loss": "فقدان الوزن المفاجئ",
-        "irritability": "التهيج أو العصبية",
-        "healing": "بطء التئام الجروح",
-        "paresis": "ضعف جزئي في العضلات",
-        "alopecia": "تساقط الشعر غير الطبيعي",
-        "itching": "الحكة",
-    },
-    "hi": {
-        "brand": "PerdiaPredict",
-        "tagline": "AI-संचालित प्रारंभिक मधुमेह स्क्रीनिंग",
-        "language": "भाषा",
-        "admin": "एडमिन पैनल",
-        "back": "वापस",
-        "email_title": "प्रारंभिक मधुमेह स्क्रीनिंग",
-        "email_intro": "अपना ईमेल दर्ज करके आकलन शुरू करें।",
-        "email": "ईमेल पता",
-        "email_required": "ईमेल पता आवश्यक है।",
-        "email_invalid": "कृपया मान्य ईमेल पता दर्ज करें।",
-        "continue": "जारी रखें",
-        "medical_notice": "केवल शैक्षिक स्क्रीनिंग — यह चिकित्सा निदान नहीं है।",
-        "medical_notice_long": "यह ऐप केवल शैक्षिक और प्रदर्शन उद्देश्यों के लिए है। यह डॉक्टर या क्लिनिकल निदान का विकल्प नहीं है।",
-        "assessment": "मधुमेह जोखिम आकलन",
-        "assessment_intro": "नीचे दिया गया फॉर्म भरें। प्रशिक्षित मशीन-लर्निंग मॉडल आपके उत्तरों का विश्लेषण करेगा।",
-        "personal": "व्यक्तिगत जानकारी",
-        "first_name": "पहला नाम",
-        "last_name": "उपनाम",
-        "phone": "फोन नंबर",
-        "address": "निवास पता (शहर / क्षेत्र)",
-        "diabetes_type": "आपको कौन सा मधुमेह है ऐसा आपको लगता है?",
-        "not_sure": "पता नहीं / निश्चित नहीं",
-        "type1": "टाइप 1",
-        "type2": "टाइप 2",
-        "gestational": "गर्भावधि मधुमेह",
-        "prediabetes": "प्रीडायबिटीज",
-        "basic": "मूल जानकारी",
-        "age": "आयु",
-        "gender": "लिंग",
-        "male": "पुरुष",
-        "female": "महिला",
-        "core": "मुख्य लक्षण",
-        "core_help": "हर लक्षण के लिए हाँ या नहीं चुनें।",
-        "yes": "हाँ",
-        "no": "नहीं",
-        "additional": "अतिरिक्त लक्षण",
-        "optional": "वैकल्पिक — ये रिपोर्ट को बेहतर बनाते हैं, लेकिन मॉडल की संभावना को सीधे नहीं बदलते।",
-        "predict": "जोखिम की गणना करें",
-        "required_fields": "कृपया आवश्यक जानकारी पूरी करें।",
-        "required": "आवश्यक है।",
-        "result": "आकलन परिणाम",
-        "high_risk": "प्रारंभिक मधुमेह का उच्च जोखिम",
-        "low_risk": "वर्तमान स्क्रीनिंग में कम जोखिम",
-        "probability": "अनुमानित संभावना",
-        "symptom_summary": "लक्षणों का सारांश",
-        "recommendation": "सिफारिश",
-        "high_recommendation": "अनुमानित जोखिम अधिक है। कृपया चिकित्सकीय जांच करवाएं। इस स्क्रीनिंग को पेशेवर निदान का विकल्प न मानें।",
-        "low_recommendation": "वर्तमान स्क्रीनिंग में जोखिम कम है। स्वस्थ आदतें जारी रखें और लक्षण बने रहने पर स्वास्थ्य विशेषज्ञ से बात करें।",
-        "extra_notice": "कुछ अतिरिक्त लक्षण चुने गए हैं। यदि वे बने रहें, तो स्वास्थ्य विशेषज्ञ से बात करें।",
-        "health_guide": "स्वस्थ जीवनशैली और पोषण गाइड",
-        "offline": "ऐप में ही उपलब्ध — बाहरी वेबसाइट की आवश्यकता नहीं।",
-        "plate": "स्वस्थ प्लेट विधि",
-        "foods": "पसंदीदा खाद्य पदार्थ",
-        "limit": "सीमित करने वाले खाद्य पदार्थ और पेय",
-        "habits": "दैनिक स्वस्थ आदतें",
-        "meal_plan": "साप्ताहिक भोजन योजना",
-        "tips": "सामान्य स्वास्थ्य सुझाव",
-        "download": "आकलन रिपोर्ट डाउनलोड करें",
-        "download_pdf": "PDF रिपोर्ट डाउनलोड करें",
-        "saved": "रिपोर्ट सफलतापूर्वक सहेजी गई।",
-        "admin_title": "एडमिन पैनल",
-        "admin_help": "सबमिट किए गए आकलन रिकॉर्ड देखने का प्रतिबंधित क्षेत्र।",
-        "password": "एडमिन पासवर्ड",
-        "access": "प्रवेश की अनुमति है।",
-        "incorrect": "गलत पासवर्ड।",
-        "no_records": "अभी कोई रिकॉर्ड नहीं है।",
-        "download_excel": "Excel फ़ाइल डाउनलोड करें",
-        "clean": "डेटा साफ करें",
-        "confirm": "क्या आप सभी रिकॉर्ड हटाना चाहते हैं? यह कार्रवाई वापस नहीं की जा सकती।",
-        "delete": "हाँ, डेटा हटाएं",
-        "cancel": "रद्द करें",
-        "deleted": "सभी डेटा सफलतापूर्वक हटा दिया गया।",
-        "readiness": "तैयार",
-        "model_status": "मशीन-लर्निंग मॉडल लोड है",
-        "privacy": "आपकी जानकारी का उपयोग इस ऐप में केवल आकलन/रिपोर्ट के लिए किया जाता है।",
-        "patient_denies": "रोगी ने इस स्क्रीनिंग में जांचे गए सभी मुख्य और अतिरिक्त लक्षणों से इनकार किया।",
-        "patient_reports": "रोगी ने बताया कि उसे",
-        "further": "अतिरिक्त पूछताछ में रोगी ने बताया कि उसे",
-        "no_core": "रोगी ने जांचे गए किसी भी मुख्य लक्षण से इनकार किया।",
-        "constant_fatigue": "लगातार थकान",
-        "blurry_vision": "धुंधली या अस्पष्ट दृष्टि",
-        "frequent_infections": "बार-बार संक्रमण (त्वचा / मसूड़े / मूत्र)",
-        "tingling_numbness": "हाथों या पैरों में झुनझुनी या सुन्नपन",
-        "polyuria": "अत्यधिक पेशाब",
-        "polydipsia": "अत्यधिक प्यास",
-        "weight_loss": "अचानक वजन कम होना",
-        "irritability": "चिड़चिड़ापन",
-        "healing": "घाव भरने में देरी",
-        "paresis": "आंशिक मांसपेशी कमजोरी",
-        "alopecia": "असामान्य बाल झड़ना",
-        "itching": "खुजली",
-    },
-    "es": {
-        "brand": "PerdiaPredict",
-        "tagline": "Detección temprana de diabetes con IA",
-        "language": "Idioma",
-        "admin": "Panel de administración",
-        "back": "Volver",
-        "email_title": "Evaluación temprana de diabetes",
-        "email_intro": "Introduce tu correo electrónico para comenzar.",
-        "email": "Correo electrónico",
-        "email_required": "El correo electrónico es obligatorio.",
-        "email_invalid": "Introduce un correo electrónico válido.",
-        "continue": "Continuar",
-        "medical_notice": "Solo para fines educativos — no es un diagnóstico médico.",
-        "medical_notice_long": "Esta aplicación es solo educativa y de demostración. No sustituye a un profesional sanitario ni a un diagnóstico clínico.",
-        "assessment": "Evaluación del riesgo de diabetes",
-        "assessment_intro": "Completa el formulario. El modelo de aprendizaje automático analizará tus respuestas.",
-        "personal": "Información personal",
-        "first_name": "Nombre",
-        "last_name": "Apellido",
-        "phone": "Número de teléfono",
-        "address": "Dirección de residencia (ciudad / zona)",
-        "diabetes_type": "¿Qué tipo de diabetes crees que tienes?",
-        "not_sure": "No estoy seguro / No sé",
-        "type1": "Tipo 1",
-        "type2": "Tipo 2",
-        "gestational": "Diabetes gestacional",
-        "prediabetes": "Prediabetes",
-        "basic": "Información básica",
-        "age": "Edad",
-        "gender": "Sexo",
-        "male": "Hombre",
-        "female": "Mujer",
-        "core": "Síntomas principales",
-        "core_help": "Selecciona Sí o No para cada síntoma.",
-        "yes": "Sí",
-        "no": "No",
-        "additional": "Síntomas adicionales",
-        "optional": "Opcional — enriquecen el informe, pero no cambian directamente la probabilidad del modelo.",
-        "predict": "Calcular mi riesgo",
-        "required_fields": "Completa los campos obligatorios.",
-        "required": "es obligatorio.",
-        "result": "Resultado de la evaluación",
-        "high_risk": "Alto riesgo de diabetes en etapa temprana",
-        "low_risk": "Bajo riesgo según la evaluación actual",
-        "probability": "Probabilidad estimada",
-        "symptom_summary": "Resumen de síntomas",
-        "recommendation": "Recomendación",
-        "high_recommendation": "El riesgo estimado es alto. Se recomienda una evaluación médica. No utilices esta herramienta como sustituto de un diagnóstico profesional.",
-        "low_recommendation": "La evaluación actual indica un riesgo bajo. Mantén hábitos saludables y consulta a un profesional si los síntomas persisten.",
-        "extra_notice": "Se seleccionaron algunos síntomas adicionales. Si persisten, considera consultar a un profesional sanitario.",
-        "health_guide": "Guía de nutrición y estilo de vida saludable",
-        "offline": "Integrada en la aplicación — no requiere un sitio web externo.",
-        "plate": "Método del plato saludable",
-        "foods": "Alimentos recomendados",
-        "limit": "Alimentos y bebidas que conviene limitar",
-        "habits": "Hábitos diarios saludables",
-        "meal_plan": "Plan semanal de comidas",
-        "tips": "Consejos generales de salud",
-        "download": "Descargar informe de evaluación",
-        "download_pdf": "Descargar informe PDF",
-        "saved": "Informe guardado correctamente.",
-        "admin_title": "Panel de administración",
-        "admin_help": "Área restringida para ver los registros enviados.",
-        "password": "Contraseña de administrador",
-        "access": "Acceso concedido.",
-        "incorrect": "Contraseña incorrecta.",
-        "no_records": "Todavía no hay registros guardados.",
-        "download_excel": "Descargar archivo Excel",
-        "clean": "Borrar datos",
-        "confirm": "¿Seguro que quieres eliminar todos los registros? Esta acción no se puede deshacer.",
-        "delete": "Sí, eliminar datos",
-        "cancel": "Cancelar",
-        "deleted": "Todos los datos se eliminaron correctamente.",
-        "readiness": "Listo",
-        "model_status": "Modelo de aprendizaje automático cargado",
-        "privacy": "Tu información se utiliza dentro de esta aplicación para el flujo de evaluación/informe.",
-        "patient_denies": "El paciente niega todos los síntomas principales y adicionales evaluados en esta prueba.",
-        "patient_reports": "El paciente informa de",
-        "further": "En preguntas adicionales, el paciente también refiere",
-        "no_core": "El paciente niega los síntomas principales evaluados.",
-        "constant_fatigue": "Fatiga o cansancio constante",
-        "blurry_vision": "Visión borrosa o poco clara",
-        "frequent_infections": "Infecciones frecuentes (piel / encías / urinarias)",
-        "tingling_numbness": "Hormigueo o entumecimiento en manos o pies",
-        "polyuria": "Micción excesiva",
-        "polydipsia": "Sed excesiva",
-        "weight_loss": "Pérdida repentina de peso",
-        "irritability": "Irritabilidad",
-        "healing": "Cicatrización lenta de heridas",
-        "paresis": "Debilidad muscular parcial",
-        "alopecia": "Pérdida anormal de cabello",
-        "itching": "Picor",
-    },
+    }
 }
 
 
 def tr(key: str) -> str:
-    return T[st.session_state.get("lang", "en")].get(key, T["en"].get(key, key))
+    return T["en"].get(key, key)
 
 
 # Keep model feature names in the training language/format.
@@ -466,9 +180,24 @@ DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"
 # =============================================================================
 
 def inject_css():
-    rtl = st.session_state.get("lang", "en") == "ar"
-    direction = "rtl" if rtl else "ltr"
-    theme = "dark" if st.session_state.get("dark_mode", True) else "light"
+    dark_mode = st.session_state.get("dark_mode", True)
+    theme_vars = (
+        """
+        --primary: #60a5fa; --primary-dark: #3b82f6; --text: #f8fafc; --muted: #94a3b8;
+        --surface: #111827; --surface-2: #172033; --surface-soft: #0f172a; --border: #334155;
+        --input: #0b1220; --success: #4ade80; --danger: #f87171; --warning-bg: #422006;
+        --warning-border: #92400e; --warning-text: #fde68a; --info-bg: #172554;
+        --info-border: #1d4ed8; --info-text: #bfdbfe; --shadow: 0 16px 42px rgba(0,0,0,.28);
+        """
+        if dark_mode else
+        """
+        --primary: #2563eb; --primary-dark: #1d4ed8; --text: #172033; --muted: #64748b;
+        --surface: #ffffff; --surface-2: #f8fafc; --surface-soft: #f1f5f9; --border: #e2e8f0;
+        --input: #ffffff; --success: #16a34a; --danger: #dc2626; --warning-bg: #fffbeb;
+        --warning-border: #fde68a; --warning-text: #713f12; --info-bg: #eff6ff;
+        --info-border: #dbeafe; --info-text: #1e40af; --shadow: 0 10px 35px rgba(15,23,42,.08);
+        """
+    )
 
     st.markdown(
         f"""
@@ -480,45 +209,7 @@ def inject_css():
            ================================================================ */
 
         :root {{
-            --primary: #60a5fa;
-            --primary-dark: #3b82f6;
-            --text: #f8fafc;
-            --muted: #94a3b8;
-            --surface: #111827;
-            --surface-2: #172033;
-            --surface-soft: #0f172a;
-            --border: #334155;
-            --input: #0b1220;
-            --success: #4ade80;
-            --danger: #f87171;
-            --warning-bg: #422006;
-            --warning-border: #92400e;
-            --warning-text: #fde68a;
-            --info-bg: #172554;
-            --info-border: #1d4ed8;
-            --info-text: #bfdbfe;
-            --shadow: 0 16px 42px rgba(0,0,0,.28);
-        }}
-
-        html[data-perdia-theme="light"] {{
-            --primary: #2563eb;
-            --primary-dark: #1d4ed8;
-            --text: #172033;
-            --muted: #64748b;
-            --surface: #ffffff;
-            --surface-2: #f8fafc;
-            --surface-soft: #f1f5f9;
-            --border: #e2e8f0;
-            --input: #ffffff;
-            --success: #16a34a;
-            --danger: #dc2626;
-            --warning-bg: #fffbeb;
-            --warning-border: #fde68a;
-            --warning-text: #713f12;
-            --info-bg: #eff6ff;
-            --info-border: #dbeafe;
-            --info-text: #1e40af;
-            --shadow: 0 10px 35px rgba(15,23,42,.08);
+            {theme_vars}
         }}
 
         html, body, [class*="css"] {{
@@ -526,16 +217,9 @@ def inject_css():
                          "Noto Sans", Arial, sans-serif;
         }}
 
-        html[data-perdia-theme="dark"],
-        html[data-perdia-theme="dark"] body {{
-            color-scheme: dark;
-            background: #080d18 !important;
-        }}
-
-        html[data-perdia-theme="light"],
-        html[data-perdia-theme="light"] body {{
-            color-scheme: light;
-            background: #f6f8fc !important;
+        html, body {{
+            color-scheme: {"dark" if dark_mode else "light"};
+            background: var(--surface-soft) !important;
         }}
 
         /* Main page */
@@ -557,7 +241,7 @@ def inject_css():
 
         .block-container {{
             max-width: 980px !important;
-            padding: 1.2rem 1rem 4rem !important;
+            padding: 3rem 1rem 4rem !important;
         }}
 
         /* Streamlit top bar / toolbar */
@@ -909,19 +593,10 @@ def inject_css():
             color:var(--text) !important;
         }}
 
-        /* Language label */
-        .lang-label {{
-            text-align:{'right' if rtl else 'left'};
-            color:var(--muted) !important;
-            font-size:.76rem;
-            font-weight:700;
-            margin-bottom:3px;
-        }}
-
         /* Mobile */
         @media (max-width:640px) {{
             .block-container {{
-                padding:.65rem .7rem 3rem !important;
+                padding:2rem .7rem 3rem !important;
             }}
 
             .hero {{
@@ -968,16 +643,7 @@ def inject_css():
             }}
         }}
 
-        [dir="rtl"], .rtl {{
-            direction:rtl;
-            text-align:right;
-        }}
         </style>
-        <script>
-        const root = window.parent.document.documentElement;
-        root.setAttribute("dir", "{direction}");
-        root.setAttribute("data-perdia-theme", "{theme}");
-        </script>
         """,
         unsafe_allow_html=True,
     )
@@ -1012,8 +678,6 @@ binary_columns = [c for c in feature_columns if c not in ("Age", "Gender")]
 # Session state
 # =============================================================================
 
-if "lang" not in st.session_state:
-    st.session_state["lang"] = "en"
 if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = True
 if "page" not in st.session_state:
@@ -1038,52 +702,18 @@ def go_to(page_name: str):
 # =============================================================================
 
 def render_header():
-    left, theme_col, right = st.columns([3.0, 0.65, 1.45], vertical_alignment="center")
-
+    left, theme_col, admin_col = st.columns([4.2, 1.2, 1.6], vertical_alignment="center")
     with left:
-        st.markdown(
-            f"""
-            <div class="brand">
-                <div class="brand-icon">🩺</div>
-                <div>
-                    <div class="brand-name">{tr('brand')}</div>
-                    <div class="brand-tagline">{tr('tagline')}</div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
+        st.markdown(f"""<div class="brand"><div class="brand-icon">🩺</div><div><div class="brand-name">{tr('brand')}</div><div class="brand-tagline">{tr('tagline')}</div></div></div>""", unsafe_allow_html=True)
     with theme_col:
-        st.toggle(
-            "🌙",
-            value=st.session_state.get("dark_mode", True),
-            key="dark_mode",
-            help="Toggle complete dark/light appearance",
-            label_visibility="collapsed",
-        )
-
-    with right:
-        options = list(LANGUAGES.keys())
-        current_label = next(k for k, v in LANGUAGES.items() if v == st.session_state["lang"])
-        selected = st.selectbox(
-            tr("language"),
-            options,
-            index=options.index(current_label),
-            key="language_selector",
-            label_visibility="collapsed",
-        )
-        new_lang = LANGUAGES[selected]
-        if new_lang != st.session_state["lang"]:
-            st.session_state["lang"] = new_lang
-            st.rerun()
-
-    if st.session_state["page"] == "admin":
-        if st.button(f"⬅️ {tr('back')}", use_container_width=True):
-            go_to("main" if st.session_state["user_email"] else "email_gate")
-    else:
-        if st.button(f"🔒 {tr('admin')}", use_container_width=True):
-            go_to("admin")
+        st.toggle("🌙 Dark", key="dark_mode", help="Switch between dark and light mode")
+    with admin_col:
+        if st.session_state["page"] == "admin":
+            if st.button(f"⬅️ {tr('back')}", use_container_width=True):
+                go_to("main" if st.session_state["user_email"] else "email_gate")
+        else:
+            if st.button(f"🔒 {tr('admin')}", use_container_width=True):
+                go_to("admin")
 
 
 # =============================================================================
@@ -1154,46 +784,14 @@ def _join(items):
 
 
 def build_symptom_narrative(symptom_values: dict, extra_values: dict) -> str:
-    lang = st.session_state["lang"]
-
-    core_keys = {
-        "Polyuria": "polyuria",
-        "Polydipsia": "polydipsia",
-        "sudden weight loss": "weight_loss",
-        "Irritability": "irritability",
-        "delayed healing": "healing",
-        "partial paresis": "paresis",
-        "Alopecia": "alopecia",
-        "Itching": "itching",
-    }
-
-    core_yes = [T[lang][key] for col, key in core_keys.items() if symptom_values.get(col) == "Yes"]
-    extra_yes = [T[lang][key] for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
-
+    core_keys = {"Polyuria":"polyuria","Polydipsia":"polydipsia","sudden weight loss":"weight_loss","Irritability":"irritability","delayed healing":"healing","partial paresis":"paresis","Alopecia":"alopecia","Itching":"itching"}
+    core_yes = [tr(key) for col, key in core_keys.items() if symptom_values.get(col) == "Yes"]
+    extra_yes = [tr(key) for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
     if not core_yes and not extra_yes:
         return tr("patient_denies")
-
-    sentences = []
-    if core_yes:
-        if lang == "ar":
-            sentences.append(tr("patient_reports") + " " + "، ".join(core_yes) + ".")
-        elif lang == "es":
-            sentences.append(tr("patient_reports") + " " + ", ".join(core_yes) + ".")
-        elif lang == "hi":
-            sentences.append(tr("patient_reports") + " " + ", ".join(core_yes) + "।")
-        else:
-            sentences.append(tr("patient_reports") + " " + _join(core_yes) + ".")
-    else:
-        sentences.append(tr("no_core"))
-
+    sentences = [tr("patient_reports") + " " + _join(core_yes) + "."] if core_yes else [tr("no_core")]
     if extra_yes:
-        if lang == "ar":
-            sentences.append(tr("further") + " " + "، ".join(extra_yes) + ".")
-        elif lang == "hi":
-            sentences.append(tr("further") + " " + ", ".join(extra_yes) + "।")
-        else:
-            sentences.append(tr("further") + " " + _join(extra_yes) + ".")
-
+        sentences.append(tr("further") + " " + _join(extra_yes) + ".")
     return " ".join(sentences)
 
 
@@ -1214,18 +812,10 @@ def render_meal_plan():
         ["Friday", "Oatmeal or eggs + raw nuts", "Fish/chicken + vegetables + salad", "Light vegetable soup + cheese", "Water / herbal tea"],
     ]
 
-    day_names = {
-        "en": ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-        "ar": ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"],
-        "hi": ["शनिवार", "रविवार", "सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार"],
-        "es": ["Sábado", "Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes"],
-    }
-
     df = pd.DataFrame(
         plans,
         columns=[tr("meal_plan"), "Breakfast", "Lunch", "Dinner", "Drinks"],
     )
-    df[tr("meal_plan")] = day_names[st.session_state["lang"]]
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 
