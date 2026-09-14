@@ -955,6 +955,20 @@ def inject_css():
             white-space:nowrap;
         }}
 
+        /* Inline label placed beside the language selectbox so it sits on
+           the same row as the theme toggle's inline label */
+        .inline-field-label {{
+            font-size:.72rem;
+            font-weight:700;
+            color:var(--muted) !important;
+            white-space:nowrap;
+            display:flex;
+            align-items:center;
+            height:38px;
+            text-align:{'right' if rtl else 'left'};
+            justify-content:{'flex-end' if rtl else 'flex-start'};
+        }}
+
         /* Mobile */
         @media (max-width:640px) {{
             .block-container {{
@@ -1010,13 +1024,23 @@ def inject_css():
             text-align:right;
         }}
         </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # NOTE: a <script> tag injected through st.markdown(unsafe_allow_html=True)
+    # is set via innerHTML and browsers never execute scripts added that way,
+    # so the dir/theme attributes were never actually applied. components.html
+    # renders inside a real iframe document, so its <script> actually runs.
+    components.html(
+        f"""
         <script>
         const root = window.parent.document.documentElement;
         root.setAttribute("dir", "{direction}");
         root.setAttribute("data-perdia-theme", "{theme}");
         </script>
         """,
-        unsafe_allow_html=True,
+        height=0,
     )
 
 
@@ -1075,7 +1099,7 @@ def go_to(page_name: str):
 # =============================================================================
 
 def render_header():
-    left, theme_col, right = st.columns([2.7, 1.15, 1.45], vertical_alignment="center")
+    left, theme_col, right = st.columns([2.4, 1.15, 2.1], vertical_alignment="center")
 
     with left:
         st.markdown(
@@ -1103,17 +1127,22 @@ def render_header():
         st.markdown('</div>', unsafe_allow_html=True)
 
     with right:
-        st.markdown('<div class="lang-select-wrap">', unsafe_allow_html=True)
-        options = list(LANGUAGES.keys())
-        current_label = next(k for k, v in LANGUAGES.items() if v == st.session_state["lang"])
-        selected = st.selectbox(
-            f"🌐 {tr('language')}",
-            options,
-            index=options.index(current_label),
-            key="language_selector",
-            label_visibility="visible",
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+        lbl_col, sel_col = st.columns([0.9, 1.6], gap="small", vertical_alignment="center")
+        with lbl_col:
+            st.markdown(
+                f'<div class="inline-field-label">🌐 {tr("language")}</div>',
+                unsafe_allow_html=True,
+            )
+        with sel_col:
+            options = list(LANGUAGES.keys())
+            current_label = next(k for k, v in LANGUAGES.items() if v == st.session_state["lang"])
+            selected = st.selectbox(
+                tr("language"),
+                options,
+                index=options.index(current_label),
+                key="language_selector",
+                label_visibility="collapsed",
+            )
         new_lang = LANGUAGES[selected]
         if new_lang != st.session_state["lang"]:
             st.session_state["lang"] = new_lang
