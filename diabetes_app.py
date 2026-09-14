@@ -13,6 +13,11 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
+# =============================================================================
+# PERDIAPREDICT - POLISHED RESPONSIVE VERSION
+# Language: English only
+# =============================================================================
+
 st.set_page_config(
     page_title="PerdiaPredict",
     page_icon="🩺",
@@ -273,16 +278,49 @@ def inject_css():
         }}
 
         .block-container {{
-            max-width: 980px !important;
+            width: 100% !important;
+            max-width: 1100px !important;
+            box-sizing: border-box !important;
             padding: 3.2rem 1rem 4rem !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
         }}
 
-        /* Theme toggle — keep it clearly visible in BOTH themes */
+        /* Prevent the page from becoming wider than the browser window. */
+        html, body, .stApp, [data-testid="stAppViewContainer"] {{
+            max-width: 100% !important;
+            overflow-x: hidden !important;
+        }}
+
+        /* Theme toggle — always visible and readable in BOTH themes */
+        [data-testid="stToggle"] {{
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 8px !important;
+            min-height: 42px !important;
+            padding: 5px 10px !important;
+            border-radius: 14px !important;
+            background: var(--surface) !important;
+            border: 1px solid var(--border) !important;
+            box-shadow: 0 4px 14px rgba(15,23,42,.08) !important;
+        }}
+
         [data-testid="stToggle"] label,
-        [data-testid="stCheckbox"] label {{
+        [data-testid="stToggle"] label *,
+        [data-testid="stToggle"] p,
+        [data-testid="stToggle"] span,
+        [data-testid="stCheckbox"] label,
+        [data-testid="stCheckbox"] label * {{
             color: var(--text) !important;
+            -webkit-text-fill-color: var(--text) !important;
             font-weight: 700 !important;
             opacity: 1 !important;
+            visibility: visible !important;
+        }}
+
+        [data-testid="stToggle"] [role="switch"] {{
+            flex: 0 0 auto !important;
         }}
 
         [data-testid="stToggle"] [role="switch"],
@@ -794,7 +832,7 @@ def go_to(page_name: str):
 # =============================================================================
 
 def render_header():
-    left, theme_col, right = st.columns([2.65, 1.55, 1.45], vertical_alignment="center")
+    left, theme_col, right = st.columns([2.55, 1.65, 1.45], vertical_alignment="center", gap="small")
 
     with left:
         st.markdown(
@@ -816,7 +854,8 @@ def render_header():
             "🌙 Dark / ☀️ Light",
             value=st.session_state.get("dark_mode", True),
             key="dark_mode",
-            help="Switch between dark and light mode",
+            # No help tooltip here: it can cover the header and is unnecessary
+            # because the label already explains the control.
         )
 
     with right:
