@@ -668,7 +668,7 @@ def inject_css():
                 width: 100% !important;
                 max-width: 100% !important;
                 box-sizing: border-box !important;
-                padding: 2.45rem 0.65rem 2.5rem !important;
+                padding: 2.60rem 0.65rem 2.5rem !important;
                 overflow-x: hidden !important;
             }}
 
