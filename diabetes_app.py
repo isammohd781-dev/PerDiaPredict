@@ -13,6 +13,11 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
+# =============================================================================
+# PERDIAPREDICT - POLISHED RESPONSIVE VERSION
+# Language: English only
+# =============================================================================
+
 st.set_page_config(
     page_title="PerdiaPredict",
     page_icon="🩺",
