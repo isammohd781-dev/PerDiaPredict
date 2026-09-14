@@ -133,6 +133,7 @@ T = {
         "delete": "Yes, Delete Data",
         "cancel": "Cancel",
         "deleted": "All data cleared successfully.",
+        "theme": "Theme",
         "readiness": "Ready",
         "model_status": "Machine-learning model loaded",
         "privacy": "Your information is used only by this application for the assessment/report workflow.",
@@ -226,6 +227,7 @@ T = {
         "delete": "نعم، احذف البيانات",
         "cancel": "إلغاء",
         "deleted": "تم حذف جميع البيانات بنجاح.",
+        "theme": "المظهر",
         "readiness": "جاهز",
         "model_status": "نموذج التعلم الآلي محمل",
         "privacy": "تُستخدم معلوماتك داخل التطبيق فقط لأغراض التقييم والتقرير.",
@@ -319,6 +321,7 @@ T = {
         "delete": "हाँ, डेटा हटाएं",
         "cancel": "रद्द करें",
         "deleted": "सभी डेटा सफलतापूर्वक हटा दिया गया।",
+        "theme": "थीम",
         "readiness": "तैयार",
         "model_status": "मशीन-लर्निंग मॉडल लोड है",
         "privacy": "आपकी जानकारी का उपयोग इस ऐप में केवल आकलन/रिपोर्ट के लिए किया जाता है।",
@@ -412,6 +415,7 @@ T = {
         "delete": "Sí, eliminar datos",
         "cancel": "Cancelar",
         "deleted": "Todos los datos se eliminaron correctamente.",
+        "theme": "Tema",
         "readiness": "Listo",
         "model_status": "Modelo de aprendizaje automático cargado",
         "privacy": "Tu información se utiliza dentro de esta aplicación para el flujo de evaluación/informe.",
@@ -931,6 +935,26 @@ def inject_css():
             text-align:{'right' if rtl else 'left'};
         }}
 
+        /* Theme toggle wrapper - matches the language selector's label
+           style/position so both controls look symmetric in the header */
+        .theme-select-wrap {{
+            margin-top:-4px;
+            white-space:nowrap;
+        }}
+
+        .theme-select-wrap [data-testid="stWidgetLabel"] {{
+            font-size:.72rem;
+            font-weight:700;
+            color:var(--muted) !important;
+            margin-bottom:2px;
+            text-align:{'right' if rtl else 'left'};
+            white-space:nowrap;
+        }}
+
+        .theme-select-wrap [data-testid="stWidgetLabel"] p {{
+            white-space:nowrap;
+        }}
+
         /* Mobile */
         @media (max-width:640px) {{
             .block-container {{
@@ -1051,7 +1075,7 @@ def go_to(page_name: str):
 # =============================================================================
 
 def render_header():
-    left, theme_col, right = st.columns([3.0, 0.65, 1.45], vertical_alignment="center")
+    left, theme_col, right = st.columns([2.7, 1.15, 1.45], vertical_alignment="center")
 
     with left:
         st.markdown(
@@ -1068,13 +1092,15 @@ def render_header():
         )
 
     with theme_col:
+        st.markdown('<div class="theme-select-wrap">', unsafe_allow_html=True)
         st.toggle(
-            "🌙",
+            f"🌙 {tr('theme')}",
             value=st.session_state.get("dark_mode", True),
             key="dark_mode",
             help="Toggle complete dark/light appearance",
-            label_visibility="collapsed",
+            label_visibility="visible",
         )
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with right:
         st.markdown('<div class="lang-select-wrap">', unsafe_allow_html=True)
