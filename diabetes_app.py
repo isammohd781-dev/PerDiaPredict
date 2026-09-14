@@ -700,6 +700,13 @@ def inject_css():
                 max-width: calc(50% - 4px) !important;
             }}
 
+            /* Lower only the mobile theme and Admin Panel controls so they
+               sit more evenly with the PerdiaPredict brand. Desktop is untouched. */
+            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(2),
+            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(3) {{
+                transform: translateY(9px) !important;
+            }}
+
             .brand {{
                 padding: 4px 2px 4px !important;
                 gap: 10px !important;
