@@ -1131,7 +1131,7 @@ def generate_pdf_report(report_data: dict) -> bytes:
 
     if os.path.exists(LOGO_PATH):
         logo = Image(LOGO_PATH, width=55, height=55)
-        header = Table([[logo, [title, subtitle]]], colWidths=[70, 470])
+        header = Table([[logo, [title, subtitle]]], colWidths=[60, 480])
     else:
         header = Table([[[title, subtitle]]], colWidths=[540])
 
