@@ -13,11 +13,6 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
-# =============================================================================
-# PERDIAPREDICT - POLISHED RESPONSIVE VERSION
-# Language: English only
-# =============================================================================
-
 st.set_page_config(
     page_title="PerdiaPredict",
     page_icon="🩺",
@@ -280,6 +275,40 @@ def inject_css():
         .block-container {{
             max-width: 980px !important;
             padding: 3.2rem 1rem 4rem !important;
+        }}
+
+        /* Theme toggle — keep it clearly visible in BOTH themes */
+        [data-testid="stToggle"] label,
+        [data-testid="stCheckbox"] label {{
+            color: var(--text) !important;
+            font-weight: 700 !important;
+            opacity: 1 !important;
+        }}
+
+        [data-testid="stToggle"] [role="switch"],
+        [data-testid="stCheckbox"] [role="switch"],
+        button[role="switch"] {{
+            width: 46px !important;
+            min-width: 46px !important;
+            height: 26px !important;
+            border-radius: 999px !important;
+            border: 1px solid var(--border) !important;
+            background: #cbd5e1 !important;
+            box-shadow: inset 0 0 0 1px rgba(15,23,42,.06) !important;
+            opacity: 1 !important;
+        }}
+
+        [data-testid="stToggle"] [role="switch"][aria-checked="true"],
+        [data-testid="stCheckbox"] [role="switch"][aria-checked="true"],
+        button[role="switch"][aria-checked="true"] {{
+            background: var(--primary) !important;
+            border-color: var(--primary) !important;
+        }}
+
+        [data-testid="stToggle"] [role="switch"] *,
+        [data-testid="stCheckbox"] [role="switch"] *,
+        button[role="switch"] * {{
+            opacity: 1 !important;
         }}
 
         /* Streamlit top bar / toolbar */
@@ -765,7 +794,7 @@ def go_to(page_name: str):
 # =============================================================================
 
 def render_header():
-    left, theme_col, right = st.columns([3.0, 1.0, 1.45], vertical_alignment="center")
+    left, theme_col, right = st.columns([2.65, 1.55, 1.45], vertical_alignment="center")
 
     with left:
         st.markdown(
@@ -784,7 +813,7 @@ def render_header():
     with theme_col:
         # Streamlit automatically reruns when this value changes.
         st.toggle(
-            "🌙 Dark mode / ☀️ Light mode",
+            "🌙 Dark / ☀️ Light",
             value=st.session_state.get("dark_mode", True),
             key="dark_mode",
             help="Switch between dark and light mode",
