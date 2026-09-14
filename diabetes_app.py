@@ -287,6 +287,13 @@ def inject_css():
             min-width: 0 !important;
         }}
 
+        /* Desktop only: lower the theme and Admin Panel controls to align
+           more evenly with the PerdiaPredict brand. Mobile rules below are unchanged. */
+        [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(2),
+        [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(3) {{
+            transform: translateY(9px) !important;
+        }}
+
         /* Prevent the page from becoming wider than the browser window. */
         html, body, .stApp, [data-testid="stAppViewContainer"] {{
             max-width: 100% !important;
