@@ -468,21 +468,57 @@ DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"
 def inject_css():
     rtl = st.session_state.get("lang", "en") == "ar"
     direction = "rtl" if rtl else "ltr"
+    theme = "dark" if st.session_state.get("dark_mode", True) else "light"
 
     st.markdown(
         f"""
         <style>
+        /* ================================================================
+           PerdiaPredict complete theme
+           The theme is applied to the whole Streamlit interface, not only
+           to text. This fixes the mixed light/dark appearance.
+           ================================================================ */
+
         :root {{
+            --primary: #60a5fa;
+            --primary-dark: #3b82f6;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --surface: #111827;
+            --surface-2: #172033;
+            --surface-soft: #0f172a;
+            --border: #334155;
+            --input: #0b1220;
+            --success: #4ade80;
+            --danger: #f87171;
+            --warning-bg: #422006;
+            --warning-border: #92400e;
+            --warning-text: #fde68a;
+            --info-bg: #172554;
+            --info-border: #1d4ed8;
+            --info-text: #bfdbfe;
+            --shadow: 0 16px 42px rgba(0,0,0,.28);
+        }}
+
+        html[data-perdia-theme="light"] {{
             --primary: #2563eb;
             --primary-dark: #1d4ed8;
             --text: #172033;
             --muted: #64748b;
             --surface: #ffffff;
-            --surface-soft: #f8fafc;
+            --surface-2: #f8fafc;
+            --surface-soft: #f1f5f9;
             --border: #e2e8f0;
+            --input: #ffffff;
             --success: #16a34a;
             --danger: #dc2626;
-            --shadow: 0 10px 35px rgba(15, 23, 42, 0.08);
+            --warning-bg: #fffbeb;
+            --warning-border: #fde68a;
+            --warning-text: #713f12;
+            --info-bg: #eff6ff;
+            --info-border: #dbeafe;
+            --info-text: #1e40af;
+            --shadow: 0 10px 35px rgba(15,23,42,.08);
         }}
 
         html, body, [class*="css"] {{
@@ -490,12 +526,33 @@ def inject_css():
                          "Noto Sans", Arial, sans-serif;
         }}
 
+        html[data-perdia-theme="dark"],
+        html[data-perdia-theme="dark"] body {{
+            color-scheme: dark;
+            background: #080d18 !important;
+        }}
+
+        html[data-perdia-theme="light"],
+        html[data-perdia-theme="light"] body {{
+            color-scheme: light;
+            background: #f6f8fc !important;
+        }}
+
+        /* Main page */
         .stApp {{
+            min-height: 100vh;
             background:
-                radial-gradient(circle at 10% 0%, rgba(37,99,235,.08), transparent 30%),
-                radial-gradient(circle at 100% 15%, rgba(14,165,233,.07), transparent 28%),
-                #f6f8fc;
-            color: var(--text);
+                radial-gradient(circle at 8% 0%, rgba(59,130,246,.13), transparent 30%),
+                radial-gradient(circle at 100% 12%, rgba(14,165,233,.10), transparent 28%),
+                var(--surface-soft) !important;
+            color: var(--text) !important;
+        }}
+
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        [data-testid="stMainBlockContainer"] {{
+            background: transparent !important;
+            color: var(--text) !important;
         }}
 
         .block-container {{
@@ -503,19 +560,23 @@ def inject_css():
             padding: 1.2rem 1rem 4rem !important;
         }}
 
+        /* Streamlit top bar / toolbar */
         header[data-testid="stHeader"] {{
-            background: rgba(246,248,252,.75);
+            background: color-mix(in srgb, var(--surface-soft) 88%, transparent) !important;
+            color: var(--text) !important;
         }}
 
-        div[data-testid="stVerticalBlockBorderWrapper"] {{
-            border-radius: 20px !important;
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"] {{
+            color: var(--text) !important;
         }}
 
+        /* Brand */
         .brand {{
             display:flex;
             align-items:center;
             gap:12px;
-            padding: 8px 2px 2px;
+            padding:8px 2px 2px;
         }}
 
         .brand-icon {{
@@ -526,7 +587,7 @@ def inject_css():
             align-items:center;
             justify-content:center;
             background:linear-gradient(135deg,#2563eb,#0ea5e9);
-            color:white;
+            color:white !important;
             font-size:25px;
             box-shadow:0 8px 22px rgba(37,99,235,.25);
         }}
@@ -535,22 +596,23 @@ def inject_css():
             font-size:1.15rem;
             font-weight:800;
             letter-spacing:-.02em;
-            color:#0f172a;
+            color:var(--text) !important;
         }}
 
         .brand-tagline {{
             font-size:.78rem;
-            color:#64748b;
+            color:var(--muted) !important;
             margin-top:1px;
         }}
 
+        /* Hero */
         .hero {{
-            background:linear-gradient(135deg,#0f172a 0%,#1e3a8a 62%,#0369a1 100%);
-            color:white;
+            background:linear-gradient(135deg,#020617 0%,#172554 56%,#075985 100%);
+            color:white !important;
             border-radius:26px;
             padding:30px 28px;
-            margin:18px 0 18px;
-            box-shadow:0 18px 45px rgba(15,23,42,.18);
+            margin:18px 0;
+            box-shadow:0 18px 45px rgba(0,0,0,.32);
             overflow:hidden;
             position:relative;
         }}
@@ -561,7 +623,7 @@ def inject_css():
             width:190px;
             height:190px;
             border-radius:50%;
-            background:rgba(255,255,255,.08);
+            background:rgba(96,165,250,.14);
             right:-55px;
             top:-65px;
         }}
@@ -575,7 +637,7 @@ def inject_css():
         }}
 
         .hero p {{
-            color:rgba(255,255,255,.82);
+            color:rgba(255,255,255,.82) !important;
             margin:0;
             max-width:720px;
             line-height:1.65;
@@ -587,30 +649,37 @@ def inject_css():
             gap:7px;
             padding:7px 11px;
             border-radius:999px;
-            background:rgba(255,255,255,.12);
-            border:1px solid rgba(255,255,255,.16);
+            background:rgba(255,255,255,.10);
+            border:1px solid rgba(255,255,255,.18);
+            color:#f8fafc !important;
             font-size:.78rem;
             margin-bottom:14px;
         }}
 
+        /* Cards */
+        .section-card,
+        .result-card {{
+            background:var(--surface) !important;
+            border:1px solid var(--border) !important;
+            color:var(--text) !important;
+            box-shadow:var(--shadow) !important;
+        }}
+
         .section-card {{
-            background:var(--surface);
-            border:1px solid var(--border);
             border-radius:22px;
             padding:20px;
             margin:14px 0;
-            box-shadow:var(--shadow);
         }}
 
         .section-title {{
             font-size:1.12rem;
             font-weight:800;
-            color:#0f172a;
+            color:var(--text) !important;
             margin-bottom:3px;
         }}
 
         .section-subtitle {{
-            color:#64748b;
+            color:var(--muted) !important;
             font-size:.86rem;
             line-height:1.5;
             margin-bottom:14px;
@@ -622,9 +691,9 @@ def inject_css():
             gap:10px;
             padding:11px 13px;
             border-radius:15px;
-            background:#eff6ff;
-            border:1px solid #dbeafe;
-            color:#1e40af;
+            background:var(--info-bg) !important;
+            border:1px solid var(--info-border) !important;
+            color:var(--info-text) !important;
             font-size:.85rem;
             margin:10px 0 16px;
         }}
@@ -633,21 +702,18 @@ def inject_css():
             border-radius:24px;
             padding:24px;
             margin:14px 0;
-            background:white;
-            border:1px solid var(--border);
-            box-shadow:var(--shadow);
         }}
 
         .result-high {{
-            border-left:6px solid #dc2626;
+            border-left:6px solid var(--danger) !important;
         }}
 
         .result-low {{
-            border-left:6px solid #16a34a;
+            border-left:6px solid var(--success) !important;
         }}
 
         .result-label {{
-            color:#64748b;
+            color:var(--muted) !important;
             font-size:.82rem;
             font-weight:700;
             text-transform:uppercase;
@@ -658,7 +724,7 @@ def inject_css():
             font-size:clamp(1.2rem,3vw,1.55rem);
             font-weight:850;
             margin:5px 0 16px;
-            color:#0f172a;
+            color:var(--text) !important;
         }}
 
         .score {{
@@ -666,11 +732,11 @@ def inject_css():
             line-height:1;
             font-weight:900;
             letter-spacing:-.05em;
-            color:#0f172a;
+            color:var(--text) !important;
         }}
 
         .score-caption {{
-            color:#64748b;
+            color:var(--muted) !important;
             font-size:.82rem;
             margin-top:5px;
         }}
@@ -678,9 +744,9 @@ def inject_css():
         .notice {{
             border-radius:16px;
             padding:13px 15px;
-            background:#fffbeb;
-            border:1px solid #fde68a;
-            color:#713f12;
+            background:var(--warning-bg) !important;
+            border:1px solid var(--warning-border) !important;
+            color:var(--warning-text) !important;
             font-size:.84rem;
             line-height:1.55;
             margin:12px 0;
@@ -688,59 +754,174 @@ def inject_css():
 
         .footer {{
             text-align:center;
-            color:#94a3b8;
+            color:var(--muted) !important;
             font-size:.75rem;
             padding:24px 0 4px;
         }}
 
+        /* ALL normal Streamlit text */
+        .stMarkdown, .stText, .stCaption,
+        [data-testid="stMarkdownContainer"],
+        [data-testid="stWidgetLabel"],
+        [data-testid="stWidgetLabel"] p,
+        label, p, li, span {{
+            color:var(--text);
+        }}
+
+        [data-testid="stCaptionContainer"],
+        [data-testid="stCaptionContainer"] p {{
+            color:var(--muted) !important;
+        }}
+
+        /* Inputs */
+        input, textarea,
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="input"] > div,
+        [data-testid="stNumberInput"] input,
+        [data-testid="stTextInput"] input {{
+            background:var(--input) !important;
+            color:var(--text) !important;
+            border:1px solid var(--border) !important;
+            border-radius:12px !important;
+            caret-color:var(--primary) !important;
+        }}
+
+        input::placeholder,
+        textarea::placeholder {{
+            color:#64748b !important;
+            opacity:1 !important;
+        }}
+
+        input:focus, textarea:focus,
+        div[data-baseweb="select"] > div:focus-within {{
+            border-color:var(--primary) !important;
+            box-shadow:0 0 0 2px rgba(96,165,250,.18) !important;
+        }}
+
+        /* Selectbox text + dropdown */
+        [data-baseweb="select"] *,
+        [role="listbox"] *,
+        [role="option"] {{
+            color:var(--text) !important;
+        }}
+
+        div[data-baseweb="popover"],
+        div[data-baseweb="menu"],
+        [role="listbox"] {{
+            background:var(--surface) !important;
+            border:1px solid var(--border) !important;
+            color:var(--text) !important;
+        }}
+
+        [role="option"]:hover,
+        [role="option"][aria-selected="true"] {{
+            background:var(--surface-2) !important;
+        }}
+
+        /* Radio buttons / checkboxes / toggles */
+        [data-testid="stRadio"],
+        [data-testid="stCheckbox"],
+        [data-testid="stToggle"] {{
+            color:var(--text) !important;
+        }}
+
+        [data-testid="stRadio"] label,
+        [data-testid="stCheckbox"] label,
+        [data-testid="stToggle"] label {{
+            color:var(--text) !important;
+        }}
+
+        /* Buttons */
         .stButton > button,
         .stDownloadButton > button,
         button[kind="primary"] {{
             border-radius:14px !important;
             min-height:46px !important;
             font-weight:750 !important;
-            transition:transform .15s ease, box-shadow .15s ease;
+            color:var(--text) !important;
+            background:var(--surface) !important;
+            border:1px solid var(--border) !important;
+            transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
         }}
 
         .stButton > button:hover,
         .stDownloadButton > button:hover {{
             transform:translateY(-1px);
-            box-shadow:0 8px 18px rgba(15,23,42,.10);
+            border-color:var(--primary) !important;
+            box-shadow:0 8px 18px rgba(0,0,0,.20) !important;
         }}
 
-        input, textarea, div[data-baseweb="select"] > div {{
-            border-radius:12px !important;
+        .stButton > button[kind="primary"],
+        button[kind="primary"] {{
+            background:linear-gradient(135deg,#2563eb,#0284c7) !important;
+            color:white !important;
+            border:none !important;
         }}
 
+        /* Metrics */
         [data-testid="stMetric"] {{
-            background:#f8fafc;
-            border:1px solid #e2e8f0;
+            background:var(--surface) !important;
+            border:1px solid var(--border) !important;
             border-radius:18px;
             padding:14px;
+            color:var(--text) !important;
         }}
 
-        [data-testid="stProgressBar"] {{
-            height:9px !important;
+        [data-testid="stMetricValue"],
+        [data-testid="stMetricLabel"],
+        [data-testid="stMetricDelta"] {{
+            color:var(--text) !important;
         }}
 
-        .stExpander {{
+        /* Expanders */
+        .stExpander,
+        [data-testid="stExpander"] {{
             border-radius:16px !important;
-            border:1px solid #e2e8f0 !important;
-            background:#fff !important;
+            border:1px solid var(--border) !important;
+            background:var(--surface) !important;
+            color:var(--text) !important;
         }}
 
+        .stExpander details,
+        .stExpander summary {{
+            background:var(--surface) !important;
+            color:var(--text) !important;
+        }}
+
+        /* Alerts */
+        [data-testid="stAlert"] {{
+            background:var(--surface) !important;
+            border:1px solid var(--border) !important;
+            color:var(--text) !important;
+        }}
+
+        /* Dataframes / tables */
+        [data-testid="stDataFrame"],
+        [data-testid="stTable"] {{
+            background:var(--surface) !important;
+            color:var(--text) !important;
+        }}
+
+        /* File uploader */
+        [data-testid="stFileUploaderDropzone"] {{
+            background:var(--surface) !important;
+            border:1px dashed var(--border) !important;
+            color:var(--text) !important;
+        }}
+
+        /* Language label */
         .lang-label {{
             text-align:{'right' if rtl else 'left'};
-            color:#64748b;
+            color:var(--muted) !important;
             font-size:.76rem;
             font-weight:700;
             margin-bottom:3px;
         }}
 
-        /* Phone-first layout */
-        @media (max-width: 640px) {{
+        /* Mobile */
+        @media (max-width:640px) {{
             .block-container {{
-                padding: .65rem .7rem 3rem !important;
+                padding:.65rem .7rem 3rem !important;
             }}
 
             .hero {{
@@ -779,7 +960,7 @@ def inject_css():
             }}
 
             div[data-testid="stHorizontalBlock"] {{
-                gap: .55rem !important;
+                gap:.55rem !important;
             }}
 
             .score {{
@@ -787,16 +968,15 @@ def inject_css():
             }}
         }}
 
-        /* RTL support */
         [dir="rtl"], .rtl {{
             direction:rtl;
             text-align:right;
         }}
-        """
-        + f"""
+        </style>
         <script>
         const root = window.parent.document.documentElement;
         root.setAttribute("dir", "{direction}");
+        root.setAttribute("data-perdia-theme", "{theme}");
         </script>
         """,
         unsafe_allow_html=True,
@@ -834,6 +1014,8 @@ binary_columns = [c for c in feature_columns if c not in ("Age", "Gender")]
 
 if "lang" not in st.session_state:
     st.session_state["lang"] = "en"
+if "dark_mode" not in st.session_state:
+    st.session_state["dark_mode"] = True
 if "page" not in st.session_state:
     st.session_state["page"] = "email_gate"
 if "user_email" not in st.session_state:
@@ -856,7 +1038,7 @@ def go_to(page_name: str):
 # =============================================================================
 
 def render_header():
-    left, right = st.columns([3.3, 1.25], vertical_alignment="center")
+    left, theme_col, right = st.columns([3.0, 0.65, 1.45], vertical_alignment="center")
 
     with left:
         st.markdown(
@@ -870,6 +1052,15 @@ def render_header():
             </div>
             """,
             unsafe_allow_html=True,
+        )
+
+    with theme_col:
+        st.toggle(
+            "🌙",
+            value=st.session_state.get("dark_mode", True),
+            key="dark_mode",
+            help="Toggle complete dark/light appearance",
+            label_visibility="collapsed",
         )
 
     with right:
