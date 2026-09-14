@@ -278,87 +278,19 @@ def inject_css():
         }}
 
         .block-container {{
-            width: 100% !important;
-            max-width: 1100px !important;
-            box-sizing: border-box !important;
-            padding: 3.2rem 1rem 4rem !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
+            max-width: 980px !important;
+            padding: 2.2rem 1rem 4rem !important;
         }}
 
-        /* Header layout */
-        .perdia-header-brand {{
-            width: 100%;
-        }}
-        .perdia-header-actions {{
-            width: 100%;
-        }}
-        .perdia-header-actions [data-testid="stHorizontalBlock"] {{
-            width: 100% !important;
-            align-items: center !important;
+        /* Header */
+        .brand {{
+            min-width: 0 !important;
         }}
 
         /* Prevent the page from becoming wider than the browser window. */
         html, body, .stApp, [data-testid="stAppViewContainer"] {{
             max-width: 100% !important;
             overflow-x: hidden !important;
-        }}
-
-        /* Theme toggle — always visible and readable in BOTH themes */
-        [data-testid="stToggle"] {{
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            gap: 8px !important;
-            min-height: 42px !important;
-            padding: 5px 10px !important;
-            border-radius: 14px !important;
-            background: var(--surface) !important;
-            border: 1px solid var(--border) !important;
-            box-shadow: 0 4px 14px rgba(15,23,42,.08) !important;
-        }}
-
-        [data-testid="stToggle"] label,
-        [data-testid="stToggle"] label *,
-        [data-testid="stToggle"] p,
-        [data-testid="stToggle"] span,
-        [data-testid="stCheckbox"] label,
-        [data-testid="stCheckbox"] label * {{
-            color: var(--text) !important;
-            -webkit-text-fill-color: var(--text) !important;
-            font-weight: 700 !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-        }}
-
-        [data-testid="stToggle"] [role="switch"] {{
-            flex: 0 0 auto !important;
-        }}
-
-        [data-testid="stToggle"] [role="switch"],
-        [data-testid="stCheckbox"] [role="switch"],
-        button[role="switch"] {{
-            width: 46px !important;
-            min-width: 46px !important;
-            height: 26px !important;
-            border-radius: 999px !important;
-            border: 1px solid var(--border) !important;
-            background: #cbd5e1 !important;
-            box-shadow: inset 0 0 0 1px rgba(15,23,42,.06) !important;
-            opacity: 1 !important;
-        }}
-
-        [data-testid="stToggle"] [role="switch"][aria-checked="true"],
-        [data-testid="stCheckbox"] [role="switch"][aria-checked="true"],
-        button[role="switch"][aria-checked="true"] {{
-            background: var(--primary) !important;
-            border-color: var(--primary) !important;
-        }}
-
-        [data-testid="stToggle"] [role="switch"] *,
-        [data-testid="stCheckbox"] [role="switch"] *,
-        button[role="switch"] * {{
-            opacity: 1 !important;
         }}
 
         /* Streamlit top bar / toolbar */
@@ -730,93 +662,136 @@ def inject_css():
             color:var(--text) !important;
         }}
 
-        /* Mobile */
-        @media (max-width:640px) {{
+        /* Mobile-only adjustments. Desktop is intentionally unchanged. */
+        @media (max-width: 640px) {{
             .block-container {{
                 width: 100% !important;
                 max-width: 100% !important;
-                padding: 1.0rem .7rem 3rem !important;
+                box-sizing: border-box !important;
+                padding: 0.75rem 0.65rem 2.5rem !important;
                 overflow-x: hidden !important;
             }}
 
-            .perdia-header-brand {{
-                margin-bottom: 8px !important;
-            }}
-
-            .perdia-header-actions [data-testid="stHorizontalBlock"] {{
-                display: flex !important;
-                flex-wrap: nowrap !important;
-                gap: 8px !important;
-            }}
-
-            .perdia-header-actions [data-testid="stColumn"] {{
-                min-width: 0 !important;
-            }}
-
-            .perdia-header-actions [data-testid="stToggle"] {{
+            /* The header is the first Streamlit horizontal block on the page.
+               On phones: brand gets the full first row, controls share row two. */
+            [data-testid="stHorizontalBlock"]:has(.brand) {{
                 width: 100% !important;
-                box-sizing: border-box !important;
+                display: flex !important;
+                flex-wrap: wrap !important;
+                gap: 8px !important;
+                align-items: center !important;
+            }}
+
+            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"] {{
+                min-width: 0 !important;
+                flex: 0 0 auto !important;
+            }}
+
+            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:first-child {{
+                flex: 0 0 100% !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }}
+
+            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(2),
+            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(3) {{
+                flex: 1 1 calc(50% - 4px) !important;
+                width: calc(50% - 4px) !important;
+                max-width: calc(50% - 4px) !important;
+            }}
+
+            .brand {{
+                padding: 4px 2px 4px !important;
+                gap: 10px !important;
+            }}
+
+            .brand-icon {{
+                width: 44px !important;
+                height: 44px !important;
+                border-radius: 13px !important;
+                flex: 0 0 44px !important;
+            }}
+
+            .brand-name {{
+                font-size: 1.05rem !important;
+                line-height: 1.15 !important;
+            }}
+
+            .brand-tagline {{
+                font-size: 0.78rem !important;
+                line-height: 1.25 !important;
+            }}
+
+            /* Mobile-only theme toggle: clear and visible in light mode. */
+            [data-testid="stToggle"] {{
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 6px !important;
                 min-height: 44px !important;
-                padding: 5px 7px !important;
+                border-radius: 14px !important;
+                background: var(--surface) !important;
+                border: 1px solid var(--border) !important;
+                box-shadow: 0 3px 10px rgba(15,23,42,.08) !important;
+                color: var(--text) !important;
+                width: 100% !important;
+                min-height: 44px !important;
+                box-sizing: border-box !important;
+                padding: 4px 6px !important;
             }}
 
-            .perdia-header-actions [data-testid="stToggle"] label {{
+            [data-testid="stToggle"] label,
+            [data-testid="stToggle"] label * {{
+                color: var(--text) !important;
+                -webkit-text-fill-color: var(--text) !important;
+                font-weight: 700 !important;
+                opacity: 1 !important;
+                visibility: visible !important;
+            }}
+
+            [data-testid="stToggle"] [role="switch"] {{
+                width: 44px !important;
+                min-width: 44px !important;
+                height: 24px !important;
+                opacity: 1 !important;
+            }}
+
+            [data-testid="stToggle"] label {{
                 white-space: nowrap !important;
-                font-size: 0.9rem !important;
+                font-size: 0.88rem !important;
             }}
 
-            .perdia-header-actions .stButton > button {{
+            .stButton > button {{
                 width: 100% !important;
                 min-height: 44px !important;
                 padding: 7px 8px !important;
                 white-space: nowrap !important;
-                font-size: 0.9rem !important;
+                font-size: 0.88rem !important;
             }}
 
             .hero {{
-                border-radius:20px;
-                padding:23px 19px;
-                margin:10px 0 13px;
+                width: 100% !important;
+                box-sizing: border-box !important;
+                border-radius: 20px !important;
+                padding: 22px 18px !important;
+                margin: 10px 0 13px !important;
             }}
 
             .hero h1 {{
-                font-size:1.75rem;
+                font-size: clamp(2rem, 9vw, 2.7rem) !important;
+                line-height: 1.08 !important;
+                word-break: normal !important;
             }}
 
-            .section-card {{
-                border-radius:18px;
-                padding:15px;
-                margin:10px 0;
+            .hero p {{
+                font-size: 1rem !important;
+                line-height: 1.5 !important;
             }}
 
-            .brand-icon {{
-                width:42px;
-                height:42px;
-                border-radius:13px;
-            }}
-
-            .brand-name {{
-                font-size:1rem;
-            }}
-
-            .brand-tagline {{
-                font-size:.69rem;
-            }}
-
-            .stButton > button,
-            .stDownloadButton > button {{
-                min-height:50px !important;
-            }}
-
-            div[data-testid="stHorizontalBlock"] {{
-                gap:.55rem !important;
-            }}
-
-            .score {{
-                font-size:2.6rem;
+            input, textarea, select {{
+                max-width: 100% !important;
             }}
         }}
-
         </style>
         <script>
         const root = window.parent.document.documentElement;
@@ -881,10 +856,13 @@ def go_to(page_name: str):
 # =============================================================================
 
 def render_header():
-    # Keep the brand on its own row so it never collides with controls on phones.
-    st.markdown(
-        f"""
-        <div class="perdia-header-brand">
+    # Desktop keeps the original 3-column layout.
+    # Mobile CSS below rearranges these same columns without changing desktop.
+    left, theme_col, right = st.columns([3.0, 1.0, 1.45], vertical_alignment="center")
+
+    with left:
+        st.markdown(
+            f"""
             <div class="brand">
                 <div class="brand-icon">🩺</div>
                 <div>
@@ -892,14 +870,9 @@ def render_header():
                     <div class="brand-tagline">{tr('tagline')}</div>
                 </div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # The controls share a separate row. This is much safer on small screens.
-    st.markdown('<div class="perdia-header-actions">', unsafe_allow_html=True)
-    theme_col, right = st.columns([1.05, 0.95], vertical_alignment="center", gap="small")
+            """,
+            unsafe_allow_html=True,
+        )
 
     with theme_col:
         st.toggle(
@@ -915,8 +888,6 @@ def render_header():
         else:
             if st.button(f"🔒 {tr('admin')}", use_container_width=True):
                 go_to("admin")
-
-    st.markdown('</div>', unsafe_allow_html=True)
 
 
 # =============================================================================
