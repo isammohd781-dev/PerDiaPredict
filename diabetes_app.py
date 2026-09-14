@@ -279,7 +279,7 @@ def inject_css():
 
         .block-container {{
             max-width: 980px !important;
-            padding: 2.2rem 1rem 4rem !important;
+            padding: 3.0rem 1rem 4rem !important;
         }}
 
         /* Header */
