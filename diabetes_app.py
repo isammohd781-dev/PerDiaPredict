@@ -19,9 +19,11 @@ from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Tabl
 # Language: English only
 # =============================================================================
 
+_page_icon = "logo.png" if os.path.exists("logo.png") else "🩺"
+
 st.set_page_config(
     page_title="PerdiaPredict",
-    page_icon="🩺",
+    page_icon=_page_icon,
     layout="centered",
     initial_sidebar_state="collapsed",
 )
