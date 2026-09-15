@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -1103,12 +1104,14 @@ def generate_pdf_report(report_data: dict) -> bytes:
         fontSize=18,
         textColor=colors.HexColor("#0d3b66"),
         spaceAfter=4,
+        alignment=TA_LEFT,
     )
     subtitle_style = ParagraphStyle(
         "DocSubtitle",
         parent=styles["Normal"],
         fontSize=11,
         textColor=colors.HexColor("#555555"),
+        alignment=TA_LEFT,
     )
     heading_style = ParagraphStyle(
         "Heading2Custom",
