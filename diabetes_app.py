@@ -1,3 +1,4 @@
+import base64
 import os
 import re
 from datetime import datetime
@@ -878,10 +879,20 @@ def render_header():
     left, theme_col, right = st.columns([3.0, 1.0, 1.45], vertical_alignment="center")
 
     with left:
+        if os.path.exists(LOGO_PATH):
+            with open(LOGO_PATH, "rb") as _logo_file:
+                _logo_b64 = base64.b64encode(_logo_file.read()).decode()
+            brand_icon_html = (
+                f'<img src="data:image/png;base64,{_logo_b64}" '
+                'style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />'
+            )
+        else:
+            brand_icon_html = "🩺"
+
         st.markdown(
             f"""
             <div class="brand">
-                <div class="brand-icon">🩺</div>
+                <div class="brand-icon">{brand_icon_html}</div>
                 <div>
                     <div class="brand-name">{tr('brand')}</div>
                     <div class="brand-tagline">{tr('tagline')}</div>
