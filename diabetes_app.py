@@ -48,7 +48,7 @@ def _get_secret(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
 
 
-ADMIN_PASSWORD = _get_secret("ADMIN_PASSWORD", "admin123")
+ADMIN_PASSWORD = _get_secret("ADMIN_PASSWORD", "group5")
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
