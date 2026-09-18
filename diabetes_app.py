@@ -148,6 +148,7 @@ T = {
  'blurry_vision': 'Blurry or unclear vision',
  'frequent_infections': 'Frequent infections (skin / gum / urinary)',
  'tingling_numbness': 'Tingling or numbness in hands or feet',
+ 'increased_hunger': 'Increased hunger / excessive hunger',
  'polyuria': 'Polyuria (excessive urination)',
  'polydipsia': 'Polydipsia (excessive thirst)',
  'weight_loss': 'Sudden weight loss',
@@ -180,6 +181,7 @@ extra_symptom_keys = {
     "blurry_vision": "blurry_vision",
     "frequent_infections": "frequent_infections",
     "tingling_numbness": "tingling_numbness",
+    "increased_hunger": "increased_hunger",
 }
 
 DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"]
