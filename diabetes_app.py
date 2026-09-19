@@ -95,6 +95,39 @@ def tr(key: str, lang: str = None):
     return value
 
 
+# Scripts where letter-spacing must be off (it breaks joining / conjuncts).
+SPACING_OFF_LANGS = {"ar", "hi", "zh"}
+
+# Languages the built-in PDF font (DejaVu Sans) can render.
+# Hindi and Chinese need special fonts, so their PDF is produced in English.
+PDF_FONT_LANGS = {"en", "ar", "fr", "es", "de", "tr", "pt", "ru"}
+
+
+def _init_theme():
+    """Dark mode by default; ?theme=light in the URL keeps light mode after a refresh."""
+    if "dark_mode" in st.session_state:
+        return
+    code = None
+    try:
+        code = st.query_params.get("theme")
+    except Exception:
+        pass
+    st.session_state["dark_mode"] = code != "light"
+
+
+_init_theme()
+
+
+def _toggle_theme():
+    """Called by the day/night button: flips between dark and light mode."""
+    is_dark = not st.session_state.get("dark_mode", True)
+    st.session_state["dark_mode"] = is_dark
+    try:
+        st.query_params["theme"] = "dark" if is_dark else "light"
+    except Exception:
+        pass
+
+
 def is_rtl(lang: str = None) -> bool:
     lang = lang or st.session_state.get("lang", "en")
     return bool(LANGUAGES.get(lang, {}).get("rtl", False))
@@ -130,6 +163,20 @@ DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"
 def inject_css():
     is_dark = st.session_state.get("dark_mode", True)
     rtl = is_rtl()
+    no_spacing = st.session_state.get("lang", "en") in SPACING_OFF_LANGS
+
+    # HEADER = the header bar (the row that contains the brand logo/name).
+    HEADER = '[data-testid="stHorizontalBlock"]:has(.brand)'
+
+    spacing_css = ""
+    if no_spacing:
+        spacing_css = """
+        .hero h1, .brand-name, .brand-tagline, .score, .result-title,
+        .result-label, .section-title, .pill {
+            letter-spacing: 0 !important;
+            text-transform: none !important;
+        }
+        """
 
     # Keep the theme entirely in Streamlit/Python so the toggle reliably
     # changes the CSS on every rerun. Do not depend on JavaScript setting
@@ -145,6 +192,8 @@ def inject_css():
             --surface-soft: #0f172a;
             --border: #334155;
             --input: #0b1220;
+            --input-border: #334155;
+            --page: #0f172a;
             --success: #4ade80;
             --danger: #f87171;
             --warning-bg: #422006;
@@ -157,27 +206,33 @@ def inject_css():
         """
         page_bg = "#080d18"
     else:
+        # Light mode: clean white surfaces + a very soft warm ivory for
+        # form fields. The darker navy text keeps every label/value readable.
         theme_vars = """
             --primary: #2563eb;
             --primary-dark: #1d4ed8;
-            --text: #172033;
-            --muted: #64748b;
+            --text: #13233f;
+            --muted: #53657f;
             --surface: #ffffff;
             --surface-2: #f8fafc;
-            --surface-soft: #f1f5f9;
-            --border: #e2e8f0;
-            --input: #ffffff;
-            --success: #16a34a;
+            --surface-soft: #eef5ff;
+            --border: #d8e2ef;
+            --input: #fffaf1;
+            --input-border: #dfd2bd;
+            --input-hover: #fff5e3;
+            --input-text: #17253d;
+            --page: #edf4fb;
+            --success: #15803d;
             --danger: #dc2626;
-            --warning-bg: #fffbeb;
-            --warning-border: #fde68a;
-            --warning-text: #713f12;
-            --info-bg: #eff6ff;
-            --info-border: #dbeafe;
-            --info-text: #1e40af;
-            --shadow: 0 10px 35px rgba(15,23,42,.08);
+            --warning-bg: #fff8e8;
+            --warning-border: #efd58d;
+            --warning-text: #694b00;
+            --info-bg: #eaf3ff;
+            --info-border: #bfd8fb;
+            --info-text: #1e429f;
+            --shadow: 0 12px 34px rgba(37,99,235,.10), 0 2px 8px rgba(15,29,53,.06);
         """
-        page_bg = "#f6f8fc"
+        page_bg = "#edf4fb"
 
     # Right-to-left languages (Arabic): mirror the layout and disable letter
     # spacing, which would otherwise break the joining of Arabic letters.
@@ -213,6 +268,23 @@ def inject_css():
         }
         input, textarea { text-align: right; }
         """
+        # Header in Arabic: the brand sits at the right edge (icon on the far
+        # right, both text lines right-aligned next to it) while the three
+        # buttons keep the same order on the left. On phones the brand stays on
+        # the first row.
+        rtl_css += f"""
+        {HEADER} .brand-name,
+        {HEADER} .brand-tagline {{
+            direction: rtl;
+            text-align: right !important;
+        }}
+
+        @media (min-width: 641px) {{
+            {HEADER} > [data-testid="stColumn"]:nth-child(1) {{
+                order: 5 !important;
+            }}
+        }}
+        """
     else:
         rtl_css = ""
 
@@ -245,7 +317,7 @@ def inject_css():
             background:
                 radial-gradient(circle at 8% 0%, rgba(59,130,246,.13), transparent 30%),
                 radial-gradient(circle at 100% 12%, rgba(14,165,233,.10), transparent 28%),
-                var(--surface-soft) !important;
+                var(--page) !important;
             color: var(--text) !important;
         }}
 
@@ -261,18 +333,6 @@ def inject_css():
             padding: 3.0rem 1rem 4rem !important;
         }}
 
-        /* Header */
-        .brand {{
-            min-width: 0 !important;
-        }}
-
-        /* Desktop only: lower the theme and Admin Panel controls to align
-           more evenly with the PerdiaPredict brand. Mobile rules below are unchanged. */
-        [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(2),
-        [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(3) {{
-            transform: translateY(9px) !important;
-        }}
-
         /* Prevent the page from becoming wider than the browser window. */
         html, body, .stApp, [data-testid="stAppViewContainer"] {{
             max-width: 100% !important;
@@ -281,7 +341,7 @@ def inject_css():
 
         /* Streamlit top bar / toolbar */
         header[data-testid="stHeader"] {{
-            background: color-mix(in srgb, var(--surface-soft) 88%, transparent) !important;
+            background: color-mix(in srgb, var(--page) 88%, transparent) !important;
             color: var(--text) !important;
         }}
 
@@ -290,38 +350,139 @@ def inject_css():
             color: var(--text) !important;
         }}
 
+        /* ================================================================
+           HEADER BAR - one tidy frame, same order in every language:
+           [ brand .............. ]  [ Admin Panel ]  [ ☀️ / 🌙 ]  [ 🔄 ]
+           ================================================================ */
+        {HEADER} {{
+            direction: ltr !important;
+            box-sizing: border-box !important;
+            background: var(--surface) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 22px !important;
+            padding: 12px 18px !important;
+            margin-bottom: 6px !important;
+            gap: 12px !important;
+            align-items: center !important;
+            flex-wrap: nowrap !important;
+            box-shadow: var(--shadow) !important;
+        }}
+
+        {HEADER} > [data-testid="stColumn"] {{
+            min-width: 0 !important;
+        }}
+
+        /* Column 1: brand (takes all the free space) */
+        {HEADER} > [data-testid="stColumn"]:nth-child(1) {{
+            flex: 1 1 0 !important;
+            width: auto !important;
+            min-width: 0 !important;
+        }}
+
+        /* Column 2: Admin Panel (fixed width so it never jumps between languages) */
+        {HEADER} > [data-testid="stColumn"]:nth-child(2) {{
+            flex: 0 0 172px !important;
+            width: 172px !important;
+            min-width: 172px !important;
+            max-width: 172px !important;
+        }}
+
+        /* Column 3 (day/night) and column 4 (restart): equal square buttons */
+        {HEADER} > [data-testid="stColumn"]:nth-child(3),
+        {HEADER} > [data-testid="stColumn"]:nth-child(4) {{
+            flex: 0 0 48px !important;
+            width: 48px !important;
+            min-width: 48px !important;
+            max-width: 48px !important;
+        }}
+
+        /* Remove default margins so everything sits on one centre line */
+        {HEADER} [data-testid="stElementContainer"],
+        {HEADER} [data-testid="stMarkdownContainer"] {{
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+
         /* Brand */
         .brand {{
-            display:flex;
-            align-items:center;
-            gap:12px;
-            padding:8px 2px 2px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            padding: 0;
         }}
 
         .brand-icon {{
-            width:48px;
-            height:48px;
-            border-radius:15px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            background:linear-gradient(135deg,#2563eb,#0ea5e9);
-            color:white !important;
-            font-size:25px;
-            box-shadow:0 8px 22px rgba(37,99,235,.25);
+            width: 48px;
+            height: 48px;
+            flex: 0 0 48px;
+            border-radius: 15px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg,#2563eb,#0ea5e9);
+            color: white !important;
+            font-size: 25px;
+            box-shadow: 0 8px 22px rgba(37,99,235,.25);
         }}
 
         .brand-name {{
-            font-size:1.15rem;
-            font-weight:800;
-            letter-spacing:-.02em;
-            color:var(--text) !important;
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: -.02em;
+            line-height: 1.2;
+            color: var(--text) !important;
         }}
 
         .brand-tagline {{
-            font-size:.78rem;
-            color:var(--muted) !important;
-            margin-top:1px;
+            font-size: .78rem;
+            line-height: 1.3;
+            color: var(--muted) !important;
+            margin-top: 1px;
+        }}
+
+        /* All three header buttons share one look and one height. */
+        {HEADER} .stButton > button {{
+            width: 100% !important;
+            height: 48px !important;
+            min-height: 48px !important;
+            border-radius: 14px !important;
+            background: var(--surface-soft) !important;
+            color: var(--text) !important;
+            border: 1px solid var(--border) !important;
+            font-weight: 750 !important;
+            padding: 0 10px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }}
+
+        {HEADER} .stButton > button:hover {{
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 3px rgba(96,165,250,.16) !important;
+            transform: none !important;
+        }}
+
+        {HEADER} .stButton > button p {{
+            margin: 0 !important;
+            line-height: 1 !important;
+        }}
+
+        /* Day / night (column 3) and restart (column 4): bigger icons */
+        {HEADER} > [data-testid="stColumn"]:nth-child(3) .stButton > button p,
+        {HEADER} > [data-testid="stColumn"]:nth-child(4) .stButton > button p {{
+            font-size: 1.3rem !important;
+        }}
+
+        /* The patient form: one complete rounded frame, visible in light AND dark mode */
+        [data-testid="stForm"] {{
+            background: var(--surface) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 22px !important;
+            padding: 22px 20px !important;
+            box-shadow: var(--shadow) !important;
         }}
 
         /* Hero */
@@ -512,49 +673,160 @@ def inject_css():
             color:var(--muted) !important;
         }}
 
-        /* Inputs */
-        input, textarea,
-        div[data-baseweb="select"] > div,
-        div[data-baseweb="input"] > div,
-        [data-testid="stNumberInput"] input,
-        [data-testid="stTextInput"] input {{
-            background:var(--input) !important;
-            color:var(--text) !important;
-            border:1px solid var(--border) !important;
-            border-radius:12px !important;
-            caret-color:var(--primary) !important;
+        /* ================================================================
+           Form fields - one clean frame per field, identical logic in light
+           and dark mode. Streamlit's own dark layers (#262730) are cleared so
+           they can no longer show through as dark edges / dark side blocks.
+           ================================================================ */
+
+        /* 1) Clear Streamlit/BaseWeb's built-in dark layers. */
+        [data-baseweb="input"],
+        [data-baseweb="input"] > div,
+        [data-baseweb="input"] div,
+        [data-baseweb="base-input"],
+        [data-baseweb="textarea"],
+        [data-baseweb="textarea"] > div,
+        [data-baseweb="textarea"] div,
+        [data-baseweb="select"],
+        [data-baseweb="select"] > div,
+        [data-baseweb="select"] > div > div {{
+            background: transparent !important;
+        }}
+
+        /* 2) The visible field frame.
+           Light mode uses a subtle warm ivory/beige so fields are distinct
+           from the white card without looking heavy. */
+        div[data-baseweb="input"],
+        div[data-baseweb="textarea"],
+        div[data-baseweb="select"] > div {{
+            background: var(--input) !important;
+            border: 1px solid var(--input-border) !important;
+            border-radius: 12px !important;
+            overflow: hidden;
+            box-shadow: none !important;
+            transition: background .15s ease, border-color .15s ease,
+                        box-shadow .15s ease;
+        }}
+
+        /* 3) Text inside inputs must stay dark in Light Mode.
+           -webkit-text-fill-color is included because BaseWeb/Streamlit can
+           otherwise keep the browser's dark-theme text color. */
+        input, textarea {{
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            color: var(--input-text, var(--text)) !important;
+            -webkit-text-fill-color: var(--input-text, var(--text)) !important;
+            caret-color: var(--primary) !important;
+            opacity: 1 !important;
+        }}
+
+        input[type="number"] {{
+            color: var(--input-text, var(--text)) !important;
+            -webkit-text-fill-color: var(--input-text, var(--text)) !important;
+        }}
+
+        /* BaseWeb Select: force the selected value and placeholder to remain
+           readable instead of inheriting Streamlit's dark-mode text. */
+        [data-baseweb="select"] [role="button"],
+        [data-baseweb="select"] [role="button"] *,
+        [data-baseweb="select"] [aria-selected="true"],
+        [data-baseweb="select"] span {{
+            color: var(--input-text, var(--text)) !important;
+            -webkit-text-fill-color: var(--input-text, var(--text)) !important;
+            opacity: 1 !important;
         }}
 
         input::placeholder,
         textarea::placeholder {{
-            color:#64748b !important;
-            opacity:1 !important;
+            color: var(--muted) !important;
+            opacity: .8 !important;
         }}
 
-        input:focus, textarea:focus,
+        /* 4) focus */
+        div[data-baseweb="input"]:focus-within,
+        div[data-baseweb="textarea"]:focus-within,
         div[data-baseweb="select"] > div:focus-within {{
-            border-color:var(--primary) !important;
-            box-shadow:0 0 0 2px rgba(96,165,250,.18) !important;
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 3px rgba(37,99,235,.16) !important;
+        }}
+
+        /* 5) small buttons inside fields (number  - / +  and password eye) */
+        [data-baseweb="input"] button {{
+            background: transparent !important;
+            border: 0 !important;
+            color: var(--muted) !important;
+        }}
+
+        [data-baseweb="input"] button:hover {{
+            background: var(--input-hover, var(--surface-soft)) !important;
+            color: var(--primary) !important;
+        }}
+
+        /* Keep the +/- controls and their icons visible. */
+        [data-baseweb="input"] button,
+        [data-baseweb="input"] button span,
+        [data-baseweb="input"] button svg {{
+            opacity: 1 !important;
+        }}
+
+        [data-baseweb="input"] button svg,
+        [data-baseweb="select"] svg {{
+            fill: var(--muted) !important;
+            color: var(--muted) !important;
         }}
 
         /* Selectbox text + dropdown */
         [data-baseweb="select"] *,
         [role="listbox"] *,
         [role="option"] {{
-            color:var(--text) !important;
+            color: var(--input-text, var(--text)) !important;
+            -webkit-text-fill-color: var(--input-text, var(--text)) !important;
+        }}
+
+        /* Dropdown arrow */
+        [data-baseweb="select"] svg {{
+            fill: var(--muted) !important;
+            color: var(--muted) !important;
+            opacity: 1 !important;
         }}
 
         div[data-baseweb="popover"],
         div[data-baseweb="menu"],
         [role="listbox"] {{
-            background:var(--surface) !important;
-            border:1px solid var(--border) !important;
-            color:var(--text) !important;
+            background: var(--surface) !important;
+            border: 1px solid var(--border) !important;
+            color: var(--text) !important;
         }}
 
         [role="option"]:hover,
         [role="option"][aria-selected="true"] {{
-            background:var(--surface-2) !important;
+            background: var(--surface-soft) !important;
+        }}
+
+        /* Field labels */
+        [data-testid="stWidgetLabel"] p {{
+            font-weight: 700 !important;
+            font-size: .88rem !important;
+            color: var(--text) !important;
+            -webkit-text-fill-color: var(--text) !important;
+        }}
+
+        [data-testid="stWidgetLabel"] span {{
+            color: var(--text) !important;
+            -webkit-text-fill-color: var(--text) !important;
+        }}
+
+        /* Divider lines inside the form: visible but compact */
+        [data-testid="stMarkdownContainer"] hr {{
+            margin: .5rem 0 !important;
+            border: 0 !important;
+            border-top: 1px solid var(--border) !important;
+            opacity: 1 !important;
+        }}
+
+        [data-testid="stForm"] [data-testid="stVerticalBlock"] {{
+            gap: .85rem !important;
         }}
 
         /* Radio buttons / checkboxes / toggles */
@@ -612,19 +884,27 @@ def inject_css():
             color:var(--text) !important;
         }}
 
-        /* Expanders */
+        /* Expanders: one clean rounded border (no doubled / half lines) */
         .stExpander,
         [data-testid="stExpander"] {{
-            border-radius:16px !important;
-            border:1px solid var(--border) !important;
-            background:var(--surface) !important;
-            color:var(--text) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 16px !important;
+            background: var(--surface-2) !important;
+            color: var(--text) !important;
+            overflow: hidden;
         }}
 
         .stExpander details,
-        .stExpander summary {{
-            background:var(--surface) !important;
-            color:var(--text) !important;
+        .stExpander summary,
+        [data-testid="stExpander"] details,
+        [data-testid="stExpander"] summary {{
+            background: transparent !important;
+            border: 0 !important;
+            color: var(--text) !important;
+        }}
+
+        [data-testid="stExpander"] summary:hover {{
+            background: var(--surface-soft) !important;
         }}
 
         /* Alerts */
@@ -648,7 +928,10 @@ def inject_css():
             color:var(--text) !important;
         }}
 
-        /* Mobile-only adjustments. Desktop is intentionally unchanged. */
+        /* ================================================================
+           Mobile-only adjustments. Desktop is intentionally unchanged.
+           Row 1: brand (full width).  Row 2: [ Admin Panel ] [ ☀️/🌙 ] [ 🔄 ]
+           ================================================================ */
         @media (max-width: 640px) {{
             .block-container {{
                 width: 100% !important;
@@ -658,43 +941,48 @@ def inject_css():
                 overflow-x: hidden !important;
             }}
 
-            /* The header is the first Streamlit horizontal block on the page.
-               On phones: brand gets the full first row, controls share row two. */
-            [data-testid="stHorizontalBlock"]:has(.brand) {{
+            {HEADER} {{
                 width: 100% !important;
                 display: flex !important;
                 flex-wrap: wrap !important;
-                gap: 8px !important;
-                align-items: center !important;
+                gap: 10px !important;
+                padding: 10px !important;
+                border-radius: 18px !important;
             }}
 
-            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"] {{
-                min-width: 0 !important;
-                flex: 0 0 auto !important;
-            }}
-
-            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:first-child {{
+            {HEADER} > [data-testid="stColumn"]:nth-child(1) {{
                 flex: 0 0 100% !important;
                 width: 100% !important;
                 max-width: 100% !important;
             }}
 
-            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(2),
-            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(3) {{
-                flex: 1 1 calc(50% - 4px) !important;
-                width: calc(50% - 4px) !important;
-                max-width: calc(50% - 4px) !important;
+            {HEADER} > [data-testid="stColumn"]:nth-child(3),
+            {HEADER} > [data-testid="stColumn"]:nth-child(4) {{
+                flex: 0 0 46px !important;
+                width: 46px !important;
+                min-width: 46px !important;
+                max-width: 46px !important;
             }}
 
-            /* Lower only the mobile theme and Admin Panel controls so they
-               sit more evenly with the PerdiaPredict brand. Desktop is untouched. */
-            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(2),
-            [data-testid="stHorizontalBlock"]:has(.brand) > [data-testid="stColumn"]:nth-child(3) {{
-                transform: translateY(9px) !important;
+            {HEADER} > [data-testid="stColumn"]:nth-child(2) {{
+                flex: 1 1 0 !important;
+                width: auto !important;
+                min-width: 0 !important;
+                max-width: none !important;
+            }}
+
+            {HEADER} .stButton > button {{
+                height: 46px !important;
+                min-height: 46px !important;
+            }}
+
+            {HEADER} > [data-testid="stColumn"]:nth-child(2) .stButton > button {{
+                font-size: 0.85rem !important;
+                padding: 0 6px !important;
+                white-space: nowrap !important;
             }}
 
             .brand {{
-                padding: 4px 2px 4px !important;
                 gap: 10px !important;
             }}
 
@@ -713,45 +1001,6 @@ def inject_css():
             .brand-tagline {{
                 font-size: 0.78rem !important;
                 line-height: 1.25 !important;
-            }}
-
-            /* Mobile-only theme toggle: clear and visible in light mode. */
-            [data-testid="stToggle"] {{
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                gap: 6px !important;
-                min-height: 44px !important;
-                border-radius: 14px !important;
-                background: var(--surface) !important;
-                border: 1px solid var(--border) !important;
-                box-shadow: 0 3px 10px rgba(15,23,42,.08) !important;
-                color: var(--text) !important;
-                width: 100% !important;
-                min-height: 44px !important;
-                box-sizing: border-box !important;
-                padding: 4px 6px !important;
-            }}
-
-            [data-testid="stToggle"] label,
-            [data-testid="stToggle"] label * {{
-                color: var(--text) !important;
-                -webkit-text-fill-color: var(--text) !important;
-                font-weight: 700 !important;
-                opacity: 1 !important;
-                visibility: visible !important;
-            }}
-
-            [data-testid="stToggle"] [role="switch"] {{
-                width: 44px !important;
-                min-width: 44px !important;
-                height: 24px !important;
-                opacity: 1 !important;
-            }}
-
-            [data-testid="stToggle"] label {{
-                white-space: nowrap !important;
-                font-size: 0.88rem !important;
             }}
 
             .stButton > button {{
@@ -784,10 +1033,16 @@ def inject_css():
             input, textarea, select {{
                 max-width: 100% !important;
             }}
+
+            [data-testid="stForm"] {{
+                padding: 16px 12px !important;
+                border-radius: 18px !important;
+            }}
         }}
 
         /* Right-to-left languages */
         {rtl_css}
+        {spacing_css}
         </style>
         """,
         unsafe_allow_html=True,
@@ -880,8 +1135,9 @@ def render_splash():
         logo_html = "🩺"
 
     # Letter-spacing / uppercase would break Arabic letter joining.
-    welcome_spacing = "0" if is_rtl() else ".35em"
-    welcome_transform = "none" if is_rtl() else "uppercase"
+    plain_script = is_rtl() or st.session_state.get("lang", "en") in SPACING_OFF_LANGS
+    welcome_spacing = "0" if plain_script else ".35em"
+    welcome_transform = "none" if plain_script else "uppercase"
 
     st.markdown(
         f"""
@@ -1074,9 +1330,13 @@ def render_language_gate():
 # =============================================================================
 
 def render_header():
-    # Desktop keeps the original 3-column layout.
-    # Mobile CSS below rearranges these same columns without changing desktop.
-    left, theme_col, right = st.columns([3.0, 1.0, 1.45], vertical_alignment="center")
+    """Header bar:  brand | Admin Panel | day/night button | restart button.
+
+    All the styling (alignment, sizes, mobile layout) lives in inject_css().
+    The order of the three buttons is the same in every language; in Arabic the
+    brand moves to the right edge (see rtl_css in inject_css()).
+    """
+    left, admin_col, theme_col, menu_col = st.columns([5, 3, 1, 1], vertical_alignment="center")
 
     with left:
         if os.path.exists(LOGO_PATH):
@@ -1102,20 +1362,34 @@ def render_header():
             unsafe_allow_html=True,
         )
 
-    with theme_col:
-        st.toggle(
-            f"🌙 {tr('dark')} / ☀️ {tr('light')}",
-            value=st.session_state.get("dark_mode", True),
-            key="dark_mode",
-        )
+    with menu_col:
+        # Restart arrow: clears the session and goes back to the splash screen.
+        if st.button(
+            "🔄",
+            key="menu_restart",
+            help=tr("menu_restart"),
+            use_container_width=True,
+        ):
+            restart_app(st.session_state["lang"])
 
-    with right:
+    with admin_col:
         if st.session_state["page"] == "admin":
             if st.button(f"⬅️ {tr('back')}", use_container_width=True):
                 go_to("main")
         else:
             if st.button(f"🔒 {tr('admin')}", use_container_width=True):
                 go_to("admin")
+
+    with theme_col:
+        # Shows the mode you will switch TO (sun while dark, moon while light).
+        is_dark = st.session_state.get("dark_mode", True)
+        st.button(
+            "☀️" if is_dark else "🌙",
+            key="theme_btn",
+            help=tr("light") if is_dark else tr("dark"),
+            use_container_width=True,
+            on_click=_toggle_theme,
+        )
 
 
 # =============================================================================
@@ -1198,16 +1472,19 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str 
     if not core_yes and not extra_yes:
         return tr("patient_denies", lang)
 
+    sp = tr("word_space", lang)
+    end = tr("period", lang)
+
     sentences = []
     if core_yes:
-        sentences.append(tr("patient_reports", lang) + " " + _join(core_yes, lang) + ".")
+        sentences.append(tr("patient_reports", lang) + sp + _join(core_yes, lang) + end)
     else:
         sentences.append(tr("no_core", lang))
 
     if extra_yes:
-        sentences.append(tr("further", lang) + " " + _join(extra_yes, lang) + ".")
+        sentences.append(tr("further", lang) + sp + _join(extra_yes, lang) + end)
 
-    return " ".join(sentences)
+    return (sp or "").join(sentences)
 
 
 def build_report(lang, timestamp, first, last, phone, email, address, type_key,
@@ -1334,6 +1611,8 @@ def register_pdf_fonts() -> bool:
 def pick_pdf_language(lang: str) -> str:
     """Return the language the PDF can actually be rendered in on this server."""
     if lang == "en":
+        return "en"
+    if lang not in PDF_FONT_LANGS:
         return "en"
     if not register_pdf_fonts():
         return "en"
