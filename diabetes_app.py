@@ -1,23 +1,38 @@
 import base64
 import os
 import re
+import time
 from datetime import datetime
 from io import BytesIO
+from xml.sax.saxutils import escape as xml_escape
 
 import joblib
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT
+from reportlab.lib.enums import TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+from translations import LANGUAGES, T
+
+# Optional: needed only to draw Arabic correctly inside the PDF report.
+try:
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+
+    ARABIC_SHAPING_OK = True
+except Exception:
+    ARABIC_SHAPING_OK = False
 
 
 # =============================================================================
-# PERDIAPREDICT - POLISHED RESPONSIVE VERSION
-# Language: English only
+# PERDIAPREDICT - MULTILINGUAL VERSION
+# Flow: splash -> language gate (continue / change language) -> app
 # =============================================================================
 
 _page_icon = "logo.png" if os.path.exists("logo.png") else "🩺"
@@ -53,115 +68,36 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 # =============================================================================
-# English-only text
+# Language handling
 # =============================================================================
 
-T = {
-    "en": {'brand': 'PerdiaPredict',
- 'tagline': 'AI-powered early-stage diabetes screening',
- 'language': 'Language',
- 'admin': 'Admin Panel',
- 'back': 'Back',
- 'email_title': 'Early Stage Diabetes Screening',
- 'email_intro': 'Enter your email address to start your assessment.',
- 'email': 'Email address',
- 'email_required': 'Email address is required.',
- 'email_invalid': 'Please enter a valid email address.',
- 'continue': 'Continue',
- 'medical_notice': 'Educational screening only — this tool is not a medical diagnosis.',
- 'medical_notice_long': 'This application is for educational and demonstration purposes only. It '
-                        'does not replace a qualified healthcare professional or a clinical '
-                        'diagnosis.',
- 'assessment': 'Diabetes Risk Assessment',
- 'assessment_intro': 'Complete the form below. Your answers are analyzed by the trained '
-                     'machine-learning model.',
- 'personal': 'Personal Information',
- 'first_name': 'First name',
- 'last_name': 'Last name',
- 'phone': 'Phone number',
- 'address': 'Residential address (city / area)',
- 'diabetes_type': 'Which type of diabetes do you believe you have?',
- 'not_sure': "Not sure / I don't know",
- 'type1': 'Type 1',
- 'type2': 'Type 2',
- 'gestational': 'Gestational diabetes',
- 'prediabetes': 'Prediabetes',
- 'basic': 'Basic Information',
- 'age': 'Age',
- 'gender': 'Gender',
- 'male': 'Male',
- 'female': 'Female',
- 'core': 'Core Symptoms',
- 'core_help': 'Please select Yes or No for every symptom.',
- 'yes': 'Yes',
- 'no': 'No',
- 'additional': 'Additional Symptoms',
- 'optional': 'Optional — these symptoms enrich the report but do not directly change the model '
-             'probability.',
- 'predict': 'Predict My Risk',
- 'required_fields': 'Please complete the required fields.',
- 'required': 'is required.',
- 'result': 'Assessment Result',
- 'high_risk': 'High risk of early-stage diabetes',
- 'low_risk': 'Low risk of early-stage diabetes',
- 'probability': 'Estimated probability',
- 'symptom_summary': 'Symptoms Summary',
- 'recommendation': 'Recommendation',
- 'high_recommendation': 'Because the estimated risk is high, please arrange a medical evaluation. '
-                        'Do not use this screening as a substitute for professional diagnosis.',
- 'low_recommendation': 'The current screening result is low risk. Continue healthy habits and '
-                       'speak with a healthcare professional if symptoms persist or concern you.',
- 'extra_notice': 'Some additional symptoms were selected. If they persist, consider speaking with '
-                 'a healthcare professional.',
- 'health_guide': 'Healthy Lifestyle & Nutrition Guide',
- 'offline': 'Built into the app — no external website is required.',
- 'plate': 'Healthy Plate Method',
- 'foods': 'Foods to Prefer',
- 'limit': 'Foods & Drinks to Limit',
- 'habits': 'Daily Lifestyle Habits',
- 'meal_plan': 'Weekly Meal Plan',
- 'tips': 'General Health Tips',
- 'download': 'Download Assessment Report',
- 'download_pdf': 'Download PDF Report',
- 'saved': 'Report saved successfully.',
- 'admin_title': 'Admin Panel',
- 'admin_help': 'Restricted area for viewing submitted assessment records.',
- 'password': 'Admin password',
- 'access': 'Access granted.',
- 'incorrect': 'Incorrect password.',
- 'no_records': 'No saved records yet.',
- 'download_excel': 'Download Excel file',
- 'clean': 'Clean Data',
- 'confirm': 'Are you sure you want to delete all saved records? This action cannot be undone.',
- 'delete': 'Yes, Delete Data',
- 'cancel': 'Cancel',
- 'deleted': 'All data cleared successfully.',
- 'readiness': 'Ready',
- 'model_status': 'Machine-learning model loaded',
- 'privacy': 'Your information is used only by this application for the assessment/report workflow.',
- 'patient_denies': 'The patient denies all core and additional symptoms assessed in this '
-                   'screening.',
- 'patient_reports': 'The patient reports',
- 'further': 'On further questioning, the patient also endorses',
- 'no_core': 'The patient denies any of the core symptoms assessed in this screening.',
- 'constant_fatigue': 'Constant fatigue / tiredness',
- 'blurry_vision': 'Blurry or unclear vision',
- 'frequent_infections': 'Frequent infections (skin / gum / urinary)',
- 'tingling_numbness': 'Tingling or numbness in hands or feet',
- 'increased_hunger': 'Increased hunger / excessive hunger',
- 'polyuria': 'Polyuria (excessive urination)',
- 'polydipsia': 'Polydipsia (excessive thirst)',
- 'weight_loss': 'Sudden weight loss',
- 'irritability': 'Irritability',
- 'healing': 'Delayed wound healing',
- 'paresis': 'Partial paresis (partial muscle weakness)',
- 'alopecia': 'Alopecia (abnormal hair loss)',
- 'itching': 'Itching'},
-}
+def _init_language():
+    """Pick the language once per session (from ?lang=xx in the URL if present)."""
+    if st.session_state.get("lang") in LANGUAGES:
+        return
+    code = None
+    try:
+        code = st.query_params.get("lang")
+    except Exception:
+        pass
+    st.session_state["lang"] = code if code in LANGUAGES else "en"
 
 
-def tr(key: str) -> str:
-    return T["en"].get(key, key)
+_init_language()
+
+
+def tr(key: str, lang: str = None):
+    """Translate a key. Falls back to English, then to the key itself."""
+    lang = lang or st.session_state.get("lang", "en")
+    value = T.get(lang, {}).get(key)
+    if value is None:
+        value = T["en"].get(key, key)
+    return value
+
+
+def is_rtl(lang: str = None) -> bool:
+    lang = lang or st.session_state.get("lang", "en")
+    return bool(LANGUAGES.get(lang, {}).get("rtl", False))
 
 
 # Keep model feature names in the training language/format.
@@ -192,8 +128,8 @@ DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"
 # =============================================================================
 
 def inject_css():
-    direction = "ltr"
     is_dark = st.session_state.get("dark_mode", True)
+    rtl = is_rtl()
 
     # Keep the theme entirely in Streamlit/Python so the toggle reliably
     # changes the CSS on every rerun. Do not depend on JavaScript setting
@@ -243,6 +179,43 @@ def inject_css():
         """
         page_bg = "#f6f8fc"
 
+    # Right-to-left languages (Arabic): mirror the layout and disable letter
+    # spacing, which would otherwise break the joining of Arabic letters.
+    if rtl:
+        rtl_css = """
+        [data-testid="stMain"],
+        [data-testid="stMainBlockContainer"] {
+            direction: rtl;
+            text-align: right;
+        }
+        .hero, .brand, .section-card, .result-card, .status-card, .notice,
+        .section-title, .section-subtitle, .footer {
+            direction: rtl;
+        }
+        .hero, .section-card, .result-card, .status-card, .notice,
+        .section-title, .section-subtitle {
+            text-align: right;
+        }
+        .footer { text-align: center; }
+        .hero:after { right: auto; left: -55px; }
+        .result-high {
+            border-left: 1px solid var(--border) !important;
+            border-right: 6px solid var(--danger) !important;
+        }
+        .result-low {
+            border-left: 1px solid var(--border) !important;
+            border-right: 6px solid var(--success) !important;
+        }
+        .hero h1, .brand-name, .brand-tagline, .score, .result-title,
+        .result-label, .section-title, .pill {
+            letter-spacing: 0 !important;
+            text-transform: none !important;
+        }
+        input, textarea { text-align: right; }
+        """
+    else:
+        rtl_css = ""
+
     st.markdown(
         f"""
         <style>
@@ -258,7 +231,7 @@ def inject_css():
 
         html, body, [class*="css"] {{
             font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
-                         "Noto Sans", Arial, sans-serif;
+                         "Noto Sans", "Noto Sans Arabic", Arial, sans-serif;
         }}
 
         html, body {{
@@ -812,11 +785,10 @@ def inject_css():
                 max-width: 100% !important;
             }}
         }}
+
+        /* Right-to-left languages */
+        {rtl_css}
         </style>
-        <script>
-        const root = window.parent.document.documentElement;
-        root.setAttribute("dir", "{direction}");
-        </script>
         """,
         unsafe_allow_html=True,
     )
@@ -830,11 +802,7 @@ def inject_css():
 def load_artifacts():
     missing = [p for p in [MODEL_PATH, SCALER_PATH, COLUMNS_PATH] if not os.path.exists(p)]
     if missing:
-        st.error(
-            "Missing required file(s): "
-            + ", ".join(missing)
-            + ". Put the model files in the same folder as the Streamlit app."
-        )
+        st.error(tr("err_missing").format(files=", ".join(missing)))
         st.stop()
 
     model = joblib.load(MODEL_PATH)
@@ -851,24 +819,254 @@ binary_columns = [c for c in feature_columns if c not in ("Age", "Gender")]
 # Session state
 # =============================================================================
 
-st.session_state["lang"] = "en"
 if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = True
 if "page" not in st.session_state:
-    st.session_state["page"] = "email_gate"
+    st.session_state["page"] = "splash"
+if "choosing_language" not in st.session_state:
+    st.session_state["choosing_language"] = False
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = None
 if "last_report" not in st.session_state:
     st.session_state["last_report"] = None
+if "last_report_en" not in st.session_state:
+    st.session_state["last_report_en"] = None
 if "last_result" not in st.session_state:
     st.session_state["last_result"] = None
 if "last_probability" not in st.session_state:
     st.session_state["last_probability"] = 0.0
+if "last_extra" not in st.session_state:
+    st.session_state["last_extra"] = False
 
 
 def go_to(page_name: str):
     st.session_state["page"] = page_name
     st.rerun()
+
+
+def restart_app(new_lang: str):
+    """Restart the app from the beginning (splash screen) in a new language."""
+    keep_dark = st.session_state.get("dark_mode", True)
+
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+
+    st.session_state["lang"] = new_lang if new_lang in LANGUAGES else "en"
+    st.session_state["dark_mode"] = keep_dark
+    st.session_state["page"] = "splash"
+
+    # Remember the language in the URL so a browser refresh keeps it.
+    try:
+        st.query_params["lang"] = st.session_state["lang"]
+    except Exception:
+        pass
+
+    st.rerun()
+
+
+# =============================================================================
+# Animated splash screen
+# =============================================================================
+
+def render_splash():
+    if os.path.exists(LOGO_PATH):
+        with open(LOGO_PATH, "rb") as _f:
+            _b64 = base64.b64encode(_f.read()).decode()
+        logo_html = (
+            f'<img src="data:image/png;base64,{_b64}" '
+            'style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />'
+        )
+    else:
+        logo_html = "🩺"
+
+    # Letter-spacing / uppercase would break Arabic letter joining.
+    welcome_spacing = "0" if is_rtl() else ".35em"
+    welcome_transform = "none" if is_rtl() else "uppercase"
+
+    st.markdown(
+        f"""
+        <style>
+        header[data-testid="stHeader"] {{ display:none !important; }}
+        .splash {{
+            position:fixed; inset:0; z-index:999999;
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            background:
+                radial-gradient(circle at 50% 38%, rgba(37,99,235,.35), transparent 45%),
+                linear-gradient(160deg,#020617 0%,#0b1a3d 55%,#053a5c 100%);
+            animation: splashOut .7s ease-in 4.5s forwards;
+            overflow:hidden;
+        }}
+        .splash-particle {{
+            position:absolute; border-radius:50%;
+            background:rgba(96,165,250,.35);
+            animation: floatUp linear infinite;
+        }}
+        .splash-particle:nth-child(1) {{ left:10%; width:8px; height:8px; animation-duration:7s; animation-delay:0s; }}
+        .splash-particle:nth-child(2) {{ left:28%; width:5px; height:5px; animation-duration:9s; animation-delay:1s; }}
+        .splash-particle:nth-child(3) {{ left:47%; width:10px; height:10px; animation-duration:8s; animation-delay:.5s; }}
+        .splash-particle:nth-child(4) {{ left:66%; width:6px; height:6px; animation-duration:10s; animation-delay:2s; }}
+        .splash-particle:nth-child(5) {{ left:82%; width:9px; height:9px; animation-duration:7.5s; animation-delay:1.5s; }}
+        .splash-particle:nth-child(6) {{ left:92%; width:5px; height:5px; animation-duration:9.5s; animation-delay:.8s; }}
+
+        .logo-stage {{
+            position:relative; width:190px; height:190px;
+            display:flex; align-items:center; justify-content:center;
+        }}
+        .logo-ring {{
+            position:absolute; inset:0; border-radius:50%;
+            border:2px solid rgba(96,165,250,.55);
+            opacity:0; animation: ring 2.6s ease-out infinite;
+        }}
+        .logo-ring:nth-child(2) {{ animation-delay:.8s; }}
+        .logo-ring:nth-child(3) {{ animation-delay:1.6s; }}
+        .logo-box {{
+            width:118px; height:118px; border-radius:30px;
+            display:flex; align-items:center; justify-content:center;
+            background:linear-gradient(135deg,#2563eb,#0ea5e9);
+            font-size:60px; overflow:hidden;
+            box-shadow:0 0 40px rgba(59,130,246,.65), 0 0 90px rgba(14,165,233,.35);
+            opacity:0; transform:scale(.2) rotate(-200deg);
+            animation:
+                logoIn 1.3s cubic-bezier(.2,1.2,.3,1) .2s forwards,
+                logoFloat 3s ease-in-out 1.5s infinite,
+                glow 2.2s ease-in-out 1.5s infinite;
+        }}
+        .welcome-small {{
+            margin-top:34px; color:#93c5fd;
+            font-size:clamp(1rem,3.5vw,1.3rem); letter-spacing:{welcome_spacing}; text-transform:{welcome_transform};
+            opacity:0; transform:translateY(16px);
+            animation: fadeUp .8s ease-out 1.7s forwards;
+        }}
+        .welcome-name {{
+            margin-top:6px; font-weight:900; letter-spacing:-.02em;
+            font-size:clamp(2.1rem,8vw,3.6rem);
+            background:linear-gradient(90deg,#60a5fa,#ffffff,#38bdf8,#60a5fa);
+            background-size:250% 100%;
+            -webkit-background-clip:text; background-clip:text;
+            -webkit-text-fill-color:transparent; color:transparent;
+            opacity:0; transform:translateY(20px) scale(.92);
+            animation: fadeUp .9s ease-out 2.1s forwards, shimmer 3s linear 2.1s infinite;
+        }}
+        .welcome-tag {{
+            margin-top:10px; color:#94a3b8; font-size:.95rem; text-align:center; padding:0 20px;
+            opacity:0; animation: fadeUp .8s ease-out 2.9s forwards;
+        }}
+        .loader {{
+            position:absolute; bottom:9%; width:min(240px,60vw); height:4px;
+            background:rgba(255,255,255,.12); border-radius:99px; overflow:hidden;
+        }}
+        .loader div {{
+            height:100%; width:0; border-radius:99px;
+            background:linear-gradient(90deg,#2563eb,#38bdf8);
+            animation: load 4s ease-in-out .4s forwards;
+        }}
+        @keyframes logoIn {{ to {{ opacity:1; transform:scale(1) rotate(0deg); }} }}
+        @keyframes logoFloat {{ 0%,100% {{ transform:translateY(0); }} 50% {{ transform:translateY(-10px); }} }}
+        @keyframes glow {{
+            0%,100% {{ box-shadow:0 0 30px rgba(59,130,246,.55), 0 0 70px rgba(14,165,233,.25); }}
+            50% {{ box-shadow:0 0 55px rgba(59,130,246,.95), 0 0 120px rgba(14,165,233,.55); }}
+        }}
+        @keyframes ring {{
+            0% {{ transform:scale(.55); opacity:.8; }}
+            100% {{ transform:scale(1.25); opacity:0; }}
+        }}
+        @keyframes fadeUp {{ to {{ opacity:1; transform:translateY(0) scale(1); }} }}
+        @keyframes shimmer {{ 0% {{ background-position:0% 0; }} 100% {{ background-position:250% 0; }} }}
+        @keyframes load {{ to {{ width:100%; }} }}
+        @keyframes floatUp {{
+            0% {{ bottom:-20px; opacity:0; }}
+            15% {{ opacity:1; }}
+            100% {{ bottom:105%; opacity:0; }}
+        }}
+        @keyframes splashOut {{ to {{ opacity:0; visibility:hidden; }} }}
+        </style>
+        <div class="splash">
+            <div class="splash-particle"></div><div class="splash-particle"></div>
+            <div class="splash-particle"></div><div class="splash-particle"></div>
+            <div class="splash-particle"></div><div class="splash-particle"></div>
+            <div class="logo-stage">
+                <div class="logo-ring"></div><div class="logo-ring"></div><div class="logo-ring"></div>
+                <div class="logo-box">{logo_html}</div>
+            </div>
+            <div class="welcome-small">{tr('welcome_to')}</div>
+            <div class="welcome-name">PerdiaPredict</div>
+            <div class="welcome-tag">{tr('tagline')}</div>
+            <div class="loader"><div></div></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Let the animation play, then show the "continue / change language" screen.
+    time.sleep(5.2)
+    go_to("language")
+
+
+# =============================================================================
+# Language gate (shown right after the splash screen)
+# =============================================================================
+
+def render_language_gate():
+    lang = st.session_state["lang"]
+    current_name = LANGUAGES[lang]["native"]
+
+    st.markdown(
+        f"""
+        <div class="hero">
+            <div class="pill">🌐 {tr('current_language')}: {current_name}</div>
+            <h1>{tr('gate_title')}</h1>
+            <p>{tr('gate_intro')}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if not st.session_state.get("choosing_language", False):
+        col_continue, col_change = st.columns(2)
+
+        with col_continue:
+            if st.button(
+                f"▶️ {tr('continue')}",
+                type="primary",
+                use_container_width=True,
+                key="gate_continue",
+            ):
+                go_to("main")
+
+        with col_change:
+            if st.button(
+                f"🌐 {tr('change_language')}",
+                use_container_width=True,
+                key="gate_change",
+            ):
+                st.session_state["choosing_language"] = True
+                st.rerun()
+    else:
+        st.markdown(
+            f"""
+            <div class="section-card">
+                <div class="section-title">🌐 {tr('select_language')}</div>
+                <div class="section-subtitle">{tr('restart_note')}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        cols = st.columns(2)
+        for i, (code, info) in enumerate(LANGUAGES.items()):
+            with cols[i % 2]:
+                label = info["native"] + ("  ✓" if code == lang else "")
+                if st.button(
+                    label,
+                    key=f"lang_{code}",
+                    use_container_width=True,
+                    type="primary" if code == lang else "secondary",
+                ):
+                    restart_app(code)  # restarts from the splash screen
+
+        if st.button(f"⬅️ {tr('back')}", key="gate_back", use_container_width=True):
+            st.session_state["choosing_language"] = False
+            st.rerun()
 
 
 # =============================================================================
@@ -906,7 +1104,7 @@ def render_header():
 
     with theme_col:
         st.toggle(
-            "🌙 Dark / ☀️ Light",
+            f"🌙 {tr('dark')} / ☀️ {tr('light')}",
             value=st.session_state.get("dark_mode", True),
             key="dark_mode",
         )
@@ -914,7 +1112,7 @@ def render_header():
     with right:
         if st.session_state["page"] == "admin":
             if st.button(f"⬅️ {tr('back')}", use_container_width=True):
-                go_to("main" if st.session_state["user_email"] else "email_gate")
+                go_to("main")
         else:
             if st.button(f"🔒 {tr('admin')}", use_container_width=True):
                 go_to("admin")
@@ -974,49 +1172,63 @@ def predict_new_patient(raw_input: dict):
 
 
 # =============================================================================
-# Symptom narrative
+# Symptom narrative / report
 # =============================================================================
 
-def _join(items):
+def _join(items, lang):
     if not items:
         return ""
     if len(items) == 1:
         return items[0]
     if len(items) == 2:
-        return f"{items[0]} and {items[1]}"
-    return ", ".join(items[:-1]) + f", and {items[-1]}"
+        return items[0] + tr("and_two", lang) + items[1]
+    return tr("list_sep", lang).join(items[:-1]) + tr("and_last", lang) + items[-1]
 
 
-def build_symptom_narrative(symptom_values: dict, extra_values: dict) -> str:
-    lang = "en"
+def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str = None) -> str:
+    lang = lang or st.session_state.get("lang", "en")
 
-    core_keys = {
-        "Polyuria": "polyuria",
-        "Polydipsia": "polydipsia",
-        "sudden weight loss": "weight_loss",
-        "Irritability": "irritability",
-        "delayed healing": "healing",
-        "partial paresis": "paresis",
-        "Alopecia": "alopecia",
-        "Itching": "itching",
-    }
-
-    core_yes = [T["en"][key] for col, key in core_keys.items() if symptom_values.get(col) == "Yes"]
-    extra_yes = [T["en"][key] for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
+    core_yes = [
+        tr(key, lang)
+        for col, key in display_labels.items()
+        if symptom_values.get(col) == "Yes"
+    ]
+    extra_yes = [tr(key, lang) for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
 
     if not core_yes and not extra_yes:
-        return tr("patient_denies")
+        return tr("patient_denies", lang)
 
     sentences = []
     if core_yes:
-        sentences.append(tr("patient_reports") + " " + _join(core_yes) + ".")
+        sentences.append(tr("patient_reports", lang) + " " + _join(core_yes, lang) + ".")
     else:
-        sentences.append(tr("no_core"))
+        sentences.append(tr("no_core", lang))
 
     if extra_yes:
-        sentences.append(tr("further") + " " + _join(extra_yes) + ".")
+        sentences.append(tr("further", lang) + " " + _join(extra_yes, lang) + ".")
 
     return " ".join(sentences)
+
+
+def build_report(lang, timestamp, first, last, phone, email, address, type_key,
+                 age, gender, result, probability, symptom_values, extra_values) -> dict:
+    """Build the report dictionary in the requested language."""
+    any_extra = any(v == "Yes" for v in extra_values.values())
+    return {
+        "Timestamp": timestamp,
+        "First name": first,
+        "Last name": last,
+        "Phone": phone,
+        "Email": email if email else tr("na", lang),
+        "Address": address,
+        "Reported diabetes type": tr(type_key, lang),
+        "Age": age,
+        "Gender": tr("male" if gender == "Male" else "female", lang),
+        "Result": tr("positive_high" if result == 1 else "negative_low", lang),
+        "Probability": f"{probability * 100:.1f}%",
+        "Notable extra symptoms": tr("yes" if any_extra else "no", lang),
+        "Symptom narrative": build_symptom_narrative(symptom_values, extra_values, lang),
+    }
 
 
 # =============================================================================
@@ -1026,23 +1238,15 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict) -> str:
 def render_meal_plan():
     st.markdown(f'<div class="section-title">📅 {tr("meal_plan")}</div>', unsafe_allow_html=True)
 
-    plans = [
-        ["Saturday", "Boiled eggs + whole-grain bread + cucumber & tomato", "Grilled chicken + brown rice + green salad", "Grilled fish + vegetables", "Water / unsweetened tea"],
-        ["Sunday", "Oatmeal + low-fat milk + berries", "Lentil soup + fresh salad", "Lean grilled meat + vegetables", "Water / mint tea"],
-        ["Monday", "Plain yogurt + whole-grain cereal + nuts", "Tuna salad + whole-grain bread", "Stuffed peppers/zucchini + small rice portion", "Water / herbal tea"],
-        ["Tuesday", "Vegetable omelet + whole-grain bread", "Chicken + quinoa/bulgur + salad", "Vegetable soup + low-fat cheese", "Water / green tea"],
-        ["Wednesday", "Greek yogurt + chia + low-sugar fruit", "Grilled fish + leafy salad", "Lentils/chickpeas + vegetables", "Water / hibiscus tea"],
-        ["Thursday", "Whole-grain bread + low-fat cheese + vegetables", "Lean meat/chicken + vegetables + brown rice", "Large salad + chicken/tuna", "Water / mint tea"],
-        ["Friday", "Oatmeal or eggs + raw nuts", "Fish/chicken + vegetables + salad", "Light vegetable soup + cheese", "Water / herbal tea"],
-    ]
-
-
     df = pd.DataFrame(
-        plans,
-        columns=[tr("meal_plan"), "Breakfast", "Lunch", "Dinner", "Drinks"],
+        tr("meal_plan_rows"),
+        columns=[tr("meal_plan"), tr("breakfast"), tr("lunch"), tr("dinner"), tr("drinks")],
     )
-    df[tr("meal_plan")] = [row[0] for row in plans]
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def _bullets(key: str) -> str:
+    return "\n".join(f"- {item}" for item in tr(key))
 
 
 def render_offline_health_guide():
@@ -1057,41 +1261,16 @@ def render_offline_health_guide():
     )
 
     with st.expander(f"🍽️ {tr('plate')}", expanded=True):
-        st.markdown(
-            "- **½** vegetables\n"
-            "- **¼** lean protein\n"
-            "- **¼** whole grains or moderate starch\n"
-            "- Water or unsweetened drinks instead of sugary drinks"
-        )
+        st.markdown(_bullets("plate_items"))
 
     with st.expander(f"🥗 {tr('foods')}"):
-        st.markdown(
-            "- Vegetables and salads\n"
-            "- Beans, lentils and chickpeas\n"
-            "- Whole grains and high-fiber foods\n"
-            "- Fish, skinless chicken and lean proteins\n"
-            "- Plain / low-sugar yogurt\n"
-            "- Small portions of nuts\n"
-            "- Whole fruit in moderate portions rather than juice"
-        )
+        st.markdown(_bullets("foods_items"))
 
     with st.expander(f"⚠️ {tr('limit')}"):
-        st.markdown(
-            "- Sugary soft drinks and packaged juices\n"
-            "- Added sugar and very sweet desserts\n"
-            "- Large portions of refined white bread/rice\n"
-            "- Highly processed foods\n"
-            "- Very large meals or unnecessary snacking"
-        )
+        st.markdown(_bullets("limit_items"))
 
     with st.expander(f"🏃 {tr('habits')}"):
-        st.markdown(
-            "- Aim for regular physical activity appropriate for your health.\n"
-            "- Keep consistent meal times.\n"
-            "- Stay hydrated.\n"
-            "- If you monitor blood glucose, follow your healthcare professional's advice.\n"
-            "- Seek professional advice for persistent or concerning symptoms."
-        )
+        st.markdown(_bullets("habits_items"))
 
     with st.expander(f"📅 {tr('meal_plan')}"):
         render_meal_plan()
@@ -1100,8 +1279,120 @@ def render_offline_health_guide():
 # =============================================================================
 # PDF
 # =============================================================================
+# The PDF needs a Unicode font for Turkish / Arabic characters. Put
+# DejaVuSans.ttf (and DejaVuSans-Bold.ttf) inside a "fonts" folder next to
+# this file. For Arabic also install: arabic-reshaper and python-bidi.
+# If the font is missing, the PDF is generated in English automatically.
 
-def generate_pdf_report(report_data: dict) -> bytes:
+_FONT_DIRS = [
+    "fonts",
+    ".",
+    "/usr/share/fonts/truetype/dejavu",
+    "/usr/share/fonts/dejavu",
+    "/usr/share/fonts/TTF",
+]
+
+
+def _find_font_file(filename: str):
+    dirs = list(_FONT_DIRS)
+    try:
+        import matplotlib
+
+        dirs.append(os.path.join(matplotlib.get_data_path(), "fonts", "ttf"))
+    except Exception:
+        pass
+
+    for directory in dirs:
+        path = os.path.join(directory, filename)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+@st.cache_resource
+def register_pdf_fonts() -> bool:
+    regular = _find_font_file("DejaVuSans.ttf")
+    if not regular:
+        return False
+    bold = _find_font_file("DejaVuSans-Bold.ttf") or regular
+
+    try:
+        pdfmetrics.registerFont(TTFont("PDFRegular", regular))
+        pdfmetrics.registerFont(TTFont("PDFBold", bold))
+        pdfmetrics.registerFontFamily(
+            "PDFRegular",
+            normal="PDFRegular",
+            bold="PDFBold",
+            italic="PDFRegular",
+            boldItalic="PDFBold",
+        )
+        return True
+    except Exception:
+        return False
+
+
+def pick_pdf_language(lang: str) -> str:
+    """Return the language the PDF can actually be rendered in on this server."""
+    if lang == "en":
+        return "en"
+    if not register_pdf_fonts():
+        return "en"
+    if is_rtl(lang) and not ARABIC_SHAPING_OK:
+        return "en"
+    return lang
+
+
+def _shape(text) -> str:
+    return get_display(arabic_reshaper.reshape(str(text)))
+
+
+def _wrap_rtl(text: str, font_name: str, font_size: float, max_width: float) -> str:
+    """Wrap Arabic text manually (line by line) so the visual order stays correct."""
+    words = str(text).split()
+    lines, current = [], []
+
+    for word in words:
+        trial = " ".join(current + [word])
+        if current and pdfmetrics.stringWidth(_shape(trial), font_name, font_size) > max_width:
+            lines.append(" ".join(current))
+            current = [word]
+        else:
+            current.append(word)
+
+    if current:
+        lines.append(" ".join(current))
+
+    return "<br/>".join(xml_escape(_shape(line)) for line in lines)
+
+
+def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = False) -> bytes:
+    rtl = is_rtl(lang)
+    has_ttf = register_pdf_fonts()
+    font = "PDFRegular" if has_ttf else "Helvetica"
+    font_bold = "PDFBold" if has_ttf else "Helvetica-Bold"
+    align = TA_RIGHT if rtl else TA_LEFT
+
+    def t(key):
+        return tr(key, lang)
+
+    def shp(text):
+        return _shape(text) if rtl else str(text)
+
+    def flow(text, size=9.5, width=530):
+        """Text for a Paragraph (escaped; manually wrapped for Arabic)."""
+        return _wrap_rtl(text, font, size, width) if rtl else xml_escape(str(text))
+
+    def label_paragraph(label, value_text):
+        if rtl:
+            return f"{xml_escape(shp(value_text))} :<b>{xml_escape(shp(label))}</b>"
+        return f"<b>{xml_escape(str(label))}:</b> {xml_escape(str(value_text))}"
+
+    def make_rows(pairs):
+        rows = []
+        for label, value in pairs:
+            rows.append([shp(value), shp(label)] if rtl else [shp(label), shp(value)])
+        return rows
+
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -1116,40 +1407,49 @@ def generate_pdf_report(report_data: dict) -> bytes:
     title_style = ParagraphStyle(
         "DocTitle",
         parent=styles["Title"],
+        fontName=font_bold,
         fontSize=18,
         textColor=colors.HexColor("#0d3b66"),
         spaceAfter=4,
-        alignment=TA_LEFT,
+        alignment=align,
     )
     subtitle_style = ParagraphStyle(
         "DocSubtitle",
         parent=styles["Normal"],
+        fontName=font,
         fontSize=11,
         textColor=colors.HexColor("#555555"),
-        alignment=TA_LEFT,
+        alignment=align,
     )
     heading_style = ParagraphStyle(
         "Heading2Custom",
         parent=styles["Heading2"],
+        fontName=font_bold,
         fontSize=12,
         textColor=colors.HexColor("#0d3b66"),
         spaceBefore=10,
         spaceAfter=6,
+        alignment=align,
     )
     body_style = ParagraphStyle(
         "BodyCustom",
         parent=styles["Normal"],
+        fontName=font,
         fontSize=9.5,
         leading=13,
+        alignment=align,
     )
 
     elements = []
     title = Paragraph("<b>PERDIAPREDICT</b>", title_style)
-    subtitle = Paragraph("Early Stage Diabetes Assessment Report", subtitle_style)
+    subtitle = Paragraph(flow(t("pdf_title"), size=11, width=440), subtitle_style)
 
     if os.path.exists(LOGO_PATH):
         logo = Image(LOGO_PATH, width=55, height=55)
-        header = Table([[logo, [title, subtitle]]], colWidths=[58, 482])
+        if rtl:
+            header = Table([[[title, subtitle], logo]], colWidths=[482, 58])
+        else:
+            header = Table([[logo, [title, subtitle]]], colWidths=[58, 482])
     else:
         header = Table([[[title, subtitle]]], colWidths=[540])
 
@@ -1170,25 +1470,32 @@ def generate_pdf_report(report_data: dict) -> bytes:
     elements.append(divider)
     elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph(f"<b>Generated:</b> {report_data.get('Timestamp', '')}", body_style))
+    elements.append(
+        Paragraph(label_paragraph(t("pdf_generated"), report_data.get("Timestamp", "")), body_style)
+    )
     elements.append(Spacer(1, 10))
-    elements.append(Paragraph("Patient Details", heading_style))
+    elements.append(Paragraph(xml_escape(shp(t("pdf_patient"))), heading_style))
 
-    patient_info = [
-        ["Name:", f"{report_data.get('First name', '')} {report_data.get('Last name', '')}"],
-        ["Age / Gender:", f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"],
-        ["Phone:", report_data.get("Phone", "")],
-        ["Email:", report_data.get("Email", "N/A")],
-        ["Address:", report_data.get("Address", "")],
-        ["Reported Type:", report_data.get("Reported diabetes type", "")],
-    ]
+    patient_info = make_rows(
+        [
+            (t("pdf_name"), f"{report_data.get('First name', '')} {report_data.get('Last name', '')}"),
+            (t("pdf_age_gender"), f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"),
+            (t("phone"), report_data.get("Phone", "")),
+            (t("pdf_email"), report_data.get("Email", t("na"))),
+            (t("pdf_address"), report_data.get("Address", "")),
+            (t("pdf_type"), report_data.get("Reported diabetes type", "")),
+        ]
+    )
 
-    t1 = Table(patient_info, colWidths=[130, 410])
+    label_col = 1 if rtl else 0
+    t1 = Table(patient_info, colWidths=[410, 130] if rtl else [130, 410])
     t1.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f4f8")),
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, -1), font),
+                ("BACKGROUND", (label_col, 0), (label_col, -1), colors.HexColor("#f0f4f8")),
+                ("FONTNAME", (label_col, 0), (label_col, -1), font_bold),
+                ("ALIGN", (0, 0), (-1, -1), "RIGHT" if rtl else "LEFT"),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
                 ("TOPPADDING", (0, 0), (-1, -1), 5),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
@@ -1198,28 +1505,32 @@ def generate_pdf_report(report_data: dict) -> bytes:
     elements.append(t1)
     elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph("Clinical Presentation", heading_style))
-    elements.append(Paragraph(report_data.get("Symptom narrative", ""), body_style))
+    elements.append(Paragraph(xml_escape(shp(t("pdf_clinical"))), heading_style))
+    elements.append(Paragraph(flow(report_data.get("Symptom narrative", "")), body_style))
     elements.append(Spacer(1, 12))
 
-    elements.append(Paragraph("Assessment Result", heading_style))
-    is_positive = "Positive" in report_data.get("Result", "")
-    result_color = colors.HexColor("#dc2626") if is_positive else colors.HexColor("#16a34a")
+    elements.append(Paragraph(xml_escape(shp(t("pdf_assessment"))), heading_style))
+    result_color = colors.HexColor("#dc2626") if is_high else colors.HexColor("#16a34a")
 
-    t2 = Table(
+    result_rows = make_rows(
         [
-            ["Risk Assessment:", report_data.get("Result", "")],
-            ["Estimated Probability:", report_data.get("Probability", "")],
-            ["Additional Symptoms:", report_data.get("Notable extra symptoms", "")],
-        ],
-        colWidths=[170, 370],
+            (t("pdf_risk"), report_data.get("Result", "")),
+            (t("probability"), report_data.get("Probability", "")),
+            (t("pdf_extra"), report_data.get("Notable extra symptoms", "")),
+        ]
     )
+    label_col2 = 1 if rtl else 0
+    value_col2 = 0 if rtl else 1
+
+    t2 = Table(result_rows, colWidths=[370, 170] if rtl else [170, 370])
     t2.setStyle(
         TableStyle(
             [
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("TEXTCOLOR", (1, 0), (1, 0), result_color),
-                ("FONTNAME", (1, 0), (1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 0), (-1, -1), font),
+                ("FONTNAME", (label_col2, 0), (label_col2, -1), font_bold),
+                ("TEXTCOLOR", (value_col2, 0), (value_col2, 0), result_color),
+                ("FONTNAME", (value_col2, 0), (value_col2, 0), font_bold),
+                ("ALIGN", (0, 0), (-1, -1), "RIGHT" if rtl else "LEFT"),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
                 ("TOPPADDING", (0, 0), (-1, -1), 6),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
@@ -1229,12 +1540,13 @@ def generate_pdf_report(report_data: dict) -> bytes:
     elements.append(t2)
     elements.append(Spacer(1, 18))
 
-    elements.append(
-        Paragraph(
-            "<b>Disclaimer:</b> This report is generated by a machine-learning model for educational and demonstration purposes only. It is NOT a medical diagnosis. Consult a qualified healthcare professional for clinical evaluation.",
-            body_style,
+    if rtl:
+        disclaimer_text = flow(f"{t('pdf_disclaimer_label')}: {t('pdf_disclaimer')}")
+    else:
+        disclaimer_text = (
+            f"<b>{xml_escape(t('pdf_disclaimer_label'))}:</b> {xml_escape(t('pdf_disclaimer'))}"
         )
-    )
+    elements.append(Paragraph(disclaimer_text, body_style))
 
     doc.build(elements)
     buffer.seek(0)
@@ -1261,58 +1573,12 @@ def save_report_to_excel(report: dict):
 
 
 # =============================================================================
-# Email screen
-# =============================================================================
-
-def render_email_gate():
-    st.markdown(
-        f"""
-        <div class="hero">
-            <div class="pill">🩺 {tr('brand')}</div>
-            <h1>{tr('email_title')}</h1>
-            <p>{tr('email_intro')}</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        f'<div class="notice">⚠️ {tr("medical_notice_long")}</div>',
-        unsafe_allow_html=True,
-    )
-
-    # Keep the email gate outside a Streamlit form.
-    # This makes the Continue button respond reliably after theme/CSS changes.
-    email_input = st.text_input(
-        tr("email"),
-        value=st.session_state.get("user_email") or "",
-        placeholder="you@example.com",
-        key="email_gate_input",
-    )
-
-    continue_clicked = st.button(
-        f"🚀 {tr('continue')}",
-        use_container_width=True,
-        type="primary",
-        key="email_continue_button",
-    )
-
-    if continue_clicked:
-        cleaned_email = email_input.strip()
-        if not cleaned_email:
-            st.error(tr("email_required"))
-        elif not EMAIL_REGEX.match(cleaned_email):
-            st.error(tr("email_invalid"))
-        else:
-            st.session_state["user_email"] = cleaned_email
-            go_to("main")
-
-
-# =============================================================================
 # Main app
 # =============================================================================
 
 def render_main_app():
+    lang = st.session_state["lang"]
+
     st.markdown(
         f"""
         <div class="hero">
@@ -1339,16 +1605,16 @@ def render_main_app():
         with c2:
             last_name = st.text_input(f"{tr('last_name')} *")
 
-        c3, c4 = st.columns(2)
-        with c3:
-            phone = st.text_input(f"{tr('phone')} *")
-        with c4:
-            patient_email = st.text_input(
-                tr("email"),
-                value=st.session_state.get("user_email", ""),
-            )
-
+        phone = st.text_input(f"{tr('phone')} *")
         address = st.text_input(f"{tr('address')} *")
+
+        # Email is optional and lives inside a collapsible section.
+        with st.expander(f"➕ {tr('optional_info')}"):
+            patient_email = st.text_input(
+                tr("email_optional"),
+                value=st.session_state.get("user_email") or "",
+                placeholder="you@example.com",
+            )
 
         diabetes_type = st.selectbox(
             tr("diabetes_type"),
@@ -1424,6 +1690,10 @@ def render_main_app():
             if not value:
                 errors.append(f"{label} {tr('required')}")
 
+        # Email is optional: validate the format only if the user typed one.
+        if clean_email and not EMAIL_REGEX.match(clean_email):
+            errors.append(tr("email_invalid"))
+
         if errors:
             st.error(tr("required_fields"))
             for error in errors:
@@ -1432,27 +1702,31 @@ def render_main_app():
             raw_input = {"Age": age, "Gender": gender, **symptom_values}
             result, probability = predict_new_patient(raw_input)
 
-            any_extra_symptom = any(v == "Yes" for v in extra_values.values())
-            symptom_narrative = build_symptom_narrative(symptom_values, extra_values)
-
             type_key = DIABETES_TYPE_KEYS[[tr(k) for k in DIABETES_TYPE_KEYS].index(diabetes_type)]
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-            st.session_state["last_report"] = {
-                "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "First name": clean_first_name,
-                "Last name": clean_last_name,
-                "Phone": clean_phone,
-                "Email": clean_email if clean_email else "N/A",
-                "Address": clean_address,
-                "Reported diabetes type": tr(type_key),
-                "Age": age,
-                "Gender": tr("male") if gender == "Male" else tr("female"),
-                "Result": "Positive (high risk)" if result == 1 else "Negative (low risk)",
-                "Probability": f"{probability * 100:.1f}%",
-                "Notable extra symptoms": "Yes" if any_extra_symptom else "No",
-                "Symptom narrative": symptom_narrative,
-            }
+            report_args = dict(
+                timestamp=timestamp,
+                first=clean_first_name,
+                last=clean_last_name,
+                phone=clean_phone,
+                email=clean_email,
+                address=clean_address,
+                type_key=type_key,
+                age=age,
+                gender=gender,
+                result=result,
+                probability=probability,
+                symptom_values=symptom_values,
+                extra_values=extra_values,
+            )
 
+            # Shown to the user (current language) ...
+            st.session_state["last_report"] = build_report(lang, **report_args)
+            # ... and the same record in English, so the admin Excel file stays consistent.
+            st.session_state["last_report_en"] = build_report("en", **report_args)
+
+            st.session_state["last_extra"] = any(v == "Yes" for v in extra_values.values())
             st.session_state["last_result"] = int(result)
             st.session_state["last_probability"] = float(probability)
             st.session_state["report_saved"] = False
@@ -1469,6 +1743,7 @@ def render_main_app():
     # Results
     if st.session_state.get("last_report"):
         report = st.session_state["last_report"]
+        report_en = st.session_state["last_report_en"]
         result = st.session_state["last_result"]
         probability = st.session_state["last_probability"]
 
@@ -1501,22 +1776,28 @@ def render_main_app():
             else:
                 st.success(tr("low_recommendation"))
 
-            if report["Notable extra symptoms"] == "Yes":
+            if st.session_state.get("last_extra", False):
                 st.info(tr("extra_notice"))
 
         render_offline_health_guide()
 
         if not st.session_state.get("report_saved", False):
             try:
-                save_report_to_excel(report)
+                save_report_to_excel(report_en)
                 st.session_state["report_saved"] = True
             except Exception as exc:
-                st.warning(f"Could not save the report: {exc}")
+                st.warning(f"{tr('save_failed')} {exc}")
 
         st.markdown("---")
         st.markdown(f'<div class="section-title">📄 {tr("download")}</div>', unsafe_allow_html=True)
 
-        pdf_data = generate_pdf_report(report)
+        pdf_lang = pick_pdf_language(lang)
+        pdf_report = report if pdf_lang == lang else report_en
+        pdf_data = generate_pdf_report(pdf_report, pdf_lang, is_high=(result == 1))
+
+        if pdf_lang != lang:
+            st.caption(tr("pdf_fallback"))
+
         file_name_pdf = (
             f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
             .replace(" ", "_")
@@ -1600,7 +1881,7 @@ def render_admin_page():
                                 st.rerun()
 
                 except Exception as exc:
-                    st.warning(f"Could not read saved records: {exc}")
+                    st.warning(f"{tr('read_failed')} {exc}")
             else:
                 st.info(tr("no_records"))
         else:
@@ -1611,23 +1892,35 @@ def render_admin_page():
 # App router
 # =============================================================================
 
+def render_footer():
+    st.markdown(
+        f"""
+        <div class="footer">
+            🩺 {tr('brand')} · {tr('medical_notice')}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 inject_css()
-render_header()
 
 current_page = st.session_state["page"]
 
+if current_page == "splash":
+    render_splash()  # plays the animation, then opens the language gate
+    st.stop()
+
+if current_page == "language":
+    render_language_gate()  # "Continue" or "Change language"
+    render_footer()
+    st.stop()
+
+render_header()
+
 if current_page == "admin":
     render_admin_page()
-elif current_page == "email_gate":
-    render_email_gate()
 else:
     render_main_app()
 
-st.markdown(
-    f"""
-    <div class="footer">
-        🩺 {tr('brand')} · {tr('medical_notice')}
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+render_footer()
