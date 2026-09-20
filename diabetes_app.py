@@ -1789,6 +1789,11 @@ C_RED_BD = (254, 202, 202)
 C_AMBER_BG = (255, 251, 235)
 C_AMBER_BD = (245, 217, 139)
 C_AMBER_TX = (120, 80, 0)
+C_PILL_BG = (239, 246, 255)
+C_PILL_BD = (191, 219, 254)
+C_XPILL_BG = (255, 247, 237)
+C_XPILL_BD = (253, 215, 170)
+C_ORANGE = (234, 88, 12)
 
 
 @st.cache_resource(show_spinner=False, ttl=900)
@@ -1846,21 +1851,50 @@ def _rgb(color):
     return color[0], color[1], color[2]
 
 
-def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = False) -> bytes:
+def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = False,
+                        symptoms: dict = None) -> bytes:
+    """Build the one-page A4 report.
+
+    The normal layout is tried first. If the content is too long for a single
+    page (very long address, wordy language, ...), the report is rebuilt with a
+    tighter layout so it still fits on one page.
+
+    `symptoms` = {"core": [model column names], "extra": [extra symptom keys]}
+    (the answers the patient marked "Yes"). When it is missing, the report
+    falls back to the text paragraph in report_data["Symptom narrative"].
+    """
+    data, pages = _render_pdf_report(report_data, lang, is_high, symptoms, compact=False)
+    if pages > 1:
+        small, small_pages = _render_pdf_report(report_data, lang, is_high, symptoms, compact=True)
+        if small_pages <= pages:
+            return small
+    return data
+
+
+def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
+                       symptoms, compact: bool):
+    """Returns (pdf_bytes, number_of_pages)."""
     rtl = is_rtl(lang)
 
     def t(key):
         return tr(key, lang)
 
+    # ------------------------------------------------------- symptom labels
+    core_texts, extra_texts = [], []
+    if symptoms:
+        core_texts = [t(display_labels[c]) for c in symptoms.get("core", []) if c in display_labels]
+        extra_texts = [t(k) for k in symptoms.get("extra", []) if k in extra_symptom_keys]
+
     # ------------------------------------------------------------------ fonts
     values = [str(v) for v in report_data.values()]
-    texts = values + [
+    texts = values + core_texts + extra_texts + [
         t(k)
         for k in (
             "pdf_title", "pdf_generated", "pdf_patient", "pdf_name", "pdf_age_gender",
             "phone", "pdf_email", "pdf_address", "pdf_type", "pdf_clinical",
             "pdf_assessment", "pdf_risk", "probability", "pdf_extra",
             "pdf_disclaimer_label", "pdf_disclaimer", "medical_notice", "brand",
+            "no_core",
         )
     ]
     blob = " ".join(texts)
@@ -1916,6 +1950,19 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
     width = page_w - pdf.l_margin - pdf.r_margin
     right = left + width
 
+    # ------------------------------------------------------------- dimensions
+    # Normal layout first; `compact` is the fallback that squeezes the spacing.
+    if compact:
+        band_h, after_band, card_h = 30, 6, 34
+        sec_top, sec_after = 3.5, 8
+        row_extra, pill_min, pill_gap_y, card_pad = 3.4, 7.2, 1.8, 4
+        dis_gap, dis_size, dis_lh = 4, 8.2, 4.3
+    else:
+        band_h, after_band, card_h = 34, 8, 37
+        sec_top, sec_after = 5.5, 9
+        row_extra, pill_min, pill_gap_y, card_pad = 4.3, 8.2, 2.4, 5
+        dis_gap, dis_size, dis_lh = 6, 8.6, 4.7
+
     # ---------------------------------------------------------------- helpers
     def font(style="", size=10, color=C_TEXT):
         pdf.set_font(base_font, style, size)
@@ -1957,17 +2004,16 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
     def section(title, need=0):
         """Section title. `need` = height of the content below, so title and
         content are never separated by a page break."""
-        ensure(16 + need)
-        y = pdf.get_y() + 6
+        ensure(sec_top + sec_after + 4 + need)
+        y = pdf.get_y() + sec_top
         bar_x = right - 1.6 if rtl else left
         pdf.set_fill_color(*_rgb(C_BLUE))
         pdf.rect(bar_x, y, 1.6, 6, style="F")
         text_x = left if rtl else left + 4.5
         put(title, text_x, y + 0.2, width - 4.5, size=12.5, style="B", color=C_NAVY, lh=6)
-        pdf.set_y(y + 9.5)
+        pdf.set_y(y + sec_after)
 
     # -------------------------------------------------------- header (banner)
-    band_h = 42
     steps = 105
     for i in range(steps):
         ratio = i / (steps - 1)
@@ -1981,7 +2027,7 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
     pdf.set_fill_color(*_rgb(C_SKY))
     pdf.rect(0, band_h, page_w, 1.3, style="F")
 
-    logo_size = 25
+    logo_size = band_h - 10
     logo_y = (band_h - logo_size) / 2
     logo_x = right - logo_size if rtl else left
     has_logo = os.path.exists(LOGO_PATH)
@@ -2010,7 +2056,7 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
     put(report_data.get("Timestamp", ""), stamp_x, band_h / 2 - 2.6, stamp_w, size=11,
         style="B", color=(255, 255, 255), lh=6, text_align=stamp_align)
 
-    pdf.set_y(band_h + 10)
+    pdf.set_y(band_h + after_band)
 
     # ------------------------------------------------ risk result (main card)
     accent = C_RED if is_high else C_GREEN
@@ -2023,7 +2069,6 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
         probability = 0.0
     probability = max(0.0, min(100.0, probability))
 
-    card_h = 42
     ensure(card_h)
     cy = pdf.get_y()
     box(left, cy, width, card_h, tint, tint_border, radius=4)
@@ -2070,20 +2115,7 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
         fill_x = bar_x + bar_w - fill_w if rtl else bar_x
         box(fill_x, bar_y, fill_w, 3.4, accent, radius=1.7)
 
-    pdf.set_y(cy + card_h + 4)
-
-    # Extra symptoms row
-    row_h = 12
-    ensure(row_h)
-    ry = pdf.get_y()
-    box(left, ry, width, row_h, (255, 255, 255), C_BORDER, radius=3)
-    half = width / 2
-    lab_x = right - pad - (half - pad) if rtl else left + pad
-    put(t("pdf_extra"), lab_x, ry + 3.4, half - pad, size=9.5, color=C_MUTED, lh=5)
-    val_x = left + pad if rtl else left + half
-    put(report_data.get("Notable extra symptoms", ""), val_x, ry + 3.2, half - pad,
-        size=10.5, style="B", color=C_TEXT, lh=5.4, text_align="L" if rtl else "R")
-    pdf.set_y(ry + row_h)
+    pdf.set_y(cy + card_h + 2)
 
     # ----------------------------------------------------------- patient card
     name = f"{report_data.get('First name', '')} {report_data.get('Last name', '')}".strip()
@@ -2091,8 +2123,8 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
     rows = [
         [(t("pdf_name"), name), (t("pdf_age_gender"), age_gender)],
         [(t("phone"), report_data.get("Phone", "")), (t("pdf_email"), report_data.get("Email", t("na")))],
-        [(t("pdf_address"), report_data.get("Address", ""))],
-        [(t("pdf_type"), report_data.get("Reported diabetes type", ""))],
+        [(t("pdf_address"), report_data.get("Address", "")),
+         (t("pdf_type"), report_data.get("Reported diabetes type", ""))],
     ]
 
     inner_w = width - 2 * pad
@@ -2106,10 +2138,10 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
     for row in rows:
         cell_w = col_w if len(row) == 2 else inner_w
         heights = [label_h + measure(v, cell_w, 10.5, "B", value_lh) for _, v in row]
-        row_height = max(heights) + 4.5
+        row_height = max(heights) + row_extra
         layouts.append((row, cell_w, row_height))
         total_h += row_height
-    total_h += pad - 4.5
+    total_h += pad - row_extra
 
     section(t("pdf_patient"), need=total_h)
     py = pdf.get_y()
@@ -2127,40 +2159,135 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
         if index < len(layouts) - 1:
             pdf.set_draw_color(*_rgb(C_BORDER))
             pdf.set_line_width(0.2)
-            pdf.line(left + pad, cursor - 2.4, right - pad, cursor - 2.4)
+            pdf.line(left + pad, cursor - row_extra / 2, right - pad, cursor - row_extra / 2)
     pdf.set_y(py + total_h)
 
     # ------------------------------------------------- clinical presentation
     narrative = report_data.get("Symptom narrative", "")
-    text_w = width - 2 * pad - 2
-    text_h = measure(narrative, text_w, 10, "", 5.9)
-    ch = text_h + 2 * 5
-    section(t("pdf_clinical"), need=ch)
-    cy2 = pdf.get_y()
-    box(left, cy2, width, ch, C_SOFT, C_BORDER, radius=4)
-    stripe_x = right - 1.6 - 0.2 if rtl else left + 0.2
-    pdf.set_fill_color(*_rgb(C_BLUE))
-    pdf.rect(stripe_x, cy2 + 4, 1.6, ch - 8, style="F")
-    text_x2 = left + pad - 1 if rtl else left + pad + 2
-    put(narrative, text_x2, cy2 + 5, text_w, size=10, color=C_TEXT, lh=5.9)
-    pdf.set_y(cy2 + ch)
+    have_pills = bool(core_texts or extra_texts)
+
+    if not have_pills:
+        # Text version: used when the patient answered "No" to everything, or
+        # when no symptom list was passed in.
+        text_w = width - 2 * pad - 2
+        text_h = measure(narrative, text_w, 10, "", 5.9)
+        ch = text_h + 2 * 5
+        section(t("pdf_clinical"), need=ch)
+        cy2 = pdf.get_y()
+        box(left, cy2, width, ch, C_SOFT, C_BORDER, radius=4)
+        stripe_x = right - 1.6 - 0.2 if rtl else left + 0.2
+        pdf.set_fill_color(*_rgb(C_BLUE))
+        pdf.rect(stripe_x, cy2 + 4, 1.6, ch - 8, style="F")
+        text_x2 = left + pad - 1 if rtl else left + pad + 2
+        put(narrative, text_x2, cy2 + 5, text_w, size=10, color=C_TEXT, lh=5.9)
+        pdf.set_y(cy2 + ch)
+    else:
+        # Symptom "pills" in a tidy grid: core symptoms first, then the
+        # additional ones under their own label.
+        gap_x = 3.2
+        icon_d = 4.4
+        icon_zone = 9.0
+        pill_size, pill_lh = 8.8, 4.4
+
+        def pill_text_w(cols):
+            return (inner_w - (cols - 1) * gap_x) / cols - icon_zone - 2
+
+        def wraps(cols):
+            tw = pill_text_w(cols)
+            return any(measure(x, tw, pill_size, "B", pill_lh) > pill_lh + 0.1
+                       for x in core_texts + extra_texts)
+
+        cols = 3 if wraps(4) else 4
+        pw = (inner_w - (cols - 1) * gap_x) / cols
+        tw = pill_text_w(cols)
+
+        def plan(items):
+            cells = [(x, max(pill_min, measure(x, tw, pill_size, "B", pill_lh) + 2.8)) for x in items]
+            grid = [cells[i:i + cols] for i in range(0, len(cells), cols)]
+            heights = [max(h for _, h in r) for r in grid]
+            return grid, heights
+
+        def block_height(heights):
+            return sum(heights) + pill_gap_y * (len(heights) - 1) if heights else 0
+
+        core_grid, core_hs = plan(core_texts)
+        extra_grid, extra_hs = plan(extra_texts)
+
+        no_core_txt = t("no_core")
+        core_block = block_height(core_hs) if core_texts else measure(no_core_txt, inner_w, 9.5, "", 5)
+        extra_head = 5.5
+        extra_block = extra_head + (2 + block_height(extra_hs) if extra_texts else 0)
+        sep = 6.5
+        ch = card_pad + core_block + sep + extra_block + card_pad
+
+        def draw_pills(grid, heights, fill, border, dot, y0):
+            y_cur = y0
+            for row_cells, rh in zip(grid, heights):
+                for i, (txt, _h) in enumerate(row_cells):
+                    slot = (cols - 1 - i) if rtl else i
+                    px = left + pad + slot * (pw + gap_x)
+                    box(px, y_cur, pw, rh, fill, border, radius=2.6, line=0.25)
+                    ix = px + pw - 2.8 - icon_d if rtl else px + 2.8
+                    iy = y_cur + (rh - icon_d) / 2
+                    pdf.set_fill_color(*_rgb(dot))
+                    pdf.ellipse(ix, iy, icon_d, icon_d, style="F")
+                    mx, my = ix + icon_d / 2, iy + icon_d / 2
+                    pdf.set_draw_color(255, 255, 255)
+                    pdf.set_line_width(0.5)
+                    pdf.line(mx - 1.2, my + 0.1, mx - 0.3, my + 1.0)
+                    pdf.line(mx - 0.3, my + 1.0, mx + 1.3, my - 0.9)
+                    th = measure(txt, tw, pill_size, "B", pill_lh)
+                    tx = px + 2 if rtl else px + icon_zone
+                    put(txt, tx, y_cur + (rh - th) / 2, tw, size=pill_size, style="B",
+                        color=C_TEXT, lh=pill_lh)
+                y_cur += rh + pill_gap_y
+            return y_cur - pill_gap_y
+
+        section(t("pdf_clinical"), need=ch)
+        cy2 = pdf.get_y()
+        box(left, cy2, width, ch, (255, 255, 255), C_BORDER, radius=4)
+        y = cy2 + card_pad
+
+        if core_texts:
+            y_end = draw_pills(core_grid, core_hs, C_PILL_BG, C_PILL_BD, C_BLUE, y)
+        else:
+            put(no_core_txt, left + pad, y, inner_w, size=9.5, color=C_MUTED, lh=5)
+            y_end = y + core_block
+
+        line_y = y_end + sep / 2
+        pdf.set_draw_color(*_rgb(C_BORDER))
+        pdf.set_line_width(0.2)
+        pdf.line(left + pad, line_y, right - pad, line_y)
+
+        y2 = y_end + sep
+        label_w = inner_w * 0.62
+        value_w = inner_w - label_w
+        label_x = right - pad - label_w if rtl else left + pad
+        put(t("pdf_extra"), label_x, y2, label_w, size=8.8, style="B", color=C_MUTED, lh=4.4)
+        if extra_texts:
+            draw_pills(extra_grid, extra_hs, C_XPILL_BG, C_XPILL_BD, C_ORANGE, y2 + extra_head + 2)
+        else:
+            value_x = left + pad if rtl else right - pad - value_w
+            put(report_data.get("Notable extra symptoms", ""), value_x, y2, value_w,
+                size=9.5, style="B", color=C_TEXT, lh=4.4, text_align="L" if rtl else "R")
+        pdf.set_y(cy2 + ch)
 
     # --------------------------------------------------------------- disclaimer
-    pdf.ln(7)
+    pdf.ln(dis_gap)
     label = t("pdf_disclaimer_label")
     body = t("pdf_disclaimer")
     dis_w = width - 2 * pad
     label_height = 5
-    body_height = measure(body, dis_w, 8.6, "", 4.7)
+    body_height = measure(body, dis_w, dis_size, "", dis_lh)
     dh = label_height + body_height + 2 * 5 - 1
     ensure(dh)
     dy = pdf.get_y()
     box(left, dy, width, dh, C_AMBER_BG, C_AMBER_BD, radius=3.5)
     put(label, left + pad, dy + 4.6, dis_w, size=9.2, style="B", color=C_AMBER_TX, lh=5)
-    put(body, left + pad, dy + 4.6 + label_height, dis_w, size=8.6, color=C_AMBER_TX, lh=4.7)
+    put(body, left + pad, dy + 4.6 + label_height, dis_w, size=dis_size, color=C_AMBER_TX, lh=dis_lh)
     pdf.set_y(dy + dh)
 
-    return bytes(pdf.output())
+    return bytes(pdf.output()), pdf.page_no()
 
 
 class _ReportPDF(FPDF):
@@ -2376,6 +2503,10 @@ def render_main_app():
             st.session_state["last_report_en"] = build_report("en", **report_args)
 
             st.session_state["last_extra"] = any(v == "Yes" for v in extra_values.values())
+            st.session_state["last_symptoms"] = {
+                "core": [c for c in display_labels if symptom_values.get(c) == "Yes"],
+                "extra": [k for k in extra_symptom_keys if extra_values.get(k) == "Yes"],
+            }
             st.session_state["last_result"] = int(result)
             st.session_state["last_probability"] = float(probability)
             st.session_state["report_saved"] = False
@@ -2445,21 +2576,27 @@ def render_main_app():
         # this language are unavailable.
         pdf_lang = pick_pdf_language(lang)
         pdf_report = report if pdf_lang == lang else report_en
+        pdf_symptoms = st.session_state.get("last_symptoms")
         cache_key = (
             pdf_lang,
             int(result),
             tuple(sorted((k, str(v)) for k, v in pdf_report.items())),
+            (tuple(pdf_symptoms["core"]), tuple(pdf_symptoms["extra"])) if pdf_symptoms else None,
         )
 
         if st.session_state.get("pdf_cache_key") != cache_key:
             try:
-                pdf_bytes = generate_pdf_report(pdf_report, pdf_lang, is_high=(result == 1))
+                pdf_bytes = generate_pdf_report(
+                    pdf_report, pdf_lang, is_high=(result == 1), symptoms=pdf_symptoms
+                )
             except Exception:
                 if pdf_lang == "en":
                     raise
                 pdf_lang = "en"
                 pdf_report = report_en
-                pdf_bytes = generate_pdf_report(pdf_report, "en", is_high=(result == 1))
+                pdf_bytes = generate_pdf_report(
+                    pdf_report, "en", is_high=(result == 1), symptoms=pdf_symptoms
+                )
             st.session_state["pdf_cache_key"] = cache_key
             st.session_state["pdf_cache_data"] = pdf_bytes
             st.session_state["pdf_cache_lang"] = pdf_lang
