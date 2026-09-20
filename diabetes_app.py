@@ -9,7 +9,7 @@ import sqlite3
 import tempfile
 import time
 import urllib.request
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import date, datetime, timedelta
 
 import joblib
@@ -2219,66 +2219,642 @@ def render_support_card():
     )
 
 
-def _auth_hero(pill: str, title: str, intro: str):
+# =============================================================================
+# AUTH UI - split-card design (welcome panel + form panel)
+# Used by: choice page, login, register and the Admin Panel gate.
+# =============================================================================
+
+# New texts (English / Arabic / Spanish). Other languages fall back to English.
+_AUTH_UI_TEXT = {
+    "en": {
+        "welcome_title": "Welcome!",
+        "welcome_back": "Welcome Back!",
+        "welcome_back_sub": "Sign in to access your account",
+        "welcome_new": "Join PerdiaPredict",
+        "welcome_new_sub": "Create your account to start your early diabetes risk screening",
+    },
+    "ar": {
+        "welcome_title": "أهلًا بك!",
+        "welcome_back": "أهلًا بعودتك!",
+        "welcome_back_sub": "سجّل الدخول للوصول إلى حسابك",
+        "welcome_new": "انضم إلى PerdiaPredict",
+        "welcome_new_sub": "أنشئ حسابك لتبدأ الفحص المبكر لخطر السكري",
+    },
+    "es": {
+        "welcome_title": "¡Bienvenido!",
+        "welcome_back": "¡Bienvenido de nuevo!",
+        "welcome_back_sub": "Inicia sesión para acceder a tu cuenta",
+        "welcome_new": "Únete a PerdiaPredict",
+        "welcome_new_sub": "Crea tu cuenta para empezar tu evaluación temprana del riesgo de diabetes",
+    },
+}
+for _code, _vals in _AUTH_UI_TEXT.items():
+    EXTRA_TEXT.setdefault(_code, {}).update(_vals)
+
+
+# Logo (shown inside the round frame of the welcome panel)
+@st.cache_data(show_spinner=False)
+def _auth_logo_html() -> str:
+    if os.path.exists(LOGO_PATH):
+        with open(LOGO_PATH, "rb") as _f:
+            _b64 = base64.b64encode(_f.read()).decode()
+        return f'<img src="data:image/png;base64,{_b64}" alt="PerdiaPredict" />'
+    return '<span class="auth-logo-fallback">🩺</span>'
+
+
+# CSS for the auth pages only (called by auth_card)
+def inject_auth_css():
+    is_dark = st.session_state.get("dark_mode", True)
+    rtl = is_rtl()
+    no_spacing = rtl or st.session_state.get("lang", "en") in SPACING_OFF_LANGS
+    letter = "0" if no_spacing else "-.02em"
+    text_side = "right" if rtl else "left"
+
+    # The form half sits on the right; in right-to-left languages it flips.
+    form_side = "left" if rtl else "right"
+
+    if is_dark:
+        backdrop = """
+            radial-gradient(900px 520px at 12% -8%, rgba(37,99,235,.38), transparent 60%),
+            radial-gradient(800px 520px at 100% 105%, rgba(14,165,233,.28), transparent 60%),
+            #060b18
+        """
+        card_shadow = "0 30px 80px rgba(0,0,0,.55), 0 0 0 1px rgba(148,163,184,.10)"
+    else:
+        backdrop = """
+            radial-gradient(900px 520px at 12% -8%, rgba(37,99,235,.20), transparent 60%),
+            radial-gradient(800px 520px at 100% 105%, rgba(14,165,233,.18), transparent 60%),
+            #e9f1fb
+        """
+        card_shadow = "0 30px 70px rgba(30,64,175,.22), 0 0 0 1px rgba(148,163,184,.25)"
+
+    # ------------------------------------------------------------------
+    # Artwork behind the logo (transparent, so the blue panel shows through).
+    #   * default: a built-in medical illustration (glow, heartbeat line,
+    #     drops, crosses) + a slowly turning orbit ring;
+    #   * your own picture: save it next to this file as auth_art.png
+    #     (or .webp / .jpg / .svg) and it is used instead of the default.
+    # ------------------------------------------------------------------
+    art_svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 460 460'>"
+        "<defs>"
+        "<radialGradient id='g' cx='50%' cy='50%' r='50%'>"
+        "<stop offset='0' stop-color='#38bdf8' stop-opacity='.55'/>"
+        "<stop offset='.6' stop-color='#2563eb' stop-opacity='.22'/>"
+        "<stop offset='1' stop-color='#2563eb' stop-opacity='0'/>"
+        "</radialGradient>"
+        "<linearGradient id='l' x1='0' x2='1' y1='0' y2='0'>"
+        "<stop offset='0' stop-color='#7dd3fc' stop-opacity='0'/>"
+        "<stop offset='.22' stop-color='#7dd3fc' stop-opacity='.9'/>"
+        "<stop offset='.78' stop-color='#7dd3fc' stop-opacity='.9'/>"
+        "<stop offset='1' stop-color='#7dd3fc' stop-opacity='0'/>"
+        "</linearGradient>"
+        "</defs>"
+        "<circle cx='230' cy='230' r='228' fill='url(#g)'/>"
+        "<circle cx='230' cy='230' r='172' fill='none' stroke='#fff' stroke-opacity='.14'/>"
+        "<path d='M6 238 H70 l10 -16 l12 34 l14 -70 l12 52 l9 -14 H310 l9 14 l12 -52 l14 70 l12 -34 l10 16 H454' "
+        "fill='none' stroke='url(#l)' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/>"
+        "<g fill='#fff' fill-opacity='.30'>"
+        "<path transform='translate(74 116)' d='M0 -16 C9 -3 13 3 13 9 A13 13 0 0 1 -13 9 C-13 3 -9 -3 0 -16Z'/>"
+        "<path transform='translate(392 104) scale(.8)' d='M0 -16 C9 -3 13 3 13 9 A13 13 0 0 1 -13 9 C-13 3 -9 -3 0 -16Z'/>"
+        "<path transform='translate(380 356) scale(1.1)' d='M0 -16 C9 -3 13 3 13 9 A13 13 0 0 1 -13 9 C-13 3 -9 -3 0 -16Z'/>"
+        "<path transform='translate(84 346) scale(.7)' d='M0 -16 C9 -3 13 3 13 9 A13 13 0 0 1 -13 9 C-13 3 -9 -3 0 -16Z'/>"
+        "</g>"
+        "<g stroke='#fff' stroke-opacity='.38' stroke-width='2' stroke-linecap='round'>"
+        "<path d='M405 196h12M411 190v12'/>"
+        "<path d='M40 190h10M45 185v10'/>"
+        "<path d='M330 60h10M335 55v10'/>"
+        "<path d='M120 410h10M125 405v10'/>"
+        "</g>"
+        "<g fill='#fff' fill-opacity='.26'>"
+        "<circle cx='150' cy='70' r='2.5'/><circle cx='300' cy='400' r='2.5'/>"
+        "<circle cx='430' cy='300' r='2'/><circle cx='30' cy='280' r='2'/>"
+        "</g>"
+        "</svg>"
+    )
+    orbit_svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 460 460'>"
+        "<circle cx='230' cy='230' r='205' fill='none' stroke='#fff' stroke-opacity='.24' stroke-dasharray='3 9'/>"
+        "<circle cx='435' cy='230' r='6' fill='#7dd3fc' fill-opacity='.95'/>"
+        "<circle cx='127.5' cy='407.5' r='4' fill='#fff' fill-opacity='.7'/>"
+        "<circle cx='127.5' cy='52.5' r='5' fill='#38bdf8' fill-opacity='.9'/>"
+        "</svg>"
+    )
+
+    def _data_uri(mime, raw_bytes):
+        return f"data:{mime};base64," + base64.b64encode(raw_bytes).decode()
+
+    art_uri = _data_uri("image/svg+xml", art_svg.encode("utf-8"))
+    orbit_uri = _data_uri("image/svg+xml", orbit_svg.encode("utf-8"))
+
+    art_mask = ""
+    for _fname, _mime in (
+        ("auth_art.png", "image/png"),
+        ("auth_art.webp", "image/webp"),
+        ("auth_art.jpg", "image/jpeg"),
+        ("auth_art.jpeg", "image/jpeg"),
+        ("auth_art.svg", "image/svg+xml"),
+    ):
+        _found = None
+        for _dir in (BASE_DIR, "."):
+            _p = os.path.join(_dir, _fname)
+            if os.path.exists(_p):
+                _found = _p
+                break
+        if _found:
+            try:
+                with open(_found, "rb") as _f:
+                    art_uri = _data_uri(_mime, _f.read())
+                # fade the edges of a personal picture so it blends in
+                art_mask = (
+                    "opacity:.55;"
+                    "-webkit-mask-image:radial-gradient(circle, #000 50%, transparent 72%);"
+                    "mask-image:radial-gradient(circle, #000 50%, transparent 72%);"
+                )
+                break
+            except Exception:
+                pass
+
     st.markdown(
         f"""
-        <div class="hero">
-            <div class="pill">{pill}</div>
-            <h1>{title}</h1>
-            <p>{intro}</p>
-        </div>
+        <style>
+        /* ---------- page: blue backdrop ---------- */
+        .stApp {{
+            background: {backdrop} !important;
+        }}
+        header[data-testid="stHeader"] {{
+            background: transparent !important;
+        }}
+        .block-container {{
+            max-width: 1000px !important;
+            padding-top: 3.4rem !important;
+        }}
+
+        /* ---------- the card ---------- */
+        .st-key-auth_card {{
+            border-radius: 28px;
+            overflow: hidden;
+            padding: 0 !important;
+            border: 0 !important;
+            box-shadow: {card_shadow};
+            background:
+                linear-gradient(var(--surface), var(--surface)) {form_side} top / 50% 100% no-repeat,
+                linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px) 0 0 / 100% 38px repeat-y,
+                linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px) 0 0 / 38px 100% repeat-x,
+                radial-gradient(circle at 14% 8%, rgba(96,165,250,.45), transparent 42%),
+                radial-gradient(circle at 46% 100%, rgba(14,165,233,.40), transparent 46%),
+                linear-gradient(135deg, #020617 0%, #172554 55%, #075985 100%);
+            animation: authRise .55s cubic-bezier(.2,.8,.2,1) both;
+        }}
+        @keyframes authRise {{
+            from {{ opacity: 0; transform: translateY(14px); }}
+            to   {{ opacity: 1; transform: none; }}
+        }}
+        @keyframes authOrbit {{
+            to {{ transform: rotate(360deg); }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .st-key-auth_card {{ animation: none; }}
+            .auth-logo-circle::after {{ animation: none !important; }}
+        }}
+
+        [data-testid="stHorizontalBlock"]:has(.st-key-auth_left) {{
+            gap: 0 !important;
+        }}
+
+        @media (min-width: 641px) {{
+            [data-testid="stHorizontalBlock"]:has(.st-key-auth_left) {{
+                flex-wrap: nowrap !important;
+                align-items: stretch !important;
+            }}
+            [data-testid="stHorizontalBlock"]:has(.st-key-auth_left) > [data-testid="stColumn"] {{
+                flex: 1 1 0 !important;
+                width: 50% !important;
+                min-width: 0 !important;
+            }}
+            /* two-column rows inside the form (first/last name, Back/Sign up ...)
+               stay side by side */
+            .st-key-auth_right [data-testid="stHorizontalBlock"] {{
+                flex-wrap: nowrap !important;
+                gap: .8rem !important;
+            }}
+            .st-key-auth_right [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
+                flex: 1 1 0 !important;
+                min-width: 0 !important;
+            }}
+        }}
+
+        /* ---------- welcome panel (blue) ---------- */
+        .st-key-auth_left {{
+            min-height: 600px;
+            padding: 48px 36px;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }}
+        .st-key-auth_left [data-testid="stMarkdownContainer"] {{
+            width: 100%;
+        }}
+        .st-key-auth_left [data-testid="stMarkdownContainer"] p {{
+            margin: 0 !important;
+        }}
+        .stApp .st-key-auth_left,
+        .stApp .st-key-auth_left * {{
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }}
+        .auth-welcome {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            width: 100%;
+        }}
+        .auth-pill {{
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            margin: 0 0 22px;
+            border-radius: 999px;
+            background: rgba(255,255,255,.10);
+            border: 1px solid rgba(255,255,255,.22);
+            backdrop-filter: blur(6px);
+            font-size: .8rem;
+            font-weight: 650;
+            line-height: 1.2;
+        }}
+        .auth-welcome-title {{
+            font-size: 2.35rem;
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: {letter};
+            text-align: center;
+            margin: 0 0 14px;
+        }}
+        .auth-welcome-sub {{
+            font-size: .97rem;
+            line-height: 1.7;
+            text-align: center;
+            opacity: .9;
+            max-width: 330px;
+            margin: 0 auto 64px;
+        }}
+
+        /* ---------- logo + artwork behind it ---------- */
+        .auth-logo-circle {{
+            position: relative;
+            isolation: isolate;
+            width: 176px;
+            height: 176px;
+            flex: 0 0 176px;
+            border-radius: 50%;
+            overflow: visible;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #2563eb, #0ea5e9);
+            border: 3px solid rgba(255,255,255,.45);
+            box-shadow:
+                0 0 0 12px rgba(255,255,255,.07),
+                0 0 0 26px rgba(255,255,255,.04),
+                0 0 60px rgba(56,189,248,.45),
+                0 26px 60px rgba(2,6,23,.55);
+        }}
+        .auth-logo-circle::before,
+        .auth-logo-circle::after {{
+            content: "";
+            position: absolute;
+            inset: -140px;
+            z-index: -1;
+            pointer-events: none;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: contain;
+        }}
+        .auth-logo-circle::before {{
+            background-image: url("{art_uri}");
+            {art_mask}
+        }}
+        .auth-logo-circle::after {{
+            background-image: url("{orbit_uri}");
+            animation: authOrbit 90s linear infinite;
+        }}
+        .auth-logo-circle img {{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;   /* use "contain" if your logo gets cropped */
+            border-radius: 50%;
+        }}
+        .auth-logo-fallback {{ font-size: 80px; }}
+
+        /* ---------- form panel ---------- */
+        .st-key-auth_right {{
+            min-height: 600px;
+            padding: 48px 46px 32px;
+            justify-content: center;
+            gap: 1rem !important;
+        }}
+        .st-key-auth_right [data-testid="stMarkdownContainer"] p {{
+            margin: 0;
+        }}
+        .auth-form-title {{
+            font-size: 1.7rem;
+            font-weight: 800;
+            letter-spacing: {letter};
+            line-height: 1.25;
+            margin: 0 0 20px;
+            color: var(--text) !important;
+            text-align: {text_side};
+        }}
+        .auth-form-sub {{
+            font-size: .92rem;
+            line-height: 1.6;
+            margin: 0 0 6px;
+            color: var(--muted) !important;
+            text-align: {text_side};
+        }}
+        .auth-form-title:has(+ .auth-form-sub) {{
+            margin-bottom: 6px;
+        }}
+        .auth-sep {{
+            height: 1px;
+            background: var(--border);
+            margin: .4rem 0;
+        }}
+
+        /* the form itself: no extra frame inside the card */
+        .st-key-auth_right [data-testid="stForm"] {{
+            border: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            background: transparent !important;
+        }}
+        .st-key-auth_right [data-testid="stForm"] [data-testid="stVerticalBlock"] {{
+            gap: .9rem !important;
+        }}
+
+        /* ---------- inputs ---------- */
+        .stApp .st-key-auth_right div[data-baseweb="input"],
+        .stApp .st-key-auth_right div[data-baseweb="select"],
+        .stApp .st-key-auth_right [data-testid="stTextInputRootElement"] {{
+            min-height: 50px;
+            border-radius: 14px !important;
+        }}
+        .stApp .st-key-auth_right input {{
+            font-size: .95rem !important;
+            padding-top: 12px !important;
+            padding-bottom: 12px !important;
+        }}
+        .stApp .st-key-auth_right div[data-baseweb="input"]:focus-within,
+        .stApp .st-key-auth_right [data-testid="stTextInputRootElement"]:focus-within,
+        .stApp .st-key-auth_right div[data-baseweb="select"]:focus-within {{
+            border-color: #2563eb !important;
+            box-shadow: 0 0 0 4px rgba(37,99,235,.20) !important;
+        }}
+
+        /* ---------- buttons ---------- */
+        .stApp .st-key-auth_right button[kind="primary"],
+        .stApp .st-key-auth_right [data-testid="stBaseButton-primary"],
+        .stApp .st-key-auth_right [data-testid="stBaseButton-primaryFormSubmit"] {{
+            min-height: 52px !important;
+            border-radius: 14px !important;
+            border: 0 !important;
+            background: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%) !important;
+            box-shadow: 0 10px 26px rgba(37,99,235,.38) !important;
+            transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+        }}
+        .stApp .st-key-auth_right button[kind="primary"]:hover,
+        .stApp .st-key-auth_right [data-testid="stBaseButton-primary"]:hover,
+        .stApp .st-key-auth_right [data-testid="stBaseButton-primaryFormSubmit"]:hover {{
+            transform: translateY(-1px);
+            filter: brightness(1.06);
+            box-shadow: 0 14px 32px rgba(37,99,235,.48) !important;
+        }}
+        .stApp .st-key-auth_right button[kind="primary"] p,
+        .stApp .st-key-auth_right [data-testid="stBaseButton-primary"] p,
+        .stApp .st-key-auth_right [data-testid="stBaseButton-primaryFormSubmit"] p {{
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            font-weight: 750 !important;
+            text-decoration: none !important;
+        }}
+
+        .stApp .st-key-auth_right button[kind="secondary"],
+        .stApp .st-key-auth_right [data-testid="stBaseButton-secondary"] {{
+            min-height: 52px !important;
+            border-radius: 14px !important;
+            background: rgba(37,99,235,.07) !important;
+            border: 1px solid rgba(96,165,250,.45) !important;
+            box-shadow: none !important;
+            transition: background .15s ease, border-color .15s ease, transform .15s ease;
+        }}
+        .stApp .st-key-auth_right button[kind="secondary"]:hover,
+        .stApp .st-key-auth_right [data-testid="stBaseButton-secondary"]:hover {{
+            background: rgba(37,99,235,.15) !important;
+            border-color: #3b82f6 !important;
+            transform: translateY(-1px);
+        }}
+        .stApp .st-key-auth_right button[kind="secondary"] p,
+        .stApp .st-key-auth_right [data-testid="stBaseButton-secondary"] p {{
+            color: var(--text) !important;
+            -webkit-text-fill-color: var(--text) !important;
+            font-weight: 700 !important;
+            text-decoration: none !important;
+        }}
+
+        /* quiet text links: Back / Admin Panel (grey) and switch-page (blue).
+           Written after the secondary rules so they win. */
+        .stApp .st-key-auth_right [class*="st-key-auth_link"] button,
+        .stApp .st-key-auth_right [class*="st-key-auth_swap"] button,
+        .stApp .st-key-auth_right [class*="st-key-auth_"][class*="admin"] button {{
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            transform: none !important;
+            min-height: 38px !important;
+            width: auto !important;
+            padding: 0 12px !important;
+        }}
+        .stApp .st-key-auth_right [class*="st-key-auth_link"] button p,
+        .stApp .st-key-auth_right [class*="st-key-auth_swap"] button p,
+        .stApp .st-key-auth_right [class*="st-key-auth_"][class*="admin"] button p {{
+            text-decoration: none !important;
+            font-size: .9rem !important;
+        }}
+        .stApp .st-key-auth_right [class*="st-key-auth_link"] button p,
+        .stApp .st-key-auth_right [class*="st-key-auth_"][class*="admin"] button p {{
+            color: var(--muted) !important;
+            -webkit-text-fill-color: var(--muted) !important;
+            font-weight: 650 !important;
+        }}
+        .stApp .st-key-auth_right [class*="st-key-auth_swap"]:not([class*="admin"]) button p {{
+            color: #60a5fa !important;
+            -webkit-text-fill-color: #60a5fa !important;
+            font-weight: 750 !important;
+        }}
+        .stApp .st-key-auth_right [class*="st-key-auth_link"] button:hover,
+        .stApp .st-key-auth_right [class*="st-key-auth_swap"] button:hover,
+        .stApp .st-key-auth_right [class*="st-key-auth_"][class*="admin"] button:hover {{
+            background: rgba(37,99,235,.10) !important;
+            border-radius: 10px !important;
+        }}
+        .stApp .st-key-auth_right [class*="st-key-auth_link"] button:hover p,
+        .stApp .st-key-auth_right [class*="st-key-auth_"][class*="admin"] button:hover p {{
+            color: var(--text) !important;
+            -webkit-text-fill-color: var(--text) !important;
+        }}
+
+        /* links placed alone on a row (choice page): centred, with a little air above.
+           Links inside a two-column row: Back at the start, switch-page at the end. */
+        .st-key-auth_right > [class*="st-key-auth_link"],
+        .st-key-auth_right > [class*="st-key-auth_"][class*="admin"] {{
+            display: flex;
+            justify-content: center;
+        }}
+        .st-key-auth_right > [class*="st-key-auth_"][class*="admin"] {{
+            margin-top: .5rem;
+        }}
+        .st-key-auth_right [data-testid="stColumn"] [class*="st-key-auth_link"] {{
+            display: flex; justify-content: flex-start;
+        }}
+        .st-key-auth_right [data-testid="stColumn"] [class*="st-key-auth_swap"] {{
+            display: flex; justify-content: flex-end;
+        }}
+
+        .st-key-auth_right .support-card {{
+            background: transparent !important;
+            box-shadow: none !important;
+            border: 0 !important;
+            border-top: 1px solid var(--border) !important;
+            border-radius: 0 !important;
+            padding: 16px 0 4px !important;
+            margin: 8px 0 0 !important;
+            text-align: center !important;
+        }}
+
+        /* ---------- phones: welcome panel on top, form below ---------- */
+        @media (max-width: 640px) {{
+            .block-container {{ padding: 1.4rem .6rem 2rem !important; }}
+            .st-key-auth_card {{ background: var(--surface) !important; border-radius: 22px; }}
+            .st-key-auth_left {{
+                min-height: 0;
+                padding: 30px 18px;
+                background:
+                    radial-gradient(circle at 15% 0%, rgba(96,165,250,.42), transparent 45%),
+                    linear-gradient(135deg, #020617 0%, #172554 56%, #075985 100%);
+            }}
+            .auth-pill {{ margin-bottom: 14px; }}
+            .auth-welcome-title {{ font-size: 1.6rem; margin-bottom: 10px; }}
+            .auth-welcome-sub {{ margin-bottom: 40px; }}
+            .auth-logo-circle {{
+                width: 110px;
+                height: 110px;
+                flex-basis: 110px;
+                box-shadow: 0 0 0 8px rgba(255,255,255,.07), 0 18px 40px rgba(2,6,23,.5);
+            }}
+            .auth-logo-circle::before,
+            .auth-logo-circle::after {{ inset: -70px; }}
+            .st-key-auth_right {{ min-height: 0; padding: 26px 18px 22px; }}
+        }}
+        </style>
         """,
         unsafe_allow_html=True,
     )
 
 
+@contextmanager
+def auth_card(title: str, subtitle: str):
+    """Split card: purple welcome panel (title, subtitle, round logo) on one side,
+    and a form panel on the other. Everything written inside `with auth_card(...)`
+    goes into the form panel."""
+    inject_auth_css()
+    with st.container(key="auth_card"):
+        left, right = st.columns(2, gap="small")
+        with left:
+            with st.container(key="auth_left"):
+                st.markdown(
+                    f"""
+                    <div class="auth-welcome">
+                        <div class="auth-welcome-title">{title}</div>
+                        <div class="auth-welcome-sub">{subtitle}</div>
+                        <div class="auth-logo-circle">{_auth_logo_html()}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        with right:
+            with st.container(key="auth_right"):
+                yield
+
+
+def _form_title(text: str):
+    st.markdown(f'<div class="auth-form-title">{text}</div>', unsafe_allow_html=True)
+
+
+# Page 1: registered / new user / admin
 def render_auth_page():
-    """Registered user / new user / Admin Panel."""
-    _auth_hero(f"🔐 {tr('auth_pill')}", tr("auth_title"), tr("auth_intro"))
+    # Leaving the admin area (or coming back here) always locks it again.
+    st.session_state.pop("admin_ok", None)
 
-    if st.button(f"🔑 {tr('auth_registered')}", type="primary", use_container_width=True, key="auth_btn_login"):
-        go_to("login")
-    if st.button(f"✨ {tr('auth_new')}", use_container_width=True, key="auth_btn_register"):
-        go_to("register")
-    if st.button(f"🔒 {tr('admin')}", use_container_width=True, key="auth_btn_admin"):
-        go_to("admin")
-    if st.button(f"⬅️ {tr('back')}", use_container_width=True, key="auth_btn_back"):
-        go_to("language")
+    with auth_card(tr("welcome_title"), tr("auth_intro")):
+        _form_title(tr("auth_title"))
+
+        if st.button(f"🔑 {tr('auth_registered')}", type="primary",
+                     use_container_width=True, key="auth_btn_login"):
+            go_to("login")
+        if st.button(f"✨ {tr('auth_new')}", use_container_width=True, key="auth_btn_register"):
+            go_to("register")
+        if st.button(f"🔒 {tr('admin')}", use_container_width=True, key="auth_btn_admin"):
+            go_to("admin")
+        if st.button(f"⬅️ {tr('back')}", use_container_width=True, key="auth_link_back"):
+            go_to("language")
 
 
+# Page 2: sign in (registered user)
 def render_login_page():
-    """Registered user: email + password only, technical support below."""
-    _auth_hero(f"🔑 {tr('login_title')}", tr("login_title"), tr("login_intro"))
+    with auth_card(tr("welcome_back"), tr("welcome_back_sub")):
+        _form_title(tr("login_title"))
 
-    with st.form("login_form", clear_on_submit=False):
-        email = st.text_input(tr("auth_email"), key="login_email", max_chars=254)
-        password = st.text_input(tr("auth_password"), type="password", key="login_pw", max_chars=128)
-        submitted = st.form_submit_button(
-            f"🔑 {tr('login_button')}", type="primary", use_container_width=True
-        )
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input(
+                tr("auth_email"), key="login_email", max_chars=254,
+                placeholder=tr("auth_email"), label_visibility="collapsed",
+            )
+            password = st.text_input(
+                tr("auth_password"), type="password", key="login_pw", max_chars=128,
+                placeholder=tr("auth_password"), label_visibility="collapsed",
+            )
+            submitted = st.form_submit_button(
+                f"🔑 {tr('login_button')}", type="primary", use_container_width=True
+            )
 
-    if submitted:
-        if not email.strip() or not password:
-            st.error(tr("login_fill"))
-        else:
-            try:
-                user, status = authenticate(email, password)
-            except Exception:
-                user, status = None, "error"
-            if status == "ok":
-                st.session_state["user"] = user
-                go_to("main")
-            elif status == "locked":
-                st.error(tr("login_locked"))
-            elif status == "error":
-                st.error(tr("auth_db_error"))
+        if submitted:
+            if not email.strip() or not password:
+                st.error(tr("login_fill"))
             else:
-                st.error(tr("login_invalid"))
+                try:
+                    user, status = authenticate(email, password)
+                except Exception:
+                    user, status = None, "error"
+                if status == "ok":
+                    st.session_state["user"] = user
+                    go_to("main")
+                elif status == "locked":
+                    st.error(tr("login_locked"))
+                elif status == "error":
+                    st.error(tr("auth_db_error"))
+                else:
+                    st.error(tr("login_invalid"))
 
-    render_support_card()
+        if st.button(f"✨ {tr('auth_new')}", key="auth_link_register"):
+            go_to("register")
 
-    if st.button(f"⬅️ {tr('back')}", use_container_width=True, key="login_back"):
-        go_to("auth")
+        render_support_card()
+
+        if st.button(f"⬅️ {tr('back')}", key="auth_link_back_login"):
+            go_to("auth")
 
 
 def _build_birth_date(day, month, year):
@@ -2292,99 +2868,191 @@ def _build_birth_date(day, month, year):
     return born if date(1900, 1, 1) <= born < date.today() else None
 
 
+# Page 3: create an account (new user)
 def render_register_page():
-    """New user: names, email, date of birth, password + confirmation, and the
-    "no forgotten-password option" warning that must be ticked."""
-    _auth_hero(f"✨ {tr('auth_new')}", tr("reg_title"), tr("reg_intro"))
+    with auth_card(tr("welcome_new"), tr("welcome_new_sub")):
+        _form_title(tr("reg_title"))
 
-    this_year = date.today().year
-    with st.form("register_form", clear_on_submit=False):
-        c1, c2 = st.columns(2)
-        with c1:
-            first_name = st.text_input(f"{tr('first_name')} *", key="reg_first", max_chars=60)
-        with c2:
-            last_name = st.text_input(f"{tr('last_name')} *", key="reg_last", max_chars=60)
+        this_year = date.today().year
+        with st.form("register_form", clear_on_submit=False):
+            c1, c2 = st.columns(2)
+            with c1:
+                first_name = st.text_input(f"{tr('first_name')} *", key="reg_first", max_chars=60)
+            with c2:
+                last_name = st.text_input(f"{tr('last_name')} *", key="reg_last", max_chars=60)
 
-        email = st.text_input(f"{tr('auth_email')} *", key="reg_email", max_chars=254)
+            email = st.text_input(f"{tr('auth_email')} *", key="reg_email", max_chars=254)
 
-        st.markdown(
-            f'<div class="section-title" style="font-size:.95rem">🎂 {tr("dob")} *</div>',
-            unsafe_allow_html=True,
-        )
-        d1, d2, d3 = st.columns(3)
-        with d1:
-            day = st.selectbox(
-                tr("dob_day"), list(range(1, 32)), index=None,
-                placeholder=tr("dob_choose"), key="reg_day",
+            st.markdown(
+                f'<div class="section-title" style="font-size:.95rem">🎂 {tr("dob")} *</div>',
+                unsafe_allow_html=True,
             )
-        with d2:
-            month = st.selectbox(
-                tr("dob_month"), list(range(1, 13)), index=None,
-                placeholder=tr("dob_choose"), key="reg_month",
+            d1, d2, d3 = st.columns(3)
+            with d1:
+                day = st.selectbox(
+                    tr("dob_day"), list(range(1, 32)), index=None,
+                    placeholder=tr("dob_choose"), key="reg_day",
+                )
+            with d2:
+                month = st.selectbox(
+                    tr("dob_month"), list(range(1, 13)), index=None,
+                    placeholder=tr("dob_choose"), key="reg_month",
+                )
+            with d3:
+                year = st.selectbox(
+                    tr("dob_year"), list(range(this_year, 1899, -1)), index=None,
+                    placeholder=tr("dob_choose"), key="reg_year",
+                )
+
+            password = st.text_input(
+                f"{tr('auth_password')} *", type="password", key="reg_pw", max_chars=128
             )
-        with d3:
-            year = st.selectbox(
-                tr("dob_year"), list(range(this_year, 1899, -1)), index=None,
-                placeholder=tr("dob_choose"), key="reg_year",
+            password2 = st.text_input(
+                f"{tr('auth_confirm_password')} *", type="password", key="reg_pw2", max_chars=128
             )
 
-        password = st.text_input(f"{tr('auth_password')} *", type="password", key="reg_pw", max_chars=128)
-        password2 = st.text_input(
-            f"{tr('auth_confirm_password')} *", type="password", key="reg_pw2", max_chars=128
-        )
+            st.markdown(
+                f"""
+                <div class="notice">
+                    <strong>⚠️ {tr('reg_warn_title')}</strong><br>
+                    {tr('reg_warn_text')}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            accepted = st.checkbox(tr("reg_accept"), key="reg_accept")
 
-        st.markdown(
-            f"""
-            <div class="notice">
-                <strong>⚠️ {tr('reg_warn_title')}</strong><br>
-                {tr('reg_warn_text')}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        accepted = st.checkbox(tr("reg_accept"), key="reg_accept")
+            submitted = st.form_submit_button(
+                f"✨ {tr('reg_button')}", type="primary", use_container_width=True
+            )
 
-        submitted = st.form_submit_button(
-            f"✨ {tr('reg_button')}", type="primary", use_container_width=True
-        )
+        if submitted:
+            clean_first = first_name.strip()
+            clean_last = last_name.strip()
+            clean_email = normalize_email(email)
+            birth = _build_birth_date(day, month, year)
+            dob_chosen = day is not None and month is not None and year is not None
 
-    if submitted:
-        clean_first = first_name.strip()
-        clean_last = last_name.strip()
-        clean_email = normalize_email(email)
-        birth = _build_birth_date(day, month, year)
-        dob_chosen = day is not None and month is not None and year is not None
+            errors = []
+            if not (clean_first and clean_last and clean_email and dob_chosen and password and password2):
+                errors.append(tr("reg_fill_all"))
+            if clean_email and not EMAIL_REGEX.match(clean_email):
+                errors.append(tr("reg_email_invalid"))
+            if dob_chosen and birth is None:
+                errors.append(tr("reg_dob_invalid"))
+            if password and len(password) < MIN_PASSWORD_LEN:
+                errors.append(tr("reg_pw_short"))
+            if password and password2 and password != password2:
+                errors.append(tr("reg_pw_mismatch"))
+            if not accepted:
+                errors.append(tr("reg_accept_required"))
 
-        errors = []
-        if not (clean_first and clean_last and clean_email and dob_chosen and password and password2):
-            errors.append(tr("reg_fill_all"))
-        if clean_email and not EMAIL_REGEX.match(clean_email):
-            errors.append(tr("reg_email_invalid"))
-        if dob_chosen and birth is None:
-            errors.append(tr("reg_dob_invalid"))
-        if password and len(password) < MIN_PASSWORD_LEN:
-            errors.append(tr("reg_pw_short"))
-        if password and password2 and password != password2:
-            errors.append(tr("reg_pw_mismatch"))
-        if not accepted:
-            errors.append(tr("reg_accept_required"))
-
-        if errors:
-            for message in errors:
-                st.error(message)
-        else:
-            ok, error_key = create_user(clean_first, clean_last, clean_email, birth, password)
-            if ok:
-                user, _status = authenticate(clean_email, password)
-                st.session_state["user"] = user
-                go_to("main")
+            if errors:
+                for message in errors:
+                    st.error(message)
             else:
-                st.error(tr(error_key))
+                ok, error_key = create_user(clean_first, clean_last, clean_email, birth, password)
+                if ok:
+                    user, _status = authenticate(clean_email, password)
+                    st.session_state["user"] = user
+                    go_to("main")
+                else:
+                    st.error(tr(error_key))
 
-    render_support_card()
+        if st.button(f"🔑 {tr('auth_registered')}", key="auth_link_login"):
+            go_to("login")
 
-    if st.button(f"⬅️ {tr('back')}", use_container_width=True, key="register_back"):
-        go_to("auth")
+        render_support_card()
+
+        if st.button(f"⬅️ {tr('back')}", key="auth_link_back_register"):
+            go_to("auth")
+
+
+# Page 4: Admin Panel (password gate in the same card, then the dashboard)
+def _admin_password_ok(candidate: str) -> bool:
+    return hmac.compare_digest(candidate.encode("utf-8"), ADMIN_PASSWORD.encode("utf-8"))
+
+
+def render_admin_page():
+    # ---- 1) locked: password inside the split card ----
+    if not st.session_state.get("admin_ok"):
+        with auth_card(tr("admin_title"), tr("admin_help")):
+            _form_title(tr("admin_title"))
+
+            with st.form("admin_form", clear_on_submit=False):
+                admin_pw = st.text_input(
+                    tr("password"), type="password", key="admin_pw",
+                    placeholder=tr("password"), label_visibility="collapsed",
+                )
+                unlock = st.form_submit_button(
+                    f"🔓 {tr('login_button')}", type="primary", use_container_width=True
+                )
+
+            if unlock:
+                if _admin_password_ok(admin_pw):
+                    st.session_state["admin_ok"] = True
+                    st.rerun()
+                else:
+                    st.error(tr("incorrect"))
+        return
+
+    # ---- 2) unlocked: the dashboard (same as before) ----
+    st.markdown(
+        f"""
+        <div class="hero">
+            <div class="pill">🔒 {tr('admin_title')}</div>
+            <h1>{tr('admin_title')}</h1>
+            <p>{tr('admin_help')}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.success(tr("access"))
+
+    if os.path.exists(SAVE_FILE_XLSX):
+        try:
+            history_df = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
+            st.dataframe(history_df, use_container_width=True, hide_index=True)
+
+            col_download, col_clean = st.columns(2)
+
+            with col_download:
+                with open(SAVE_FILE_XLSX, "rb") as f:
+                    st.download_button(
+                        tr("download_excel"),
+                        data=f.read(),
+                        file_name=SAVE_FILE_XLSX,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
+
+            with col_clean:
+                if st.button(f"🗑️ {tr('clean')}", use_container_width=True):
+                    st.session_state["confirm_clean"] = True
+
+            if st.session_state.get("confirm_clean", False):
+                st.warning(tr("confirm"))
+                col_yes, col_no = st.columns(2)
+
+                with col_yes:
+                    if st.button(tr("delete"), type="primary", use_container_width=True):
+                        try:
+                            os.remove(SAVE_FILE_XLSX)
+                            st.session_state["confirm_clean"] = False
+                            st.success(tr("deleted"))
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(str(exc))
+
+                with col_no:
+                    if st.button(tr("cancel"), use_container_width=True):
+                        st.session_state["confirm_clean"] = False
+                        st.rerun()
+
+        except Exception as exc:
+            st.warning(f"{tr('read_failed')} {exc}")
+    else:
+        st.info(tr("no_records"))
 
 
 # =============================================================================
@@ -3665,71 +4333,8 @@ def render_main_app():
 # =============================================================================
 # Admin
 # =============================================================================
-
-def render_admin_page():
-    st.markdown(
-        f"""
-        <div class="hero">
-            <div class="pill">🔒 {tr('admin_title')}</div>
-            <h1>{tr('admin_title')}</h1>
-            <p>{tr('admin_help')}</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    admin_pw = st.text_input(tr("password"), type="password", key="admin_pw")
-
-    if admin_pw:
-        if admin_pw == ADMIN_PASSWORD:
-            st.success(tr("access"))
-
-            if os.path.exists(SAVE_FILE_XLSX):
-                try:
-                    history_df = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
-                    st.dataframe(history_df, use_container_width=True, hide_index=True)
-
-                    col_download, col_clean = st.columns(2)
-
-                    with col_download:
-                        with open(SAVE_FILE_XLSX, "rb") as f:
-                            st.download_button(
-                                tr("download_excel"),
-                                data=f.read(),
-                                file_name=SAVE_FILE_XLSX,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True,
-                            )
-
-                    with col_clean:
-                        if st.button(f"🗑️ {tr('clean')}", use_container_width=True):
-                            st.session_state["confirm_clean"] = True
-
-                    if st.session_state.get("confirm_clean", False):
-                        st.warning(tr("confirm"))
-                        col_yes, col_no = st.columns(2)
-
-                        with col_yes:
-                            if st.button(tr("delete"), type="primary", use_container_width=True):
-                                try:
-                                    os.remove(SAVE_FILE_XLSX)
-                                    st.session_state["confirm_clean"] = False
-                                    st.success(tr("deleted"))
-                                    st.rerun()
-                                except Exception as exc:
-                                    st.error(str(exc))
-
-                        with col_no:
-                            if st.button(tr("cancel"), use_container_width=True):
-                                st.session_state["confirm_clean"] = False
-                                st.rerun()
-
-                except Exception as exc:
-                    st.warning(f"{tr('read_failed')} {exc}")
-            else:
-                st.info(tr("no_records"))
-        else:
-            st.error(tr("incorrect"))
+# The Admin Panel page (render_admin_page) now lives in the "AUTH UI" block
+# above, because it shares the split-card design of the sign-in pages.
 
 
 # =============================================================================
