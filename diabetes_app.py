@@ -4462,4 +4462,450 @@ def render_main_app():
             with target_col:
                 if col == "Polyuria":
                     # "No", or "Yes" together with how many times a day the patient urinates.
-               
+                    freq_options = [tr("no")] + [f"{tr('yes')} - {tr(k)}" for k in POLYURIA_FREQ_KEYS]
+                    selected = st.selectbox(label, freq_options, key="core_polyuria_freq")
+                    if selected == freq_options[0]:
+                        symptom_values[col] = "No"
+                    else:
+                        symptom_values[col] = "Yes"
+                        freq_key = POLYURIA_FREQ_KEYS[freq_options.index(selected) - 1]
+                else:
+                    selected = st.selectbox(
+                        label,
+                        [tr("no"), tr("yes")],
+                        key=f"core_{col}",
+                    )
+                    symptom_values[col] = "Yes" if selected == tr("yes") else "No"
+
+        # ---------------------------------------------------- Additional symptoms
+        st.markdown("---")
+        st.markdown(f'<div class="section-title">{tr("additional")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-subtitle">{tr("optional")}</div>', unsafe_allow_html=True)
+
+        extra_values = {}
+        e_col1, e_col2 = st.columns(2)
+
+        for i, key in enumerate(extra_symptom_keys):
+            target_col = e_col1 if i % 2 == 0 else e_col2
+            with target_col:
+                selected = st.selectbox(
+                    tr(key),
+                    [tr("no"), tr("yes")],
+                    key=f"extra_{key}",
+                )
+                extra_values[key] = "Yes" if selected == tr("yes") else "No"
+
+        # Optional blood sugar / glucose reading (empty = not measured).
+        glu_col1, glu_col2 = st.columns([2, 1])
+        with glu_col1:
+            glucose_value = st.number_input(
+                tr("glucose_level"),
+                min_value=0.0,
+                max_value=1000.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                help=tr("glucose_help"),
+                key="glucose_value",
+            )
+        with glu_col2:
+            glucose_unit = st.selectbox(tr("glucose_unit"), GLUCOSE_UNITS, key="glucose_unit")
+
+        # ------------------------------- Questions that depend on the patient
+        # Pediatric questions for a child, the transgender questions for a
+        # transgender adult, otherwise the adult male / female questions.
+        gender_values = {}
+        if is_child:
+            gender_keys = child_question_keys(sex_at_birth)
+            gender_title = tr("child_section")
+            key_kind = f"child_{sex_at_birth}"
+        elif gender == "Transgender":
+            gender_keys = list(TRANS_SYMPTOM_KEYS)
+            gender_title = tr("trans_section")
+            key_kind = "trans"
+        else:
+            gender_keys = gender_question_keys(gender, ever_married)
+            gender_title = tr("male_section" if gender == "Male" else "female_section")
+            key_kind = f"adult_{gender}"
+
+        st.markdown("---")
+        st.markdown(f'<div class="section-title">{gender_title}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-subtitle">{tr("gender_section_help")}</div>', unsafe_allow_html=True)
+
+        g_col1, g_col2 = st.columns(2)
+        for i, key in enumerate(gender_keys):
+            target_col = g_col1 if i % 2 == 0 else g_col2
+            with target_col:
+                selected = st.selectbox(
+                    tr(key),
+                    [tr("no"), tr("yes")],
+                    key=f"gender_{key_kind}_{key}",
+                )
+                gender_values[key] = "Yes" if selected == tr("yes") else "No"
+
+        submitted = st.button(
+            f"{tr('predict')}",
+            use_container_width=True,
+            type="primary",
+            key="predict_btn",
+        )
+
+    if submitted:
+        clean_first_name = first_name.strip()
+        clean_last_name = last_name.strip()
+        clean_phone = phone.strip()
+        clean_address = address.strip()
+
+        errors = []
+        for value, label in [
+            (clean_first_name, tr("first_name")),
+            (clean_last_name, tr("last_name")),
+            (clean_phone, tr("phone")),
+            (clean_address, tr("address")),
+        ]:
+            if not value:
+                errors.append(f"{label} {tr('required')}")
+
+        # Glucose is optional; if it is filled in, it must be a realistic value.
+        glucose = None
+        if glucose_value:
+            low, high = GLUCOSE_RANGE[glucose_unit]
+            if low <= glucose_value <= high:
+                glucose = (float(glucose_value), glucose_unit)
+            else:
+                errors.append(tr("glucose_invalid"))
+
+        if errors:
+            st.error(tr("required_fields"))
+            for error in errors:
+                st.warning(error)
+        else:
+            # The model only knows Male / Female -> use the sex assigned at birth.
+            raw_input = {"Age": age, "Gender": sex_at_birth, **symptom_values}
+            result, probability = predict_new_patient(raw_input)
+
+            type_key = DIABETES_TYPE_KEYS[[tr(k) for k in DIABETES_TYPE_KEYS].index(diabetes_type)]
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+            report_args = dict(
+                timestamp=timestamp,
+                first=clean_first_name,
+                last=clean_last_name,
+                phone=clean_phone,
+                address=clean_address,
+                type_key=type_key,
+                age=age,
+                gender=gender,
+                result=result,
+                probability=probability,
+                symptom_values=symptom_values,
+                extra_values=extra_values,
+                gender_values=gender_values,
+                freq_key=freq_key,
+                marital_status_key=marital_status_key,
+                birth_sex=sex_at_birth,
+                glucose=glucose,
+            )
+
+            # Shown to the user (current language) ...
+            st.session_state["last_report"] = build_report(lang, **report_args)
+            # ... and the same record in English, so the admin Excel file stays consistent.
+            st.session_state["last_report_en"] = build_report("en", **report_args)
+
+            st.session_state["last_extra"] = any(v == "Yes" for v in extra_values.values())
+            st.session_state["last_symptoms"] = {
+                "core": [c for c in display_labels if symptom_values.get(c) == "Yes"],
+                "extra": [k for k in extra_symptom_keys if extra_values.get(k) == "Yes"],
+                "gender": [k for k, v in gender_values.items() if v == "Yes"],
+                "gender_kind": sex_at_birth if is_child else gender,
+                "is_child": is_child,
+                "freq": freq_key,
+            }
+            st.session_state["last_result"] = int(result)
+            st.session_state["last_probability"] = float(probability)
+            st.session_state["report_saved"] = False
+
+            components.html(
+                """
+                <script>
+                window.parent.scrollTo({top: 0, behavior: 'smooth'});
+                </script>
+                """,
+                height=0,
+            )
+
+    # Results
+    if st.session_state.get("last_report"):
+        report = st.session_state["last_report"]
+        report_en = st.session_state["last_report_en"]
+        result = st.session_state["last_result"]
+        probability = st.session_state["last_probability"]
+
+        st.markdown("---")
+        st.markdown(f'<div class="section-title">{tr("result")}</div>', unsafe_allow_html=True)
+
+        css_class = "result-high" if result == 1 else "result-low"
+        title = tr("high_risk") if result == 1 else tr("low_risk")
+
+        st.markdown(
+            f"""
+            <div class="result-card {css_class}">
+                <div class="result-label">{tr('result')}</div>
+                <div class="result-title">{'⚠️' if result == 1 else '✅'} {title}</div>
+                <div class="score">{probability * 100:.1f}%</div>
+                <div class="score-caption">{tr('probability')}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.progress(min(max(probability, 0.0), 1.0))
+
+        with st.expander(f"{tr('symptom_summary')}", expanded=True):
+            st.write(report.get("Symptom narrative", ""))
+
+        with st.expander(f"{tr('recommendation')}", expanded=True):
+            if result == 1:
+                st.warning(tr("high_recommendation"))
+            else:
+                st.success(tr("low_recommendation"))
+
+            if st.session_state.get("last_extra", False):
+                st.info(tr("extra_notice"))
+
+        render_offline_health_guide()
+
+        if not st.session_state.get("report_saved", False):
+            try:
+                save_report_to_excel(report_en)
+                st.session_state["report_saved"] = True
+            except Exception as exc:
+                st.warning(f"{tr('save_failed')} {exc}")
+
+        st.markdown("---")
+        st.markdown(f'<div class="section-title">{tr("download")}</div>', unsafe_allow_html=True)
+
+        # The report follows the app language. It is generated once per result
+        # (not on every rerun) and falls back to English only if the fonts for
+        # this language are unavailable.
+        pdf_lang = pick_pdf_language(lang)
+        pdf_report = report if pdf_lang == lang else report_en
+        pdf_symptoms = st.session_state.get("last_symptoms")
+        cache_key = (
+            pdf_lang,
+            int(result),
+            tuple(sorted((k, str(v)) for k, v in pdf_report.items())),
+            repr(pdf_symptoms) if pdf_symptoms else None,
+        )
+
+        if st.session_state.get("pdf_cache_key") != cache_key:
+            try:
+                pdf_bytes = generate_pdf_report(
+                    pdf_report, pdf_lang, is_high=(result == 1), symptoms=pdf_symptoms
+                )
+            except Exception:
+                if pdf_lang == "en":
+                    raise
+                pdf_lang = "en"
+                pdf_report = report_en
+                pdf_bytes = generate_pdf_report(
+                    pdf_report, "en", is_high=(result == 1), symptoms=pdf_symptoms
+                )
+            st.session_state["pdf_cache_key"] = cache_key
+            st.session_state["pdf_cache_data"] = pdf_bytes
+            st.session_state["pdf_cache_lang"] = pdf_lang
+
+        pdf_data = st.session_state["pdf_cache_data"]
+        pdf_lang = st.session_state["pdf_cache_lang"]
+
+        if pdf_lang != lang:
+            st.caption(tr("pdf_fallback"))
+
+        safe_name = re.sub(r'[\\/:*?"<>|\s]+', "_", f"{report['First name']}_{report['Last name']}")
+        file_name_pdf = f"Diabetes_Report_{safe_name}.pdf"
+
+        st.download_button(
+            label=f"{tr('download_pdf')}",
+            data=pdf_data,
+            file_name=file_name_pdf,
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True,
+        )
+
+        st.markdown(
+            f'<div class="notice">⚠️ {tr("medical_notice_long")}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+# =============================================================================
+# Admin
+# =============================================================================
+# The Admin Panel page (render_admin_page) now lives in the "AUTH UI" block
+# above, because it shares the split-card design of the sign-in pages.
+
+
+# =============================================================================
+# App router
+# =============================================================================
+
+# ENTER-NAV-START
+# JavaScript that makes the Enter key jump to the next field. It is added once to
+# the page itself (not to the small helper iframe), so it keeps working after reruns.
+_ENTER_NAV_JS = r"""
+(function () {
+  if (window.__ppEnterNav) return;
+  window.__ppEnterNav = true;
+
+  var SKIP = ['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'hidden', 'image', 'range', 'color'];
+  var BLOCK = '[data-testid="stElementContainer"], [data-testid="element-container"], .element-container';
+
+  function isField(inp) {
+    if (!inp || inp.tagName !== 'INPUT') return false;
+    var type = (inp.getAttribute('type') || 'text').toLowerCase();
+    if (SKIP.indexOf(type) !== -1) return false;
+    if (inp.disabled) return false;
+    return inp.offsetParent !== null;
+  }
+
+  // All fields of a card / form in the order the eye reads them:
+  // top to bottom, and inside one row left to right (right to left in Arabic).
+  function fieldsIn(scope) {
+    var list = Array.prototype.filter.call(scope.querySelectorAll('input'), isField);
+    var rtl = window.getComputedStyle(scope).direction === 'rtl';
+    var items = list.map(function (inp) {
+      var box = inp.closest(BLOCK) || inp;
+      var r = box.getBoundingClientRect();
+      return { el: inp, top: r.top, left: r.left };
+    });
+    items.sort(function (a, b) { return a.top - b.top; });
+    var rows = [], cur = null;
+    items.forEach(function (it) {
+      if (cur && Math.abs(it.top - cur.top) < 32) { cur.items.push(it); }
+      else { cur = { top: it.top, items: [it] }; rows.push(cur); }
+    });
+    var out = [];
+    rows.forEach(function (row) {
+      row.items.sort(function (a, b) { return rtl ? b.left - a.left : a.left - b.left; });
+      row.items.forEach(function (it) { out.push(it.el); });
+    });
+    return out;
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+    var el = e.target;
+    if (!isField(el)) return;
+
+    var scope = el.closest('[data-testid="stForm"]') ||
+                el.closest('.st-key-patient_card') ||
+                el.closest('[data-testid="stMainBlockContainer"]');
+    if (!scope) return;
+
+    var inForm = scope.getAttribute('data-testid') === 'stForm';
+    var predictBtn = function () { return scope.querySelector('.st-key-predict_btn button'); };
+    var fields = fieldsIn(scope);
+    var idx = fields.indexOf(el);
+    if (idx === -1) return;
+
+    var isLast = idx === fields.length - 1;
+    // Last field of a form: normal Enter (submits the form).
+    // Last field elsewhere with nothing to jump to: normal Enter.
+    if (isLast && (inForm || !predictBtn())) return;
+
+    function go() {
+      var next = fieldsIn(scope)[idx + 1];
+      if (next) {
+        next.focus();
+        try { next.select(); } catch (_) {}
+      } else {
+        var b = predictBtn();
+        if (b) b.focus();
+      }
+    }
+
+    if (el.closest('[data-baseweb="select"]')) {
+      // Drop-down field: let Enter pick the highlighted option first, then move on.
+      setTimeout(go, 90);
+    } else {
+      e.preventDefault();
+      e.stopPropagation();   // stops Streamlit from submitting the form on this Enter
+      go();
+    }
+  }, true);
+})();
+"""
+
+
+def inject_enter_navigation():
+    """Adds the Enter-key navigation script to the page (once)."""
+    import json
+
+    components.html(
+        "<script>(function(){"
+        "var d=window.parent.document;"
+        "if(d.getElementById('pp-enter-nav'))return;"
+        "var s=d.createElement('script');"
+        "s.id='pp-enter-nav';"
+        "s.text=" + json.dumps(_ENTER_NAV_JS) + ";"
+        "d.head.appendChild(s);"
+        "})();</script>",
+        height=0,
+    )
+# ENTER-NAV-END
+
+
+def render_footer():
+    inject_enter_navigation()
+    st.markdown(
+        f"""
+        <div class="footer">
+            {tr('brand')} · {tr('medical_notice')}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+inject_css()
+inject_hover_css()
+
+current_page = st.session_state["page"]
+
+if current_page == "splash":
+    render_splash()  # plays the animation, then opens the language gate
+    st.stop()
+
+if current_page == "language":
+    render_language_gate()  # "Continue" or "Change language"
+    render_footer()
+    st.stop()
+
+if current_page == "auth":
+    render_auth_page()  # registered / new user / Admin Panel
+    render_footer()
+    st.stop()
+
+if current_page == "login":
+    render_login_page()
+    render_footer()
+    st.stop()
+
+if current_page == "register":
+    render_register_page()
+    render_footer()
+    st.stop()
+
+# The patient form is only for signed-in users (the Admin Panel has its own password).
+if current_page != "admin" and not st.session_state.get("user"):
+    go_to("auth")
+
+render_header()
+
+if current_page == "admin":
+    render_admin_page()
+else:
+    render_main_app()
+
+render_footer()
