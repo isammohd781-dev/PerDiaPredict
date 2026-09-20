@@ -251,8 +251,9 @@ def inject_css():
         input, textarea { text-align: right; }
         """
         # Header in Arabic: the brand sits at the right edge (icon on the far
-        # right, both text lines right-aligned next to it) while the three
-        # buttons keep the same order on the left. On phones the brand stays on
+        # right, both text lines right-aligned next to it). The three buttons
+        # read from left to right as:  Restart | Day/Night | Admin Panel
+        # (the reverse of the other languages). On phones the brand stays on
         # the first row.
         rtl_css += f"""
         {HEADER} .brand-name,
@@ -260,6 +261,11 @@ def inject_css():
             direction: rtl;
             text-align: right !important;
         }}
+
+        /* Buttons, left -> right: restart (col 4), day/night (col 3), admin (col 2) */
+        {HEADER} > [data-testid="stColumn"]:nth-child(4) {{ order: 1 !important; }}
+        {HEADER} > [data-testid="stColumn"]:nth-child(3) {{ order: 2 !important; }}
+        {HEADER} > [data-testid="stColumn"]:nth-child(2) {{ order: 3 !important; }}
 
         @media (min-width: 641px) {{
             {HEADER} > [data-testid="stColumn"]:nth-child(1) {{
