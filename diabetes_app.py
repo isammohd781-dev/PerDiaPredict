@@ -1,11 +1,16 @@
 import base64
+import hashlib
+import hmac
 import os
 import re
+import secrets
 import shutil
+import sqlite3
 import tempfile
 import time
 import urllib.request
-from datetime import datetime
+from contextlib import closing
+from datetime import date, datetime, timedelta
 
 import joblib
 import pandas as pd
@@ -236,6 +241,42 @@ EXTRA_TEXT = {
         "diet_preference": "Diet preference",
         "diet_nonveg": "Non-vegetarian",
         "diet_veg": "Vegetarian",
+        "auth_pill": "Secure access",
+        "auth_title": "Sign in or create an account",
+        "auth_intro": "Are you already registered with us, or are you new? Choose an option to continue.",
+        "auth_registered": "I'm already registered",
+        "auth_new": "I'm a new user",
+        "login_title": "Sign in",
+        "login_intro": "Enter your email and password to continue.",
+        "auth_email": "Email address",
+        "auth_password": "Password",
+        "auth_confirm_password": "Confirm password",
+        "login_button": "Sign in",
+        "login_fill": "Please enter your email and password.",
+        "login_invalid": "Incorrect email or password.",
+        "login_locked": "Too many failed attempts. Please try again in a few minutes, or contact technical support.",
+        "support_title": "Technical support",
+        "support_text": "Need help or forgot your password? Contact us on WhatsApp:",
+        "reg_title": "Create your account",
+        "reg_intro": "Your information is protected and kept strictly confidential.",
+        "dob": "Date of birth",
+        "dob_day": "Day",
+        "dob_month": "Month",
+        "dob_year": "Year",
+        "dob_choose": "Choose",
+        "reg_warn_title": "Important warning",
+        "reg_warn_text": "There is no “Forgot password” option. We protect your data with complete confidentiality, so passwords cannot be viewed or recovered by anyone. If you forget your password, please contact technical support only. Make sure you will remember it before you confirm.",
+        "reg_accept": "I have read and understood this warning",
+        "reg_button": "Create account",
+        "reg_fill_all": "Please fill in all the required fields.",
+        "reg_email_invalid": "Please enter a valid email address.",
+        "reg_pw_short": "The password must be at least 8 characters long.",
+        "reg_pw_mismatch": "The passwords do not match.",
+        "reg_dob_invalid": "Please choose a valid date of birth.",
+        "reg_accept_required": "Please tick the box to confirm that you understood the warning.",
+        "auth_email_taken": "This email is already registered. Please sign in instead.",
+        "auth_db_error": "Could not save your account. Please try again or contact technical support.",
+        "logout": "Log out",
         "foods_items_veg": [
             "Non-starchy vegetables: leafy greens, broccoli, cauliflower, cucumber, tomatoes",
             "Legumes: lentils, chickpeas, beans, moong dal",
@@ -302,6 +343,42 @@ EXTRA_TEXT = {
         "diet_preference": "نوع النظام الغذائي",
         "diet_nonveg": "غير نباتي (يشمل اللحوم والأسماك)",
         "diet_veg": "نباتي",
+        "auth_pill": "دخول آمن",
+        "auth_title": "تسجيل الدخول أو إنشاء حساب",
+        "auth_intro": "هل أنت مسجّل لدينا أم مستخدم جديد؟ اختر أحد الخيارات للمتابعة.",
+        "auth_registered": "أنا مسجّل لديكم",
+        "auth_new": "أنا مستخدم جديد",
+        "login_title": "تسجيل الدخول",
+        "login_intro": "أدخل بريدك الإلكتروني وكلمة المرور للمتابعة.",
+        "auth_email": "البريد الإلكتروني",
+        "auth_password": "كلمة المرور",
+        "auth_confirm_password": "تأكيد كلمة المرور",
+        "login_button": "دخول",
+        "login_fill": "يرجى إدخال البريد الإلكتروني وكلمة المرور.",
+        "login_invalid": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+        "login_locked": "محاولات خاطئة كثيرة. حاول مجددًا بعد بضع دقائق، أو تواصل مع الدعم الفني.",
+        "support_title": "الدعم الفني",
+        "support_text": "تحتاج مساعدة أو نسيت كلمة المرور؟ تواصل معنا عبر واتساب:",
+        "reg_title": "إنشاء حساب جديد",
+        "reg_intro": "بياناتك محمية وتُحفظ بسرية تامة.",
+        "dob": "تاريخ الميلاد",
+        "dob_day": "اليوم",
+        "dob_month": "الشهر",
+        "dob_year": "السنة",
+        "dob_choose": "اختر",
+        "reg_warn_title": "تحذير مهم",
+        "reg_warn_text": "لا يوجد خيار «نسيت كلمة المرور»، لأننا نحمي بياناتكم بسرية تامة ولا يمكن لأي أحد الاطلاع على كلمات المرور أو استرجاعها. في حال نسيان كلمة المرور، يرجى التواصل مع الدعم الفني فقط. تأكد من حفظ كلمة المرور قبل التأكيد.",
+        "reg_accept": "قرأتُ التحذير وفهمته",
+        "reg_button": "إنشاء الحساب",
+        "reg_fill_all": "يرجى تعبئة جميع الحقول المطلوبة.",
+        "reg_email_invalid": "يرجى إدخال بريد إلكتروني صحيح.",
+        "reg_pw_short": "يجب ألا تقل كلمة المرور عن 8 أحرف.",
+        "reg_pw_mismatch": "كلمتا المرور غير متطابقتين.",
+        "reg_dob_invalid": "يرجى اختيار تاريخ ميلاد صحيح.",
+        "reg_accept_required": "يرجى تحديد المربع لتأكيد أنك فهمت التحذير.",
+        "auth_email_taken": "هذا البريد الإلكتروني مسجّل مسبقًا. يرجى تسجيل الدخول بدلًا من ذلك.",
+        "auth_db_error": "تعذّر حفظ الحساب. حاول مرة أخرى أو تواصل مع الدعم الفني.",
+        "logout": "تسجيل الخروج",
         "foods_items_veg": [
             "خضروات غير نشوية: ورقيات، بروكلي، قرنبيط، خيار، طماطم",
             "البقوليات: عدس، حمص، فاصوليا، فول",
@@ -368,6 +445,42 @@ EXTRA_TEXT = {
         "diet_preference": "Preferencia alimentaria",
         "diet_nonveg": "No vegetariano",
         "diet_veg": "Vegetariano",
+        "auth_pill": "Acceso seguro",
+        "auth_title": "Inicia sesión o crea una cuenta",
+        "auth_intro": "¿Ya estás registrado con nosotros o eres un usuario nuevo? Elige una opción para continuar.",
+        "auth_registered": "Ya estoy registrado",
+        "auth_new": "Soy un usuario nuevo",
+        "login_title": "Iniciar sesión",
+        "login_intro": "Introduce tu correo electrónico y tu contraseña para continuar.",
+        "auth_email": "Correo electrónico",
+        "auth_password": "Contraseña",
+        "auth_confirm_password": "Confirmar contraseña",
+        "login_button": "Entrar",
+        "login_fill": "Introduce tu correo electrónico y tu contraseña.",
+        "login_invalid": "Correo electrónico o contraseña incorrectos.",
+        "login_locked": "Demasiados intentos fallidos. Inténtalo de nuevo en unos minutos o contacta con el soporte técnico.",
+        "support_title": "Soporte técnico",
+        "support_text": "¿Necesitas ayuda u olvidaste tu contraseña? Escríbenos por WhatsApp:",
+        "reg_title": "Crea tu cuenta",
+        "reg_intro": "Tu información está protegida y se mantiene en estricta confidencialidad.",
+        "dob": "Fecha de nacimiento",
+        "dob_day": "Día",
+        "dob_month": "Mes",
+        "dob_year": "Año",
+        "dob_choose": "Elegir",
+        "reg_warn_title": "Advertencia importante",
+        "reg_warn_text": "No existe la opción «Olvidé mi contraseña». Protegemos tus datos con total confidencialidad, por lo que nadie puede ver ni recuperar las contraseñas. Si olvidas tu contraseña, contacta únicamente con el soporte técnico. Asegúrate de recordarla antes de confirmar.",
+        "reg_accept": "He leído y entendido esta advertencia",
+        "reg_button": "Crear cuenta",
+        "reg_fill_all": "Completa todos los campos obligatorios.",
+        "reg_email_invalid": "Introduce un correo electrónico válido.",
+        "reg_pw_short": "La contraseña debe tener al menos 8 caracteres.",
+        "reg_pw_mismatch": "Las contraseñas no coinciden.",
+        "reg_dob_invalid": "Elige una fecha de nacimiento válida.",
+        "reg_accept_required": "Marca la casilla para confirmar que entendiste la advertencia.",
+        "auth_email_taken": "Este correo ya está registrado. Inicia sesión en su lugar.",
+        "auth_db_error": "No se pudo guardar la cuenta. Inténtalo de nuevo o contacta con el soporte técnico.",
+        "logout": "Cerrar sesión",
         "foods_items_veg": [
             "Verduras sin almidón: hojas verdes, brócoli, coliflor, pepino, tomate",
             "Legumbres: lentejas, garbanzos, frijoles, dal de moong",
@@ -469,6 +582,139 @@ GLUCOSE_RANGE = {"mg/dL": (20.0, 1000.0), "mmol/L": (1.1, 55.0)}
 
 
 # =============================================================================
+# Accounts database  (one SQLite file: perdiapredict.db)
+# =============================================================================
+# The file holds every registered user: first / last name, email, date of birth,
+# password, creation date, last login. The password is NEVER stored as readable
+# text: only a salted PBKDF2-SHA256 hash is saved. Nobody - not the admin, not
+# the technical support, not someone who copies the file - can read a password.
+# That is also why there is no "forgot password": support can only set a new one.
+# ACCOUNTS-DB-START
+DB_FILE = "perdiapredict.db"
+PBKDF2_ITERATIONS = 260_000
+MIN_PASSWORD_LEN = 8
+MAX_FAILED_LOGINS = 5      # wrong passwords in a row ...
+LOCK_MINUTES = 5           # ... lock that account for this many minutes
+SUPPORT_WHATSAPP_NUMBER = "+256771715275"
+SUPPORT_WHATSAPP_URL = "https://wa.me/256771715275"
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+USERS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS users (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    first_name      TEXT    NOT NULL,
+    last_name       TEXT    NOT NULL,
+    email           TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    birth_date      TEXT    NOT NULL,
+    password_hash   TEXT    NOT NULL,
+    created_at      TEXT    NOT NULL,
+    last_login      TEXT,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until    TEXT
+)
+"""
+
+
+def _db():
+    conn = sqlite3.connect(DB_FILE, timeout=15)
+    conn.row_factory = sqlite3.Row
+    conn.execute(USERS_TABLE_SQL)
+    return conn
+
+
+def normalize_email(email: str) -> str:
+    return (email or "").strip().lower()
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERATIONS)
+    return f"pbkdf2_sha256${PBKDF2_ITERATIONS}${salt.hex()}${digest.hex()}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    try:
+        _algo, iterations, salt_hex, hash_hex = stored.split("$")
+        digest = hashlib.pbkdf2_hmac(
+            "sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), int(iterations)
+        )
+        return hmac.compare_digest(digest.hex(), hash_hex)
+    except Exception:
+        return False
+
+
+def create_user(first_name: str, last_name: str, email: str, birth_date: date, password: str):
+    """Save a new account. Returns (True, None) or (False, translation_key_of_the_error)."""
+    now = datetime.now().isoformat(timespec="seconds")
+    try:
+        with closing(_db()) as conn, conn:
+            conn.execute(
+                "INSERT INTO users (first_name, last_name, email, birth_date, password_hash, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    first_name.strip(),
+                    last_name.strip(),
+                    normalize_email(email),
+                    birth_date.isoformat(),
+                    hash_password(password),
+                    now,
+                ),
+            )
+        return True, None
+    except sqlite3.IntegrityError:
+        return False, "auth_email_taken"
+    except Exception:
+        return False, "auth_db_error"
+
+
+def authenticate(email: str, password: str):
+    """Check an email + password. Returns (user_dict_or_None, status) where status is
+    "ok", "invalid" or "locked" (too many wrong passwords in a row)."""
+    email = normalize_email(email)
+    now = datetime.now()
+    with closing(_db()) as conn:
+        row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        if row is None:
+            return None, "invalid"
+
+        if row["locked_until"]:
+            try:
+                if datetime.fromisoformat(row["locked_until"]) > now:
+                    return None, "locked"
+            except ValueError:
+                pass
+
+        if verify_password(password, row["password_hash"]):
+            conn.execute(
+                "UPDATE users SET failed_attempts = 0, locked_until = NULL, last_login = ? WHERE id = ?",
+                (now.isoformat(timespec="seconds"), row["id"]),
+            )
+            conn.commit()
+            user = {
+                "id": row["id"],
+                "first_name": row["first_name"],
+                "last_name": row["last_name"],
+                "email": row["email"],
+            }
+            return user, "ok"
+
+        attempts = (row["failed_attempts"] or 0) + 1
+        locked_until = None
+        status = "invalid"
+        if attempts >= MAX_FAILED_LOGINS:
+            locked_until = (now + timedelta(minutes=LOCK_MINUTES)).isoformat(timespec="seconds")
+            attempts = 0
+            status = "locked"
+        conn.execute(
+            "UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?",
+            (attempts, locked_until, row["id"]),
+        )
+        conn.commit()
+        return None, status
+# ACCOUNTS-DB-END
+
+
+# =============================================================================
 # Responsive / modern UI
 # =============================================================================
 
@@ -558,11 +804,11 @@ def inject_css():
             text-align: right;
         }
         .hero, .brand, .section-card, .result-card, .status-card, .notice,
-        .section-title, .section-subtitle, .footer {
+        .section-title, .section-subtitle, .footer, .support-card {
             direction: rtl;
         }
         .hero, .section-card, .result-card, .status-card, .notice,
-        .section-title, .section-subtitle {
+        .section-title, .section-subtitle, .support-card {
             text-align: right;
         }
         .footer { text-align: center; }
@@ -1003,6 +1249,50 @@ def inject_css():
             font-size:.84rem;
             line-height:1.55;
             margin:12px 0;
+        }}
+
+        /* Technical-support card (WhatsApp) */
+        .support-card {{
+            background: var(--surface) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 18px;
+            padding: 16px 18px;
+            margin: 16px 0;
+            box-shadow: var(--shadow);
+        }}
+
+        .support-title {{
+            font-weight: 800;
+            color: var(--text) !important;
+            margin-bottom: 2px;
+        }}
+
+        .support-text {{
+            color: var(--muted) !important;
+            font-size: .86rem;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }}
+
+        .support-card a.support-link,
+        .support-card a.support-link * {{
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-decoration: none !important;
+        }}
+
+        .support-card a.support-link {{
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 14px;
+            background: #16a34a;
+            font-weight: 800;
+        }}
+
+        .support-card a.support-link:hover {{
+            background: #15803d;
         }}
 
         .footer {{
@@ -1609,7 +1899,7 @@ def go_to(page_name: str):
     st.rerun()
 
 
-def restart_app(new_lang: str):
+def restart_app(new_lang: str, page: str = "splash"):
     """Restart the app from the beginning (splash screen) in a new language."""
     keep_dark = st.session_state.get("dark_mode", True)
 
@@ -1618,7 +1908,7 @@ def restart_app(new_lang: str):
 
     st.session_state["lang"] = new_lang if new_lang in LANGUAGES else "en"
     st.session_state["dark_mode"] = keep_dark
-    st.session_state["page"] = "splash"
+    st.session_state["page"] = page
 
     # Remember the language in the URL so a browser refresh keeps it.
     try:
@@ -1797,7 +2087,7 @@ def render_language_gate():
                 use_container_width=True,
                 key="gate_continue",
             ):
-                go_to("main")
+                go_to("auth")
 
         with col_change:
             if st.button(
@@ -1840,7 +2130,7 @@ def render_language_gate():
 # =============================================================================
 
 def render_header():
-    """Header bar:  brand | Admin Panel | day/night button | restart button.
+    """Header bar:  brand | Log out (Back on the admin page) | day/night button | restart button.
 
     All the styling (alignment, sizes, mobile layout) lives in inject_css().
     The order of the three buttons is the same in every language; in Arabic the
@@ -1883,12 +2173,13 @@ def render_header():
             restart_app(st.session_state["lang"])
 
     with admin_col:
+        # (The Admin Panel is now opened from the sign-in choice page.)
         if st.session_state["page"] == "admin":
-            if st.button(f"⬅️ {tr('back')}", use_container_width=True):
-                go_to("main")
+            if st.button(f"⬅️ {tr('back')}", key="admin_back", use_container_width=True):
+                go_to("auth")
         else:
-            if st.button(f"🔒 {tr('admin')}", use_container_width=True):
-                go_to("admin")
+            if st.button(f"🚪 {tr('logout')}", key="logout_btn", use_container_width=True):
+                logout()
 
     with theme_col:
         # Shows the mode you will switch TO (sun while dark, moon while light).
@@ -1900,6 +2191,200 @@ def render_header():
             use_container_width=True,
             on_click=_toggle_theme,
         )
+
+
+# =============================================================================
+# Sign-in choice / login / registration pages
+# Flow: language gate -> auth (registered / new / admin) -> login or register -> main
+# =============================================================================
+
+def logout():
+    """Sign out. Everything typed in the patient form is cleared too, then the
+    sign-in choice page is shown again (language and theme are kept)."""
+    restart_app(st.session_state.get("lang", "en"), page="auth")
+
+
+def render_support_card():
+    st.markdown(
+        f"""
+        <div class="support-card">
+            <div class="support-title">🛟 {tr('support_title')}</div>
+            <div class="support-text">{tr('support_text')}</div>
+            <a class="support-link" href="{SUPPORT_WHATSAPP_URL}" target="_blank" rel="noopener noreferrer">
+                💬 WhatsApp <span dir="ltr">{SUPPORT_WHATSAPP_NUMBER}</span>
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _auth_hero(pill: str, title: str, intro: str):
+    st.markdown(
+        f"""
+        <div class="hero">
+            <div class="pill">{pill}</div>
+            <h1>{title}</h1>
+            <p>{intro}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_auth_page():
+    """Registered user / new user / Admin Panel."""
+    _auth_hero(f"🔐 {tr('auth_pill')}", tr("auth_title"), tr("auth_intro"))
+
+    if st.button(f"🔑 {tr('auth_registered')}", type="primary", use_container_width=True, key="auth_btn_login"):
+        go_to("login")
+    if st.button(f"✨ {tr('auth_new')}", use_container_width=True, key="auth_btn_register"):
+        go_to("register")
+    if st.button(f"🔒 {tr('admin')}", use_container_width=True, key="auth_btn_admin"):
+        go_to("admin")
+    if st.button(f"⬅️ {tr('back')}", use_container_width=True, key="auth_btn_back"):
+        go_to("language")
+
+
+def render_login_page():
+    """Registered user: email + password only, technical support below."""
+    _auth_hero(f"🔑 {tr('login_title')}", tr("login_title"), tr("login_intro"))
+
+    with st.form("login_form", clear_on_submit=False):
+        email = st.text_input(tr("auth_email"), key="login_email", max_chars=254)
+        password = st.text_input(tr("auth_password"), type="password", key="login_pw", max_chars=128)
+        submitted = st.form_submit_button(
+            f"🔑 {tr('login_button')}", type="primary", use_container_width=True
+        )
+
+    if submitted:
+        if not email.strip() or not password:
+            st.error(tr("login_fill"))
+        else:
+            try:
+                user, status = authenticate(email, password)
+            except Exception:
+                user, status = None, "error"
+            if status == "ok":
+                st.session_state["user"] = user
+                go_to("main")
+            elif status == "locked":
+                st.error(tr("login_locked"))
+            elif status == "error":
+                st.error(tr("auth_db_error"))
+            else:
+                st.error(tr("login_invalid"))
+
+    render_support_card()
+
+    if st.button(f"⬅️ {tr('back')}", use_container_width=True, key="login_back"):
+        go_to("auth")
+
+
+def _build_birth_date(day, month, year):
+    """A real, past date - or None."""
+    if day is None or month is None or year is None:
+        return None
+    try:
+        born = date(int(year), int(month), int(day))
+    except ValueError:
+        return None
+    return born if date(1900, 1, 1) <= born < date.today() else None
+
+
+def render_register_page():
+    """New user: names, email, date of birth, password + confirmation, and the
+    "no forgotten-password option" warning that must be ticked."""
+    _auth_hero(f"✨ {tr('auth_new')}", tr("reg_title"), tr("reg_intro"))
+
+    this_year = date.today().year
+    with st.form("register_form", clear_on_submit=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            first_name = st.text_input(f"{tr('first_name')} *", key="reg_first", max_chars=60)
+        with c2:
+            last_name = st.text_input(f"{tr('last_name')} *", key="reg_last", max_chars=60)
+
+        email = st.text_input(f"{tr('auth_email')} *", key="reg_email", max_chars=254)
+
+        st.markdown(
+            f'<div class="section-title" style="font-size:.95rem">🎂 {tr("dob")} *</div>',
+            unsafe_allow_html=True,
+        )
+        d1, d2, d3 = st.columns(3)
+        with d1:
+            day = st.selectbox(
+                tr("dob_day"), list(range(1, 32)), index=None,
+                placeholder=tr("dob_choose"), key="reg_day",
+            )
+        with d2:
+            month = st.selectbox(
+                tr("dob_month"), list(range(1, 13)), index=None,
+                placeholder=tr("dob_choose"), key="reg_month",
+            )
+        with d3:
+            year = st.selectbox(
+                tr("dob_year"), list(range(this_year, 1899, -1)), index=None,
+                placeholder=tr("dob_choose"), key="reg_year",
+            )
+
+        password = st.text_input(f"{tr('auth_password')} *", type="password", key="reg_pw", max_chars=128)
+        password2 = st.text_input(
+            f"{tr('auth_confirm_password')} *", type="password", key="reg_pw2", max_chars=128
+        )
+
+        st.markdown(
+            f"""
+            <div class="notice">
+                <strong>⚠️ {tr('reg_warn_title')}</strong><br>
+                {tr('reg_warn_text')}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        accepted = st.checkbox(tr("reg_accept"), key="reg_accept")
+
+        submitted = st.form_submit_button(
+            f"✨ {tr('reg_button')}", type="primary", use_container_width=True
+        )
+
+    if submitted:
+        clean_first = first_name.strip()
+        clean_last = last_name.strip()
+        clean_email = normalize_email(email)
+        birth = _build_birth_date(day, month, year)
+        dob_chosen = day is not None and month is not None and year is not None
+
+        errors = []
+        if not (clean_first and clean_last and clean_email and dob_chosen and password and password2):
+            errors.append(tr("reg_fill_all"))
+        if clean_email and not EMAIL_REGEX.match(clean_email):
+            errors.append(tr("reg_email_invalid"))
+        if dob_chosen and birth is None:
+            errors.append(tr("reg_dob_invalid"))
+        if password and len(password) < MIN_PASSWORD_LEN:
+            errors.append(tr("reg_pw_short"))
+        if password and password2 and password != password2:
+            errors.append(tr("reg_pw_mismatch"))
+        if not accepted:
+            errors.append(tr("reg_accept_required"))
+
+        if errors:
+            for message in errors:
+                st.error(message)
+        else:
+            ok, error_key = create_user(clean_first, clean_last, clean_email, birth, password)
+            if ok:
+                user, _status = authenticate(clean_email, password)
+                st.session_state["user"] = user
+                go_to("main")
+            else:
+                st.error(tr(error_key))
+
+    render_support_card()
+
+    if st.button(f"⬅️ {tr('back')}", use_container_width=True, key="register_back"):
+        go_to("auth")
 
 
 # =============================================================================
@@ -3274,6 +3759,25 @@ if current_page == "language":
     render_language_gate()  # "Continue" or "Change language"
     render_footer()
     st.stop()
+
+if current_page == "auth":
+    render_auth_page()  # registered / new user / Admin Panel
+    render_footer()
+    st.stop()
+
+if current_page == "login":
+    render_login_page()
+    render_footer()
+    st.stop()
+
+if current_page == "register":
+    render_register_page()
+    render_footer()
+    st.stop()
+
+# The patient form is only for signed-in users (the Admin Panel has its own password).
+if current_page != "admin" and not st.session_state.get("user"):
+    go_to("auth")
 
 render_header()
 
