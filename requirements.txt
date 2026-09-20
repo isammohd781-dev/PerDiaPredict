@@ -18,3 +18,6 @@ uharfbuzz
 
 # ---- Only needed if you run train_model.py locally (not needed on Render) ----
 # matplotlib
+
+apply_blue_ui
+apply_excel_accounts
