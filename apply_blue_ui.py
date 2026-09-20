@@ -1,23 +1,36 @@
 """
-apply_blue_ui_v2.py  -  تحديث التصميم: مسافات ونصوص مرتبة + صورة شفافة خلف الشعار.
+apply_blue_ui.py  -  تحديث التصميم (الإصدار 1):
+  1) عنوان "Sign in or create an account" في المنتصف
+  2) الشعار والحركة في منتصف اللوحة تمامًا وكلمة Welcome مرفوعة للأعلى
+  3) لون أزرق فاتح عند تمرير الماوس على الأزرار (كل الصفحات وكل اللغات)
 
 الاستخدام (ضعه بجانب diabetes_app.py ثم شغّله):
-    python apply_blue_ui_v2.py
+    python apply_blue_ui.py
 
-- يحفظ نسخة احتياطية: diabetes_app.py.bak2
-- يستبدل دالة inject_auth_css() فقط ولا يلمس أي شيء آخر.
+- يحفظ نسخة احتياطية: diabetes_app.py.bak3
+- يعدّل ثلاثة أماكن فقط: دالة inject_auth_css، وإضافة دالة inject_hover_css، واستدعاؤها.
+- يمكن تشغيله أكثر من مرة بدون مشاكل.
 """
+import re
 import shutil
 import sys
 
 APP_FILE = "diabetes_app.py"
 
-NEW_FUNC = r'''def inject_auth_css():
+# كم بكسل تُنزل الشعار والحركة عن منتصف اللوحة (زِد الرقم لتنزل أكثر، أو قلّله لترتفع)
+LOGO_OFFSET_PX = 30
+
+NEW_AUTH = r'''def inject_auth_css():
     is_dark = st.session_state.get("dark_mode", True)
     rtl = is_rtl()
     no_spacing = rtl or st.session_state.get("lang", "en") in SPACING_OFF_LANGS
     letter = "0" if no_spacing else "-.02em"
-    text_side = "right" if rtl else "left"
+
+    # Light-blue hover colours (buttons light up in sky blue under the mouse).
+    if is_dark:
+        h_bg, h_border, h_text, h_glow = "rgba(56,189,248,.16)", "#38bdf8", "#bae6fd", "rgba(56,189,248,.30)"
+    else:
+        h_bg, h_border, h_text, h_glow = "rgba(14,165,233,.13)", "#0ea5e9", "#075985", "rgba(14,165,233,.30)"
 
     # The form half sits on the right; in right-to-left languages it flips.
     form_side = "left" if rtl else "right"
@@ -193,13 +206,22 @@ NEW_FUNC = r'''def inject_auth_css():
             }}
         }}
 
-        /* ---------- welcome panel (blue) ---------- */
+        /* ---------- welcome panel (blue) ----------
+           Text sits near the top; the logo (and its artwork) is pinned to the
+           exact centre of the panel, so it lines up with the middle of the form. */
         .st-key-auth_left {{
-            min-height: 600px;
-            padding: 48px 36px;
-            justify-content: center;
+            position: relative;
+            min-height: 660px;
+            padding: 56px 36px 0 !important;
+            justify-content: flex-start;
             align-items: center;
             text-align: center;
+        }}
+        .st-key-auth_left [data-testid="stElementContainer"],
+        .st-key-auth_left [data-testid="stMarkdown"],
+        .st-key-auth_left [data-testid="stMarkdownContainer"],
+        .auth-welcome {{
+            position: static !important;
         }}
         .st-key-auth_left [data-testid="stMarkdownContainer"] {{
             width: 100%;
@@ -248,12 +270,15 @@ NEW_FUNC = r'''def inject_auth_css():
             text-align: center;
             opacity: .9;
             max-width: 330px;
-            margin: 0 auto 64px;
+            margin: 0 auto;
         }}
 
         /* ---------- logo + artwork behind it ---------- */
         .auth-logo-circle {{
-            position: relative;
+            position: absolute;
+            top: calc(50% + @@OFFSET@@px);
+            left: 50%;
+            transform: translate(-50%, -50%);
             isolation: isolate;
             width: 176px;
             height: 176px;
@@ -275,7 +300,7 @@ NEW_FUNC = r'''def inject_auth_css():
         .auth-logo-circle::after {{
             content: "";
             position: absolute;
-            inset: -140px;
+            inset: -112px;
             z-index: -1;
             pointer-events: none;
             background-position: center;
@@ -300,7 +325,7 @@ NEW_FUNC = r'''def inject_auth_css():
 
         /* ---------- form panel ---------- */
         .st-key-auth_right {{
-            min-height: 600px;
+            min-height: 660px;
             padding: 48px 46px 32px;
             justify-content: center;
             gap: 1rem !important;
@@ -315,14 +340,14 @@ NEW_FUNC = r'''def inject_auth_css():
             line-height: 1.25;
             margin: 0 0 20px;
             color: var(--text) !important;
-            text-align: {text_side};
+            text-align: center;
         }}
         .auth-form-sub {{
             font-size: .92rem;
             line-height: 1.6;
             margin: 0 0 6px;
             color: var(--muted) !important;
-            text-align: {text_side};
+            text-align: center;
         }}
         .auth-form-title:has(+ .auth-form-sub) {{
             margin-bottom: 6px;
@@ -401,9 +426,15 @@ NEW_FUNC = r'''def inject_auth_css():
         }}
         .stApp .st-key-auth_right button[kind="secondary"]:hover,
         .stApp .st-key-auth_right [data-testid="stBaseButton-secondary"]:hover {{
-            background: rgba(37,99,235,.15) !important;
-            border-color: #3b82f6 !important;
+            background: {h_bg} !important;
+            border-color: {h_border} !important;
+            box-shadow: 0 0 0 3px {h_glow}, 0 10px 24px rgba(14,165,233,.18) !important;
             transform: translateY(-1px);
+        }}
+        .stApp .st-key-auth_right button[kind="secondary"]:hover p,
+        .stApp .st-key-auth_right [data-testid="stBaseButton-secondary"]:hover p {{
+            color: {h_text} !important;
+            -webkit-text-fill-color: {h_text} !important;
         }}
         .stApp .st-key-auth_right button[kind="secondary"] p,
         .stApp .st-key-auth_right [data-testid="stBaseButton-secondary"] p {{
@@ -446,13 +477,15 @@ NEW_FUNC = r'''def inject_auth_css():
         .stApp .st-key-auth_right [class*="st-key-auth_link"] button:hover,
         .stApp .st-key-auth_right [class*="st-key-auth_swap"] button:hover,
         .stApp .st-key-auth_right [class*="st-key-auth_"][class*="admin"] button:hover {{
-            background: rgba(37,99,235,.10) !important;
+            background: {h_bg} !important;
             border-radius: 10px !important;
+            box-shadow: 0 0 0 2px {h_glow} !important;
         }}
         .stApp .st-key-auth_right [class*="st-key-auth_link"] button:hover p,
+        .stApp .st-key-auth_right [class*="st-key-auth_swap"] button:hover p,
         .stApp .st-key-auth_right [class*="st-key-auth_"][class*="admin"] button:hover p {{
-            color: var(--text) !important;
-            -webkit-text-fill-color: var(--text) !important;
+            color: {h_text} !important;
+            -webkit-text-fill-color: {h_text} !important;
         }}
 
         /* links placed alone on a row (choice page): centred, with a little air above.
@@ -489,15 +522,20 @@ NEW_FUNC = r'''def inject_auth_css():
             .st-key-auth_card {{ background: var(--surface) !important; border-radius: 22px; }}
             .st-key-auth_left {{
                 min-height: 0;
-                padding: 30px 18px;
+                padding: 30px 18px 26px !important;
+                justify-content: center;
                 background:
                     radial-gradient(circle at 15% 0%, rgba(96,165,250,.42), transparent 45%),
                     linear-gradient(135deg, #020617 0%, #172554 56%, #075985 100%);
             }}
             .auth-pill {{ margin-bottom: 14px; }}
             .auth-welcome-title {{ font-size: 1.6rem; margin-bottom: 10px; }}
-            .auth-welcome-sub {{ margin-bottom: 40px; }}
             .auth-logo-circle {{
+                position: relative;
+                top: auto;
+                left: auto;
+                transform: none;
+                margin: 92px auto 70px;
                 width: 110px;
                 height: 110px;
                 flex-basis: 110px;
@@ -513,6 +551,46 @@ NEW_FUNC = r'''def inject_auth_css():
     )
 '''
 
+HOVER_FUNC = r'''# HOVER-CSS-START
+def inject_hover_css():
+    """Light-blue glow when the mouse is over a button (all pages, all languages)."""
+    if st.session_state.get("dark_mode", True):
+        h_bg, h_border, h_text, h_glow = "rgba(56,189,248,.16)", "#38bdf8", "#bae6fd", "rgba(56,189,248,.30)"
+    else:
+        h_bg, h_border, h_text, h_glow = "rgba(14,165,233,.13)", "#0ea5e9", "#075985", "rgba(14,165,233,.30)"
+
+    header = '[data-testid="stHorizontalBlock"]:has(.brand)'
+    st.markdown(
+        f"""
+        <style>
+        .stApp button[kind="secondary"],
+        .stApp [data-testid="stBaseButton-secondary"],
+        .stApp .stDownloadButton > button {{
+            transition: background-color .15s ease, border-color .15s ease,
+                        box-shadow .15s ease, color .15s ease, transform .15s ease;
+        }}
+        .stApp button[kind="secondary"]:hover,
+        .stApp [data-testid="stBaseButton-secondary"]:hover,
+        .stApp .stDownloadButton > button:hover,
+        {header} .stButton > button:hover {{
+            background: {h_bg} !important;
+            border-color: {h_border} !important;
+            box-shadow: 0 0 0 3px {h_glow}, 0 10px 24px rgba(14,165,233,.18) !important;
+        }}
+        .stApp button[kind="secondary"]:hover p,
+        .stApp button[kind="secondary"]:hover span,
+        .stApp [data-testid="stBaseButton-secondary"]:hover p,
+        .stApp .stDownloadButton > button:hover p {{
+            color: {h_text} !important;
+            -webkit-text-fill-color: {h_text} !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+# HOVER-CSS-END
+'''
+
 
 def main():
     try:
@@ -520,17 +598,35 @@ def main():
     except FileNotFoundError:
         sys.exit(f"لم أجد {APP_FILE} في هذا المجلد. ضع هذا الملف بجانبه ثم شغّله.")
 
+    # 1) inject_auth_css()
     start = text.find("def inject_auth_css():")
     end = text.find("@contextmanager\ndef auth_card(", start)
     if start == -1 or end == -1:
         sys.exit("لم أجد دالة inject_auth_css() أو auth_card() في الملف. لم يتم تغيير شيء.")
+    text = text[:start] + NEW_AUTH.replace("@@OFFSET@@", str(LOGO_OFFSET_PX)).rstrip() + "\n\n\n" + text[end:]
 
-    new_text = text[:start] + NEW_FUNC.rstrip() + "\n\n\n" + text[end:]
-    compile(new_text, APP_FILE, "exec")  # syntax check BEFORE writing anything
+    # 2) inject_hover_css()  (replace if it already exists, otherwise add it before inject_css)
+    if "# HOVER-CSS-START" in text and "# HOVER-CSS-END" in text:
+        a = text.index("# HOVER-CSS-START")
+        b = text.index("# HOVER-CSS-END") + len("# HOVER-CSS-END")
+        text = text[:a] + HOVER_FUNC.strip() + text[b:]
+    else:
+        pos = text.find("def inject_css():")
+        if pos == -1:
+            sys.exit("لم أجد دالة inject_css() في الملف. لم يتم تغيير شيء.")
+        text = text[:pos] + HOVER_FUNC.strip() + "\n\n\n" + text[pos:]
 
-    shutil.copyfile(APP_FILE, APP_FILE + ".bak2")
-    open(APP_FILE, "w", encoding="utf-8", newline="\n").write(new_text)
-    print("Done. Backup saved as", APP_FILE + ".bak2")
+    # 3) call it right after inject_css()
+    if not re.search(r"(?m)^inject_hover_css\(\)", text):
+        text, n = re.subn(r"(?m)^inject_css\(\)[ \t]*$", "inject_css()\ninject_hover_css()", text, count=1)
+        if n == 0:
+            sys.exit("لم أجد السطر inject_css() في نهاية الملف. لم يتم تغيير شيء.")
+
+    compile(text, APP_FILE, "exec")  # syntax check BEFORE writing anything
+
+    shutil.copyfile(APP_FILE, APP_FILE + ".bak3")
+    open(APP_FILE, "w", encoding="utf-8", newline="\n").write(text)
+    print("Done. Backup saved as", APP_FILE + ".bak3")
 
 
 if __name__ == "__main__":
