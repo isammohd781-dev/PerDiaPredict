@@ -49,6 +49,7 @@ def _get_secret(key: str, default: str = "") -> str:
 
 
 ADMIN_PASSWORD = _get_secret("ADMIN_PASSWORD", "admin123")
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 # =============================================================================
@@ -167,27 +168,6 @@ def child_question_keys(gender: str) -> list:
     extra = CHILD_GIRL_EXTRA_KEYS if gender == "Female" else CHILD_BOY_EXTRA_KEYS
     return list(CHILD_COMMON_SYMPTOM_KEYS) + list(extra)
 
-
-# -----------------------------------------------------------------------------
-# Gender options. "Transgender" also asks for the sex assigned at birth,
-# because the trained model only knows Male / Female (that value is what is
-# fed to the model). The transgender questions are informational only, like
-# the other gender-specific sections, and do not change the probability.
-# -----------------------------------------------------------------------------
-GENDER_OPTIONS = ["Male", "Female", "Transgender"]
-BIRTH_SEX_OPTIONS = ["Male", "Female"]
-
-TRANS_SYMPTOM_KEYS = [
-    "trans_hormones", "trans_weight", "trans_surgery", "trans_infections", "trans_periods",
-]
-
-
-def gender_label(value: str, lang: str = None) -> str:
-    """Display text for a gender value (Male / Female / Transgender)."""
-    key = {"Male": "male", "Female": "female", "Transgender": "transgender"}.get(value, "male")
-    return tr(key, lang)
-
-
 EXTRA_TEXT = {
     "en": {
         "freq_8_10": "8-10 times a day",
@@ -216,15 +196,6 @@ EXTRA_TEXT = {
         "child_fatigue_school": "Unusual tiredness or trouble concentrating at school",
         "child_skin_infections": "Repeated skin infections or slow-healing sores",
         "child_yeast": "Recurrent yeast infections",
-        "transgender": "Transgender",
-        "birth_sex": "Sex assigned at birth",
-        "birth_sex_short": "at birth",
-        "trans_section": "Questions specific to transgender patients",
-        "trans_hormones": "Currently taking gender-affirming hormones (estrogen or testosterone)",
-        "trans_weight": "Weight gain or increased body fat since starting hormone therapy",
-        "trans_surgery": "Previous gender-affirming surgery",
-        "trans_infections": "Repeated genital or urinary tract infections",
-        "trans_periods": "Irregular or absent menstrual periods (if applicable)",
     },
     "ar": {
         "freq_8_10": "من 8 إلى 10 مرات في اليوم",
@@ -253,15 +224,6 @@ EXTRA_TEXT = {
         "child_fatigue_school": "تعب غير معتاد أو صعوبة في التركيز في المدرسة",
         "child_skin_infections": "التهابات جلدية متكررة أو بطء التئام الجروح",
         "child_yeast": "التهابات فطرية متكررة",
-        "transgender": "عابر جنسيًا (Transgender)",
-        "birth_sex": "الجنس المحدد عند الولادة",
-        "birth_sex_short": "عند الولادة",
-        "trans_section": "أسئلة خاصة بالمرضى العابرين جنسيًا",
-        "trans_hormones": "تناول هرمونات تأكيد الجنس حاليًا (إستروجين أو تستوستيرون)",
-        "trans_weight": "زيادة في الوزن أو الدهون منذ بدء العلاج الهرموني",
-        "trans_surgery": "إجراء عملية تأكيد الجنس سابقًا",
-        "trans_infections": "التهابات متكررة في المنطقة التناسلية أو المسالك البولية",
-        "trans_periods": "اضطراب أو انقطاع الدورة الشهرية (إن وُجدت)",
     },
     "es": {
         "freq_8_10": "de 8 a 10 veces al día",
@@ -290,15 +252,6 @@ EXTRA_TEXT = {
         "child_fatigue_school": "Cansancio inusual o dificultad para concentrarse en la escuela",
         "child_skin_infections": "Infecciones cutáneas repetidas o heridas que sanan lentamente",
         "child_yeast": "Infecciones por hongos recurrentes",
-        "transgender": "Transgénero",
-        "birth_sex": "Sexo asignado al nacer",
-        "birth_sex_short": "al nacer",
-        "trans_section": "Preguntas específicas para pacientes transgénero",
-        "trans_hormones": "Toma actualmente hormonas de afirmación de género (estrógeno o testosterona)",
-        "trans_weight": "Aumento de peso o de grasa corporal desde que inició la terapia hormonal",
-        "trans_surgery": "Cirugía de afirmación de género previa",
-        "trans_infections": "Infecciones genitales o urinarias repetidas",
-        "trans_periods": "Menstruación irregular o ausente (si aplica)",
     },
 }
 
@@ -689,40 +642,9 @@ def inject_css():
             transform: none !important;
         }}
 
-        /* Centre every header-button label, horizontally AND vertically.
-           The lock emoji is taller than the letters and used to push the
-           "Admin Panel" text down, so every wrapper is a centred flex box. */
-        {HEADER} .stButton {{
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            margin: 0 !important;
-        }}
-
-        {HEADER} .stButton > button,
-        {HEADER} .stButton > button > * {{
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            margin: 0 !important;
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-        }}
-
         {HEADER} .stButton > button p {{
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
             margin: 0 !important;
-            padding: 0 !important;
             line-height: 1 !important;
-            text-align: center !important;
-        }}
-
-        /* Small optical nudge for the Admin Panel text (the lock emoji sits low).
-           If it looks too high, set it to 0; if still low, use -2px. */
-        {HEADER} > [data-testid="stColumn"]:nth-child(2) .stButton > button p {{
-            transform: translateY(-1px);
         }}
 
         /* Day / night (column 3) and restart (column 4): bigger icons */
@@ -731,10 +653,8 @@ def inject_css():
             font-size: 1.3rem !important;
         }}
 
-        /* The patient card (personal info + questions): one complete rounded
-           frame, visible in light AND dark mode. */
-        [data-testid="stForm"],
-        .st-key-patient_card {{
+        /* The patient form: one complete rounded frame, visible in light AND dark mode */
+        [data-testid="stForm"] {{
             background: var(--surface) !important;
             border: 1px solid var(--border) !important;
             border-radius: 22px !important;
@@ -1222,8 +1142,7 @@ def inject_css():
             opacity: 1 !important;
         }}
 
-        [data-testid="stForm"] [data-testid="stVerticalBlock"],
-        .st-key-patient_card {{
+        [data-testid="stForm"] [data-testid="stVerticalBlock"] {{
             gap: .85rem !important;
         }}
 
@@ -1449,8 +1368,7 @@ def inject_css():
                 max-width: 100% !important;
             }}
 
-            [data-testid="stForm"],
-            .st-key-patient_card {{
+            [data-testid="stForm"] {{
                 padding: 16px 12px !important;
                 border-radius: 18px !important;
             }}
@@ -1496,6 +1414,8 @@ if "page" not in st.session_state:
     st.session_state["page"] = "splash"
 if "choosing_language" not in st.session_state:
     st.session_state["choosing_language"] = False
+if "user_email" not in st.session_state:
+    st.session_state["user_email"] = None
 if "last_report" not in st.session_state:
     st.session_state["last_report"] = None
 if "last_report_en" not in st.session_state:
@@ -1905,35 +1825,26 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str 
     return (sp or "").join(sentences)
 
 
-def build_report(lang, timestamp, first, last, phone, address, type_key,
+def build_report(lang, timestamp, first, last, phone, email, address, type_key,
                  age, gender, result, probability, symptom_values, extra_values,
-                 gender_values=None, freq_key=None, marital_status_key=None,
-                 birth_sex=None) -> dict:
+                 gender_values=None, freq_key=None, marital_status_key=None) -> dict:
     """Build the report dictionary in the requested language."""
     gender_values = gender_values or {}
     any_extra = any(v == "Yes" for v in extra_values.values()) or any(
         v == "Yes" for v in gender_values.values()
     )
     gender_yes = [tr(k, lang) for k, v in gender_values.items() if v == "Yes"]
-
-    # "Transgender (at birth: Female)" - the sex at birth is what the model used.
-    gender_text = gender_label(gender, lang)
-    if gender == "Transgender" and birth_sex:
-        gender_text = f"{gender_text} ({tr('birth_sex_short', lang)}: {gender_label(birth_sex, lang)})"
-
     return {
         "Timestamp": timestamp,
         "First name": first,
         "Last name": last,
         "Phone": phone,
+        "Email": email if email else tr("na", lang),
         "Address": address,
         "Reported diabetes type": tr(type_key, lang),
         "Age": age,
-        "Gender": gender_text,
-        "Marital status": (
-            marital_status_label(marital_status_key, birth_sex or gender, lang)
-            if marital_status_key else ""
-        ),
+        "Gender": tr("male" if gender == "Male" else "female", lang),
+        "Marital status": marital_status_label(marital_status_key, gender, lang) if marital_status_key else "",
         "Result": tr("positive_high" if result == 1 else "negative_low", lang),
         "Probability": f"{probability * 100:.1f}%",
         "Notable extra symptoms": tr("yes" if any_extra else "no", lang),
@@ -2155,7 +2066,7 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
     rebuilt with a tighter layout (level 1, then 2) so it still fits on one page.
 
     `symptoms` = {"core": [...], "extra": [...], "gender": [...],
-                  "gender_kind": "Male"/"Female"/"Transgender", "freq": key}
+                  "gender_kind": "Male"/"Female", "freq": key}
     (the answers the patient marked "Yes"). When it is missing, the report
     falls back to the text paragraph in report_data["Symptom narrative"].
     """
@@ -2193,9 +2104,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         if symptoms.get("is_child"):
             g_keys = child_question_keys(kind)
             gender_head = t("child_section")
-        elif kind == "Transgender":
-            g_keys = TRANS_SYMPTOM_KEYS
-            gender_head = t("trans_section")
         else:
             g_keys = MALE_SYMPTOM_KEYS if kind == "Male" else FEMALE_SYMPTOM_KEYS
             gender_head = t("male_section" if kind == "Male" else "female_section")
@@ -2207,7 +2115,7 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         t(k)
         for k in (
             "pdf_title", "pdf_generated", "pdf_patient", "pdf_name", "pdf_age_gender",
-            "phone", "marital_status", "pdf_address", "pdf_type", "pdf_clinical",
+            "phone", "pdf_email", "pdf_address", "pdf_type", "pdf_clinical",
             "pdf_assessment", "pdf_risk", "probability", "pdf_extra",
             "pdf_disclaimer_label", "pdf_disclaimer", "medical_notice", "brand",
             "no_core",
@@ -2445,13 +2353,11 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
     pdf.set_y(cy + card_h + 2)
 
     # ----------------------------------------------------------- patient card
-    # (name, age / gender, phone, marital status, address, diabetes type)
     name = f"{report_data.get('First name', '')} {report_data.get('Last name', '')}".strip()
     age_gender = f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"
     rows = [
         [(t("pdf_name"), name), (t("pdf_age_gender"), age_gender)],
-        [(t("phone"), report_data.get("Phone", "")),
-         (t("marital_status"), report_data.get("Marital status", ""))],
+        [(t("phone"), report_data.get("Phone", "")), (t("pdf_email"), report_data.get("Email", t("na")))],
         [(t("pdf_address"), report_data.get("Address", "")),
          (t("pdf_type"), report_data.get("Reported diabetes type", ""))],
     ]
@@ -2685,8 +2591,6 @@ def save_report_to_excel(report: dict):
     if os.path.exists(SAVE_FILE_XLSX):
         try:
             existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
-            # Old files may still contain the removed "Email" column.
-            existing = existing.drop(columns=["Email"], errors="ignore")
             combined = pd.concat([existing, new_row], ignore_index=True)
         except Exception:
             combined = new_row
@@ -2719,58 +2623,55 @@ def render_main_app():
         unsafe_allow_html=True,
     )
 
-    # Everything lives in ONE card and NOT in st.form on purpose: a widget inside
-    # a form does not refresh the page, but the gender / marital-status choice
-    # must refresh it immediately so the matching questions can appear.
-    # (The frame of the card is drawn by the ".st-key-patient_card" CSS rule.)
-    with st.container(key="patient_card"):
-        # ------------------------------------------------ Personal information
-        st.markdown(f'<div class="section-title">👤 {tr("personal")}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="section-subtitle">{tr("gender_hint")}</div>', unsafe_allow_html=True)
+    # Age and gender are asked OUTSIDE the form on purpose: a widget inside a
+    # form does not refresh the page, and the gender choice must refresh it
+    # immediately so the questions specific to men / women can appear.
+    st.markdown(f'<div class="section-title">📋 {tr("basic")}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-subtitle">{tr("gender_hint")}</div>', unsafe_allow_html=True)
 
-        c1, c2 = st.columns(2)
-        with c1:
-            first_name = st.text_input(f"{tr('first_name')} *", key="in_first_name")
-        with c2:
-            last_name = st.text_input(f"{tr('last_name')} *", key="in_last_name")
-
-        c5, c6, c7 = st.columns(3)
-        with c5:
-            age = st.number_input(tr("age"), min_value=1, max_value=120, value=40, step=1, key="basic_age")
-        with c6:
-            gender = st.selectbox(tr("gender"), GENDER_OPTIONS, format_func=gender_label, key="basic_gender")
-            if gender == "Transgender":
-                # The trained model only knows Male / Female: this answer is what
-                # the model receives (and it also picks the pediatric questions).
-                sex_at_birth = st.selectbox(
-                    tr("birth_sex"), BIRTH_SEX_OPTIONS, format_func=gender_label, key="basic_birth_sex"
-                )
-            else:
-                sex_at_birth = gender
-        with c7:
-            # Labels agree in gender (e.g. "أعزب" vs "عزباء") and include a "Child"
-            # option that switches the last section to pediatric questions.
-            marital_status_key = st.selectbox(
-                tr("marital_status"),
-                MARITAL_STATUS_ORDER,
-                format_func=lambda k: marital_status_label(k, sex_at_birth, lang),
-                key="basic_marital",
-            )
-
+    c5, c6, c7 = st.columns(3)
+    with c5:
+        age = st.number_input(tr("age"), min_value=1, max_value=120, value=40, step=1, key="basic_age")
+    with c6:
+        gender_label = st.selectbox(tr("gender"), [tr("male"), tr("female")], key="basic_gender")
+        gender = "Male" if gender_label == tr("male") else "Female"
+    with c7:
+        # Labels agree in gender with the "Gender" choice above (e.g. "أعزب" for a
+        # male patient vs "عزباء" for a female one), and include a "Child" option
+        # that switches the last section of the form to pediatric questions.
+        marital_labels = [marital_status_label(k, gender, lang) for k in MARITAL_STATUS_ORDER]
+        marital_label = st.selectbox(tr("marital_status"), marital_labels, key="basic_marital")
+        marital_status_key = MARITAL_STATUS_ORDER[marital_labels.index(marital_label)]
         is_child = marital_status_key == "child"
         # Sensitive adult questions only appear once married or divorced/widowed.
         ever_married = marital_status_key in ("married", "divorced")
 
-        phone = st.text_input(f"{tr('phone')} *", key="in_phone")
-        address = st.text_input(f"{tr('address')} *", key="in_address")
+    with st.form("patient_form", clear_on_submit=False):
+        st.markdown(f'<div class="section-title">👤 {tr("personal")}</div>', unsafe_allow_html=True)
+        st.markdown("<div class='section-subtitle'></div>", unsafe_allow_html=True)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            first_name = st.text_input(f"{tr('first_name')} *")
+        with c2:
+            last_name = st.text_input(f"{tr('last_name')} *")
+
+        phone = st.text_input(f"{tr('phone')} *")
+        address = st.text_input(f"{tr('address')} *")
+
+        # Email is optional and lives inside a collapsible section.
+        with st.expander(f"➕ {tr('optional_info')}"):
+            patient_email = st.text_input(
+                tr("email_optional"),
+                value=st.session_state.get("user_email") or "",
+                placeholder="you@example.com",
+            )
 
         diabetes_type = st.selectbox(
             tr("diabetes_type"),
             [tr(k) for k in DIABETES_TYPE_KEYS],
-            key="in_diabetes_type",
         )
 
-        # ------------------------------------------------------ Core symptoms
         st.markdown("---")
         st.markdown(f'<div class="section-title">🩺 {tr("core")}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="section-subtitle">{tr("core_help")}</div>', unsafe_allow_html=True)
@@ -2801,7 +2702,6 @@ def render_main_app():
                     )
                     symptom_values[col] = "Yes" if selected == tr("yes") else "No"
 
-        # ---------------------------------------------------- Additional symptoms
         st.markdown("---")
         st.markdown(f'<div class="section-title">➕ {tr("additional")}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="section-subtitle">{tr("optional")}</div>', unsafe_allow_html=True)
@@ -2819,25 +2719,18 @@ def render_main_app():
                 )
                 extra_values[key] = "Yes" if selected == tr("yes") else "No"
 
-        # ------------------------------- Questions that depend on the patient
-        # Pediatric questions for a child, the transgender questions for a
-        # transgender adult, otherwise the adult male / female questions.
+        # Questions that depend on the gender chosen above (adult male/female
+        # section), or - if the patient is a child - pediatric questions
+        # chosen by the child's gender instead.
         gender_values = {}
         if is_child:
-            gender_keys = child_question_keys(sex_at_birth)
-            gender_icon = "🧒" if sex_at_birth == "Male" else "👧"
+            gender_keys = child_question_keys(gender)
+            gender_icon = "🧒" if gender == "Male" else "👧"
             gender_title = tr("child_section")
-            key_kind = f"child_{sex_at_birth}"
-        elif gender == "Transgender":
-            gender_keys = list(TRANS_SYMPTOM_KEYS)
-            gender_icon = "⚧️"
-            gender_title = tr("trans_section")
-            key_kind = "trans"
         else:
             gender_keys = gender_question_keys(gender, ever_married)
             gender_icon = "♂️" if gender == "Male" else "♀️"
             gender_title = tr("male_section" if gender == "Male" else "female_section")
-            key_kind = f"adult_{gender}"
 
         st.markdown("---")
         st.markdown(f'<div class="section-title">{gender_icon} {gender_title}</div>', unsafe_allow_html=True)
@@ -2850,15 +2743,14 @@ def render_main_app():
                 selected = st.selectbox(
                     tr(key),
                     [tr("no"), tr("yes")],
-                    key=f"gender_{key_kind}_{key}",
+                    key=f"gender_{gender}_{'child' if is_child else 'adult'}_{key}",
                 )
                 gender_values[key] = "Yes" if selected == tr("yes") else "No"
 
-        submitted = st.button(
+        submitted = st.form_submit_button(
             f"🔍 {tr('predict')}",
             use_container_width=True,
             type="primary",
-            key="predict_btn",
         )
 
     if submitted:
@@ -2866,6 +2758,7 @@ def render_main_app():
         clean_last_name = last_name.strip()
         clean_phone = phone.strip()
         clean_address = address.strip()
+        clean_email = patient_email.strip()
 
         errors = []
         for value, label in [
@@ -2877,13 +2770,16 @@ def render_main_app():
             if not value:
                 errors.append(f"{label} {tr('required')}")
 
+        # Email is optional: validate the format only if the user typed one.
+        if clean_email and not EMAIL_REGEX.match(clean_email):
+            errors.append(tr("email_invalid"))
+
         if errors:
             st.error(tr("required_fields"))
             for error in errors:
                 st.warning(error)
         else:
-            # The model only knows Male / Female -> use the sex assigned at birth.
-            raw_input = {"Age": age, "Gender": sex_at_birth, **symptom_values}
+            raw_input = {"Age": age, "Gender": gender, **symptom_values}
             result, probability = predict_new_patient(raw_input)
 
             type_key = DIABETES_TYPE_KEYS[[tr(k) for k in DIABETES_TYPE_KEYS].index(diabetes_type)]
@@ -2894,6 +2790,7 @@ def render_main_app():
                 first=clean_first_name,
                 last=clean_last_name,
                 phone=clean_phone,
+                email=clean_email,
                 address=clean_address,
                 type_key=type_key,
                 age=age,
@@ -2905,7 +2802,6 @@ def render_main_app():
                 gender_values=gender_values,
                 freq_key=freq_key,
                 marital_status_key=marital_status_key,
-                birth_sex=sex_at_birth,
             )
 
             # Shown to the user (current language) ...
@@ -2918,7 +2814,7 @@ def render_main_app():
                 "core": [c for c in display_labels if symptom_values.get(c) == "Yes"],
                 "extra": [k for k in extra_symptom_keys if extra_values.get(k) == "Yes"],
                 "gender": [k for k, v in gender_values.items() if v == "Yes"],
-                "gender_kind": sex_at_birth if is_child else gender,
+                "gender_kind": gender,
                 "is_child": is_child,
                 "freq": freq_key,
             }
