@@ -225,6 +225,35 @@ EXTRA_TEXT = {
         "trans_surgery": "Previous gender-affirming surgery",
         "trans_infections": "Repeated genital or urinary tract infections",
         "trans_periods": "Irregular or absent menstrual periods (if applicable)",
+        "skin_tags": "Skin tags (small, soft growths on the skin)",
+        "glycosuria": "Sugar in the urine (glycosuria)",
+        "hyperglycemia": "High blood sugar readings (hyperglycemia)",
+        "sweet_craving": "Craving for sweet things",
+        "glucose_level": "Blood sugar / glucose level",
+        "glucose_unit": "Unit",
+        "glucose_help": "Leave it empty if you have not measured it. It is added to your report but does not change the estimated probability.",
+        "glucose_invalid": "Please enter a realistic blood glucose value for the selected unit, or leave it empty.",
+        "diet_preference": "Diet preference",
+        "diet_nonveg": "Non-vegetarian",
+        "diet_veg": "Vegetarian",
+        "foods_items_veg": [
+            "Non-starchy vegetables: leafy greens, broccoli, cauliflower, cucumber, tomatoes",
+            "Legumes: lentils, chickpeas, beans, moong dal",
+            "Plant proteins and dairy: tofu, paneer or cottage cheese, plain low-fat yogurt",
+            "Whole grains: oats, brown rice, quinoa, whole-wheat bread and roti",
+            "Nuts and seeds in small portions: almonds, walnuts, flax and chia seeds",
+            "Low-sugar fruits in moderation: berries, apples, guava, pears",
+            "Healthy fats: olive oil, avocado",
+        ],
+        "meal_plan_rows_veg": [
+            ["Day 1", "Oats porridge with nuts and cinnamon", "Lentil soup, cucumber salad and a small portion of brown rice", "Grilled paneer with sautéed vegetables", "Water, unsweetened green tea"],
+            ["Day 2", "Whole-wheat toast with avocado and tomato", "Chickpea salad with mixed vegetables and 1 whole-wheat roti", "Vegetable soup with baked tofu", "Water, unsweetened herbal tea"],
+            ["Day 3", "Plain yogurt with chia seeds and berries", "Kidney bean curry, a small portion of brown rice and salad", "Bell peppers stuffed with quinoa", "Water, unsweetened buttermilk"],
+            ["Day 4", "Chickpea-flour pancake (besan chilla) with mint chutney", "Vegetable and lentil stew with 1 whole-wheat roti", "Grilled vegetables with hummus", "Water, cinnamon tea"],
+            ["Day 5", "Vegetable poha with a few peanuts (small portion)", "Spinach and paneer curry with a side salad", "Moong dal soup with steamed vegetables", "Water, unsweetened green tea"],
+            ["Day 6", "Overnight oats with flaxseed and apple slices", "Quinoa and vegetable pulao with plain yogurt", "Tofu and broccoli stir-fry", "Water, lemon water without sugar"],
+            ["Day 7", "Whole-wheat sandwich with vegetables and cottage cheese", "Black bean and vegetable bowl with a small portion of brown rice", "Cauliflower and pea curry with 1 roti", "Water, unsweetened herbal tea"],
+        ],
     },
     "ar": {
         "freq_8_10": "من 8 إلى 10 مرات في اليوم",
@@ -262,6 +291,35 @@ EXTRA_TEXT = {
         "trans_surgery": "إجراء عملية تأكيد الجنس سابقًا",
         "trans_infections": "التهابات متكررة في المنطقة التناسلية أو المسالك البولية",
         "trans_periods": "اضطراب أو انقطاع الدورة الشهرية (إن وُجدت)",
+        "skin_tags": "زوائد جلدية (Skin tags)",
+        "glycosuria": "وجود سكر في البول (Glycosuria)",
+        "hyperglycemia": "ارتفاع سكر الدم (Hyperglycemia)",
+        "sweet_craving": "اشتهاء شديد للحلويات والسكريات",
+        "glucose_level": "مستوى السكر / الجلوكوز في الدم",
+        "glucose_unit": "الوحدة",
+        "glucose_help": "اتركه فارغًا إن لم تقم بقياسه. يُضاف إلى التقرير ولا يغيّر نسبة الاحتمال المقدَّرة.",
+        "glucose_invalid": "يرجى إدخال قيمة سكر منطقية للوحدة المختارة، أو اتركه فارغًا.",
+        "diet_preference": "نوع النظام الغذائي",
+        "diet_nonveg": "غير نباتي (يشمل اللحوم والأسماك)",
+        "diet_veg": "نباتي",
+        "foods_items_veg": [
+            "خضروات غير نشوية: ورقيات، بروكلي، قرنبيط، خيار، طماطم",
+            "البقوليات: عدس، حمص، فاصوليا، فول",
+            "بروتينات نباتية وألبان: توفو، جبنة قريش، لبن زبادي قليل الدسم",
+            "حبوب كاملة: شوفان، أرز بني، كينوا، خبز القمح الكامل",
+            "مكسرات وبذور بكميات صغيرة: لوز، جوز، بذور الكتان والشيا",
+            "فواكه قليلة السكر باعتدال: توت، تفاح، جوافة، كمثرى",
+            "دهون صحية: زيت الزيتون، أفوكادو",
+        ],
+        "meal_plan_rows_veg": [
+            ["اليوم 1", "شوفان بالمكسرات والقرفة", "شوربة عدس مع سلطة خيار وحصة صغيرة من الأرز البني", "جبنة قريش مشوية مع خضار سوتيه", "ماء، شاي أخضر بدون سكر"],
+            ["اليوم 2", "خبز أسمر محمص مع أفوكادو وطماطم", "سلطة حمص مع خضار متنوعة ورغيف صغير من القمح الكامل", "شوربة خضار مع توفو مشوي", "ماء، شاي أعشاب بدون سكر"],
+            ["اليوم 3", "زبادي سادة مع بذور الشيا والتوت", "فاصوليا حمراء مع حصة صغيرة من الأرز البني وسلطة", "فلفل ملون محشو بالكينوا", "ماء، عيران (لبن رائب) بدون سكر"],
+            ["اليوم 4", "فطيرة رقيقة من دقيق الحمص مع صلصة النعناع", "يخنة عدس وخضار مع رغيف قمح كامل", "خضار مشوية مع حمص", "ماء، شاي بالقرفة"],
+            ["اليوم 5", "بوها الخضار مع قليل من الفول السوداني (حصة صغيرة)", "سبانخ مع جبنة قريش وسلطة جانبية", "شوربة ماش مع خضار مطهوة على البخار", "ماء، شاي أخضر بدون سكر"],
+            ["اليوم 6", "شوفان منقوع طوال الليل مع بذور الكتان وشرائح التفاح", "كينوا بالخضار مع زبادي سادة", "توفو مقلّب مع البروكلي بقليل من الزيت", "ماء، ماء بالليمون بدون سكر"],
+            ["اليوم 7", "ساندويتش خبز أسمر بالخضار والجبنة القريش", "طبق فاصوليا سوداء وخضار مع حصة صغيرة من الأرز البني", "قرنبيط وبازلاء مطبوخة مع رغيف صغير", "ماء، شاي أعشاب بدون سكر"],
+        ],
     },
     "es": {
         "freq_8_10": "de 8 a 10 veces al día",
@@ -299,6 +357,35 @@ EXTRA_TEXT = {
         "trans_surgery": "Cirugía de afirmación de género previa",
         "trans_infections": "Infecciones genitales o urinarias repetidas",
         "trans_periods": "Menstruación irregular o ausente (si aplica)",
+        "skin_tags": "Acrocordones (pequeños crecimientos blandos en la piel)",
+        "glycosuria": "Azúcar en la orina (glucosuria)",
+        "hyperglycemia": "Azúcar alta en sangre (hiperglucemia)",
+        "sweet_craving": "Antojo de dulces",
+        "glucose_level": "Nivel de azúcar / glucosa en sangre",
+        "glucose_unit": "Unidad",
+        "glucose_help": "Déjalo vacío si no lo has medido. Se añade al informe pero no modifica la probabilidad estimada.",
+        "glucose_invalid": "Introduce un valor de glucosa realista para la unidad elegida, o déjalo vacío.",
+        "diet_preference": "Preferencia alimentaria",
+        "diet_nonveg": "No vegetariano",
+        "diet_veg": "Vegetariano",
+        "foods_items_veg": [
+            "Verduras sin almidón: hojas verdes, brócoli, coliflor, pepino, tomate",
+            "Legumbres: lentejas, garbanzos, frijoles, dal de moong",
+            "Proteínas vegetales y lácteos: tofu, queso fresco o paneer, yogur natural bajo en grasa",
+            "Cereales integrales: avena, arroz integral, quinoa, pan integral y roti",
+            "Frutos secos y semillas en porciones pequeñas: almendras, nueces, semillas de lino y chía",
+            "Frutas bajas en azúcar con moderación: frutos rojos, manzana, guayaba, pera",
+            "Grasas saludables: aceite de oliva, aguacate",
+        ],
+        "meal_plan_rows_veg": [
+            ["Día 1", "Avena con frutos secos y canela", "Sopa de lentejas, ensalada de pepino y una porción pequeña de arroz integral", "Queso paneer a la plancha con verduras salteadas", "Agua, té verde sin azúcar"],
+            ["Día 2", "Tostada integral con aguacate y tomate", "Ensalada de garbanzos con verduras y 1 roti integral", "Sopa de verduras con tofu al horno", "Agua, infusión sin azúcar"],
+            ["Día 3", "Yogur natural con semillas de chía y frutos rojos", "Frijoles rojos con una porción pequeña de arroz integral y ensalada", "Pimientos rellenos de quinoa", "Agua, suero de mantequilla sin azúcar"],
+            ["Día 4", "Tortita de harina de garbanzo (besan chilla) con salsa de menta", "Estofado de verduras y lentejas con 1 roti integral", "Verduras asadas con hummus", "Agua, té de canela"],
+            ["Día 5", "Poha de verduras con unos pocos cacahuetes (porción pequeña)", "Curry de espinacas y paneer con ensalada", "Sopa de moong dal con verduras al vapor", "Agua, té verde sin azúcar"],
+            ["Día 6", "Avena de la noche anterior con linaza y rodajas de manzana", "Pulao de quinoa y verduras con yogur natural", "Salteado de tofu y brócoli", "Agua, agua con limón sin azúcar"],
+            ["Día 7", "Sándwich integral con verduras y queso fresco", "Bol de frijoles negros y verduras con una porción pequeña de arroz integral", "Curry de coliflor y guisantes con 1 roti", "Agua, infusión sin azúcar"],
+        ],
     },
 }
 
@@ -367,9 +454,18 @@ extra_symptom_keys = {
     "frequent_infections": "frequent_infections",
     "tingling_numbness": "tingling_numbness",
     "increased_hunger": "increased_hunger",
+    "skin_tags": "skin_tags",
+    "glycosuria": "glycosuria",
+    "hyperglycemia": "hyperglycemia",
+    "sweet_craving": "sweet_craving",
 }
 
-DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"]
+DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "prediabetes"]
+
+# Optional blood-glucose reading. Informational only (added to the report for the
+# doctor); it does not change the estimated probability.
+GLUCOSE_UNITS = ["mg/dL", "mmol/L"]
+GLUCOSE_RANGE = {"mg/dL": (20.0, 1000.0), "mmol/L": (1.1, 55.0)}
 
 
 # =============================================================================
@@ -1908,7 +2004,7 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str 
 def build_report(lang, timestamp, first, last, phone, address, type_key,
                  age, gender, result, probability, symptom_values, extra_values,
                  gender_values=None, freq_key=None, marital_status_key=None,
-                 birth_sex=None) -> dict:
+                 birth_sex=None, glucose=None) -> dict:
     """Build the report dictionary in the requested language."""
     gender_values = gender_values or {}
     any_extra = any(v == "Yes" for v in extra_values.values()) or any(
@@ -1938,6 +2034,7 @@ def build_report(lang, timestamp, first, last, phone, address, type_key,
         "Probability": f"{probability * 100:.1f}%",
         "Notable extra symptoms": tr("yes" if any_extra else "no", lang),
         "Urination frequency": tr(freq_key, lang) if freq_key else "",
+        "Glucose level": f"{glucose[0]:g} {glucose[1]}" if glucose else "",
         "Gender-specific symptoms": ", ".join(gender_yes),
         "Symptom narrative": build_symptom_narrative(
             symptom_values, extra_values, lang, gender_values=gender_values, freq_key=freq_key
@@ -1949,11 +2046,11 @@ def build_report(lang, timestamp, first, last, phone, address, type_key,
 # Health guide
 # =============================================================================
 
-def render_meal_plan():
+def render_meal_plan(veg: bool = False):
     st.markdown(f'<div class="section-title">📅 {tr("meal_plan")}</div>', unsafe_allow_html=True)
 
     df = pd.DataFrame(
-        tr("meal_plan_rows"),
+        tr("meal_plan_rows_veg" if veg else "meal_plan_rows"),
         columns=[tr("meal_plan"), tr("breakfast"), tr("lunch"), tr("dinner"), tr("drinks")],
     )
     st.dataframe(df, use_container_width=True, hide_index=True)
@@ -1974,11 +2071,21 @@ def render_offline_health_guide():
         unsafe_allow_html=True,
     )
 
+    # Diet preference: the foods list and the weekly meal plan follow it.
+    diet_choice = st.radio(
+        tr("diet_preference"),
+        ["nonveg", "veg"],
+        format_func=lambda k: tr("diet_veg" if k == "veg" else "diet_nonveg"),
+        horizontal=True,
+        key="diet_pref",
+    )
+    veg = diet_choice == "veg"
+
     with st.expander(f"🍽️ {tr('plate')}", expanded=True):
         st.markdown(_bullets("plate_items"))
 
     with st.expander(f"🥗 {tr('foods')}"):
-        st.markdown(_bullets("foods_items"))
+        st.markdown(_bullets("foods_items_veg" if veg else "foods_items"))
 
     with st.expander(f"⚠️ {tr('limit')}"):
         st.markdown(_bullets("limit_items"))
@@ -1987,7 +2094,7 @@ def render_offline_health_guide():
         st.markdown(_bullets("habits_items"))
 
     with st.expander(f"📅 {tr('meal_plan')}"):
-        render_meal_plan()
+        render_meal_plan(veg)
 
 
 # =============================================================================
@@ -2207,7 +2314,7 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         t(k)
         for k in (
             "pdf_title", "pdf_generated", "pdf_patient", "pdf_name", "pdf_age_gender",
-            "phone", "marital_status", "pdf_address", "pdf_type", "pdf_clinical",
+            "phone", "marital_status", "glucose_level", "pdf_address", "pdf_type", "pdf_clinical",
             "pdf_assessment", "pdf_risk", "probability", "pdf_extra",
             "pdf_disclaimer_label", "pdf_disclaimer", "medical_notice", "brand",
             "no_core",
@@ -2455,6 +2562,10 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         [(t("pdf_address"), report_data.get("Address", "")),
          (t("pdf_type"), report_data.get("Reported diabetes type", ""))],
     ]
+    # Optional blood-glucose reading: shown only when the patient entered it.
+    glucose_text = report_data.get("Glucose level", "")
+    if glucose_text:
+        rows.append([(t("glucose_level"), glucose_text)])
 
     inner_w = width - 2 * pad
     col_gap = 8
@@ -2819,6 +2930,22 @@ def render_main_app():
                 )
                 extra_values[key] = "Yes" if selected == tr("yes") else "No"
 
+        # Optional blood sugar / glucose reading (empty = not measured).
+        glu_col1, glu_col2 = st.columns([2, 1])
+        with glu_col1:
+            glucose_value = st.number_input(
+                tr("glucose_level"),
+                min_value=0.0,
+                max_value=1000.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                help=tr("glucose_help"),
+                key="glucose_value",
+            )
+        with glu_col2:
+            glucose_unit = st.selectbox(tr("glucose_unit"), GLUCOSE_UNITS, key="glucose_unit")
+
         # ------------------------------- Questions that depend on the patient
         # Pediatric questions for a child, the transgender questions for a
         # transgender adult, otherwise the adult male / female questions.
@@ -2877,6 +3004,15 @@ def render_main_app():
             if not value:
                 errors.append(f"{label} {tr('required')}")
 
+        # Glucose is optional; if it is filled in, it must be a realistic value.
+        glucose = None
+        if glucose_value:
+            low, high = GLUCOSE_RANGE[glucose_unit]
+            if low <= glucose_value <= high:
+                glucose = (float(glucose_value), glucose_unit)
+            else:
+                errors.append(tr("glucose_invalid"))
+
         if errors:
             st.error(tr("required_fields"))
             for error in errors:
@@ -2906,6 +3042,7 @@ def render_main_app():
                 freq_key=freq_key,
                 marital_status_key=marital_status_key,
                 birth_sex=sex_at_birth,
+                glucose=glucose,
             )
 
             # Shown to the user (current language) ...
