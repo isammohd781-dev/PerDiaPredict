@@ -196,6 +196,15 @@ EXTRA_TEXT = {
         "child_fatigue_school": "Unusual tiredness or trouble concentrating at school",
         "child_skin_infections": "Repeated skin infections or slow-healing sores",
         "child_yeast": "Recurrent yeast infections",
+        "skin_tags": "Skin tags (small skin growths, often on neck/armpits)",
+        "glycosuria": "Sugar detected in urine (glycosuria)",
+        "hyperglycemia": "Episodes of very high blood sugar (hyperglycemia)",
+        "sweet_craving": "Frequent craving for sweet or sugary foods",
+        "glucose_level": "Blood glucose level (mg/dL, optional)",
+        "pdf_glucose": "Blood glucose",
+        "diet_preference": "Diet preference",
+        "veg": "Vegetarian",
+        "non_veg": "Non-vegetarian",
     },
     "ar": {
         "freq_8_10": "من 8 إلى 10 مرات في اليوم",
@@ -224,6 +233,15 @@ EXTRA_TEXT = {
         "child_fatigue_school": "تعب غير معتاد أو صعوبة في التركيز في المدرسة",
         "child_skin_infections": "التهابات جلدية متكررة أو بطء التئام الجروح",
         "child_yeast": "التهابات فطرية متكررة",
+        "skin_tags": "زوائد جلدية صغيرة (غالبًا في الرقبة أو الإبط)",
+        "glycosuria": "وجود سكر في البول",
+        "hyperglycemia": "نوبات ارتفاع شديد في سكر الدم",
+        "sweet_craving": "رغبة متكررة في تناول الحلويات أو السكريات",
+        "glucose_level": "مستوى السكر في الدم (mg/dL، اختياري)",
+        "pdf_glucose": "سكر الدم",
+        "diet_preference": "نوع النظام الغذائي",
+        "veg": "نباتي",
+        "non_veg": "غير نباتي",
     },
     "es": {
         "freq_8_10": "de 8 a 10 veces al día",
@@ -252,6 +270,15 @@ EXTRA_TEXT = {
         "child_fatigue_school": "Cansancio inusual o dificultad para concentrarse en la escuela",
         "child_skin_infections": "Infecciones cutáneas repetidas o heridas que sanan lentamente",
         "child_yeast": "Infecciones por hongos recurrentes",
+        "skin_tags": "Fibromas cutáneos (pequeños crecimientos de piel, cuello/axilas)",
+        "glycosuria": "Azúcar detectada en la orina (glucosuria)",
+        "hyperglycemia": "Episodios de azúcar muy alta en sangre (hiperglucemia)",
+        "sweet_craving": "Antojo frecuente de dulces o azúcar",
+        "glucose_level": "Nivel de glucosa en sangre (mg/dL, opcional)",
+        "pdf_glucose": "Glucosa en sangre",
+        "diet_preference": "Preferencia alimentaria",
+        "veg": "Vegetariano",
+        "non_veg": "No vegetariano",
     },
 }
 
@@ -320,6 +347,10 @@ extra_symptom_keys = {
     "frequent_infections": "frequent_infections",
     "tingling_numbness": "tingling_numbness",
     "increased_hunger": "increased_hunger",
+    "skin_tags": "skin_tags",
+    "glycosuria": "glycosuria",
+    "hyperglycemia": "hyperglycemia",
+    "sweet_craving": "sweet_craving",
 }
 
 DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "gestational", "prediabetes"]
@@ -1827,7 +1858,8 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str 
 
 def build_report(lang, timestamp, first, last, phone, email, address, type_key,
                  age, gender, result, probability, symptom_values, extra_values,
-                 gender_values=None, freq_key=None, marital_status_key=None) -> dict:
+                 gender_values=None, freq_key=None, marital_status_key=None,
+                 glucose=None) -> dict:
     """Build the report dictionary in the requested language."""
     gender_values = gender_values or {}
     any_extra = any(v == "Yes" for v in extra_values.values()) or any(
@@ -1850,6 +1882,7 @@ def build_report(lang, timestamp, first, last, phone, email, address, type_key,
         "Notable extra symptoms": tr("yes" if any_extra else "no", lang),
         "Urination frequency": tr(freq_key, lang) if freq_key else "",
         "Gender-specific symptoms": ", ".join(gender_yes),
+        "Blood glucose level": f"{glucose} mg/dL" if glucose else tr("na", lang),
         "Symptom narrative": build_symptom_narrative(
             symptom_values, extra_values, lang, gender_values=gender_values, freq_key=freq_key
         ),
@@ -1860,11 +1893,40 @@ def build_report(lang, timestamp, first, last, phone, email, address, type_key,
 # Health guide
 # =============================================================================
 
+MEAL_PLAN_VEG = [
+    ["Monday", "Oats + fruit", "Dal, brown rice, salad", "Vegetable soup + roti", "Water, green tea"],
+    ["Tuesday", "Idli + sambar", "Chana curry, roti, salad", "Mixed veg + rice", "Water, buttermilk"],
+    ["Wednesday", "Vegetable poha", "Rajma, roti, salad", "Palak paneer + roti", "Water, herbal tea"],
+    ["Thursday", "Moong dal chilla", "Vegetable pulao + raita", "Lentil soup + roti", "Water, green tea"],
+    ["Friday", "Sprouts salad", "Mixed veg curry, roti", "Khichdi + curd", "Water, buttermilk"],
+    ["Saturday", "Vegetable upma", "Chole, roti, salad", "Tofu stir-fry + rice", "Water, herbal tea"],
+    ["Sunday", "Fruit + nuts bowl", "Paneer curry, roti, salad", "Vegetable soup + salad", "Water, green tea"],
+]
+
+MEAL_PLAN_NONVEG = [
+    ["Monday", "Boiled eggs + toast", "Grilled chicken, brown rice, salad", "Fish curry + roti", "Water, green tea"],
+    ["Tuesday", "Egg omelette", "Chicken curry, roti, salad", "Grilled fish + rice", "Water, buttermilk"],
+    ["Wednesday", "Egg bhurji", "Fish curry, brown rice, salad", "Chicken stew + roti", "Water, herbal tea"],
+    ["Thursday", "Boiled eggs + fruit", "Grilled fish, roti, salad", "Chicken soup + salad", "Water, green tea"],
+    ["Friday", "Egg white omelette", "Chicken curry, rice, salad", "Fish tikka + roti", "Water, buttermilk"],
+    ["Saturday", "Boiled eggs + toast", "Grilled chicken, roti, salad", "Fish curry + rice", "Water, herbal tea"],
+    ["Sunday", "Egg bhurji + fruit", "Chicken biryani + raita", "Grilled fish + salad", "Water, green tea"],
+]
+
+
 def render_meal_plan():
     st.markdown(f'<div class="section-title">📅 {tr("meal_plan")}</div>', unsafe_allow_html=True)
 
+    diet_choice = st.radio(
+        tr("diet_preference"),
+        [tr("veg"), tr("non_veg")],
+        horizontal=True,
+        key="diet_pref",
+    )
+    rows = MEAL_PLAN_VEG if diet_choice == tr("veg") else MEAL_PLAN_NONVEG
+
     df = pd.DataFrame(
-        tr("meal_plan_rows"),
+        rows,
         columns=[tr("meal_plan"), tr("breakfast"), tr("lunch"), tr("dinner"), tr("drinks")],
     )
     st.dataframe(df, use_container_width=True, hide_index=True)
@@ -2118,7 +2180,7 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
             "phone", "pdf_email", "pdf_address", "pdf_type", "pdf_clinical",
             "pdf_assessment", "pdf_risk", "probability", "pdf_extra",
             "pdf_disclaimer_label", "pdf_disclaimer", "medical_notice", "brand",
-            "no_core",
+            "no_core", "pdf_glucose",
         )
     ]
     blob = " ".join(texts)
@@ -2360,6 +2422,7 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         [(t("phone"), report_data.get("Phone", "")), (t("pdf_email"), report_data.get("Email", t("na")))],
         [(t("pdf_address"), report_data.get("Address", "")),
          (t("pdf_type"), report_data.get("Reported diabetes type", ""))],
+        [(t("pdf_glucose"), report_data.get("Blood glucose level", t("na"))), ("", "")],
     ]
 
     inner_w = width - 2 * pad
@@ -2385,6 +2448,8 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
     cursor = py + pad - 1
     for index, (row, cell_w, row_height) in enumerate(layouts):
         for i, (label, value) in enumerate(row):
+            if not label:
+                continue
             slot = (1 - i) if rtl else i
             cx = left + pad + slot * (col_w + col_gap) if len(row) == 2 else left + pad
             put(label, cx, cursor, cell_w, size=8.3, color=C_MUTED, lh=label_h)
@@ -2719,6 +2784,15 @@ def render_main_app():
                 )
                 extra_values[key] = "Yes" if selected == tr("yes") else "No"
 
+        glucose_level = st.number_input(
+            tr("glucose_level"),
+            min_value=0,
+            max_value=600,
+            value=0,
+            step=1,
+            key="extra_glucose_level",
+        )
+
         # Questions that depend on the gender chosen above (adult male/female
         # section), or - if the patient is a child - pediatric questions
         # chosen by the child's gender instead.
@@ -2802,6 +2876,7 @@ def render_main_app():
                 gender_values=gender_values,
                 freq_key=freq_key,
                 marital_status_key=marital_status_key,
+                glucose=glucose_level,
             )
 
             # Shown to the user (current language) ...
