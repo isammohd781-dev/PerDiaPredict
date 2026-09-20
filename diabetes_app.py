@@ -94,8 +94,6 @@ FEMALE_SYMPTOM_KEYS = [
 MALE_INTIMATE_KEYS = ["male_erectile", "male_libido", "male_fertility"]
 FEMALE_INTIMATE_KEYS = ["female_dryness", "female_gdm"]
 
-MARITAL_KEYS = ["marital_single", "marital_married", "marital_previously"]
-
 
 def gender_question_keys(gender: str, ever_married: bool) -> list:
     """Questions to show for this gender (all of them only if ever married)."""
@@ -105,6 +103,71 @@ def gender_question_keys(gender: str, ever_married: bool) -> list:
     intimate = MALE_INTIMATE_KEYS if gender == "Male" else FEMALE_INTIMATE_KEYS
     return [k for k in keys if k not in intimate]
 
+
+# -----------------------------------------------------------------------------
+# Marital status, gender-agreeing.
+#
+# "status" is one of: single / married / divorced / child. "child" is not a
+# marital status at all - it lets a parent fill in the form for a child
+# patient, which then shows pediatric questions instead of the adult
+# male/female section below.
+#
+# Each label is written separately for a male ("Male") and a female
+# ("Female") patient so Arabic (and Spanish) agree in gender, e.g.
+# "أعزب" vs "عزباء", "متزوج" vs "متزوجة", "طفل" vs "طفلة". English does not
+# need two forms, so the same text is reused for both.
+# -----------------------------------------------------------------------------
+MARITAL_STATUS_ORDER = ["single", "married", "divorced", "child"]
+
+MARITAL_STATUS_TEXT = {
+    "en": {
+        "single": {"Male": "Single (never married)", "Female": "Single (never married)"},
+        "married": {"Male": "Married", "Female": "Married"},
+        "divorced": {"Male": "Divorced or widowed", "Female": "Divorced or widowed"},
+        "child": {"Male": "Child", "Female": "Child"},
+    },
+    "ar": {
+        "single": {"Male": "أعزب", "Female": "عزباء"},
+        "married": {"Male": "متزوج", "Female": "متزوجة"},
+        "divorced": {"Male": "مطلّق أو أرمل", "Female": "مطلّقة أو أرملة"},
+        "child": {"Male": "طفل", "Female": "طفلة"},
+    },
+    "es": {
+        "single": {"Male": "Soltero", "Female": "Soltera"},
+        "married": {"Male": "Casado", "Female": "Casada"},
+        "divorced": {"Male": "Divorciado o viudo", "Female": "Divorciada o viuda"},
+        "child": {"Male": "Niño", "Female": "Niña"},
+    },
+}
+
+
+def marital_status_label(status: str, gender: str, lang: str = None) -> str:
+    """Gender-agreeing label for a marital-status option, with an English fallback
+    for languages that have not been given their own wording yet."""
+    lang = lang or st.session_state.get("lang", "en")
+    gender = gender if gender in ("Male", "Female") else "Male"
+    table = MARITAL_STATUS_TEXT.get(lang) or MARITAL_STATUS_TEXT["en"]
+    entry = table.get(status) or MARITAL_STATUS_TEXT["en"][status]
+    return entry.get(gender, entry.get("Male", ""))
+
+
+# -----------------------------------------------------------------------------
+# Pediatric questions, shown instead of the adult male/female section whenever
+# the marital status is "child". They are informational only (like the adult
+# gender-specific questions) and do not change the estimated probability.
+# -----------------------------------------------------------------------------
+CHILD_COMMON_SYMPTOM_KEYS = [
+    "child_bedwetting", "child_growth", "child_fatigue_school", "child_skin_infections",
+]
+CHILD_BOY_EXTRA_KEYS: list = []
+CHILD_GIRL_EXTRA_KEYS = ["child_yeast"]
+
+
+def child_question_keys(gender: str) -> list:
+    """Pediatric questions for this child, by their gender."""
+    extra = CHILD_GIRL_EXTRA_KEYS if gender == "Female" else CHILD_BOY_EXTRA_KEYS
+    return list(CHILD_COMMON_SYMPTOM_KEYS) + list(extra)
+
 EXTRA_TEXT = {
     "en": {
         "freq_8_10": "8-10 times a day",
@@ -113,11 +176,9 @@ EXTRA_TEXT = {
         "freq_unsure": "not sure how many times",
         "gender_hint": "Choose your gender and marital status: the questions below adapt to them.",
         "marital_status": "Marital status",
-        "marital_single": "Single (never married)",
-        "marital_married": "Married",
-        "marital_previously": "Divorced or widowed",
         "male_section": "Symptoms specific to men",
         "female_section": "Symptoms specific to women",
+        "child_section": "Questions specific to children",
         "gender_section_help": "These answers are added to your report to help your doctor. They do not change the estimated probability.",
         "male_erectile": "Difficulty getting or keeping an erection",
         "male_libido": "Reduced sex drive",
@@ -130,6 +191,11 @@ EXTRA_TEXT = {
         "female_hair": "Excess facial or body hair",
         "female_dryness": "Vaginal dryness or painful intercourse",
         "female_gdm": "Diabetes during a previous pregnancy",
+        "child_bedwetting": "New bedwetting after being previously toilet-trained",
+        "child_growth": "Poor weight gain or slowed growth",
+        "child_fatigue_school": "Unusual tiredness or trouble concentrating at school",
+        "child_skin_infections": "Repeated skin infections or slow-healing sores",
+        "child_yeast": "Recurrent yeast infections",
     },
     "ar": {
         "freq_8_10": "من 8 إلى 10 مرات في اليوم",
@@ -138,11 +204,9 @@ EXTRA_TEXT = {
         "freq_unsure": "لا أعرف عدد المرات",
         "gender_hint": "اختر الجنس والحالة الاجتماعية لتظهر لك الأسئلة المناسبة.",
         "marital_status": "الحالة الاجتماعية",
-        "marital_single": "لم أتزوج بعد",
-        "marital_married": "متزوج/ة",
-        "marital_previously": "مطلّق/ة أو أرمل/ة",
         "male_section": "أعراض خاصة بالرجال",
         "female_section": "أعراض خاصة بالنساء",
+        "child_section": "أسئلة خاصة بالأطفال",
         "gender_section_help": "تُضاف هذه الإجابات إلى التقرير لمساعدة الطبيب، ولا تغيّر نسبة الاحتمال المقدَّرة.",
         "male_erectile": "صعوبة في الانتصاب أو الحفاظ عليه",
         "male_libido": "انخفاض الرغبة الجنسية",
@@ -155,6 +219,11 @@ EXTRA_TEXT = {
         "female_hair": "زيادة شعر الوجه أو الجسم",
         "female_dryness": "جفاف مهبلي أو ألم أثناء الجماع",
         "female_gdm": "الإصابة بسكري الحمل في حمل سابق",
+        "child_bedwetting": "التبول اللاإرادي المفاجئ بعد التحكم به سابقًا",
+        "child_growth": "ضعف في زيادة الوزن أو تباطؤ في النمو",
+        "child_fatigue_school": "تعب غير معتاد أو صعوبة في التركيز في المدرسة",
+        "child_skin_infections": "التهابات جلدية متكررة أو بطء التئام الجروح",
+        "child_yeast": "التهابات فطرية متكررة",
     },
     "es": {
         "freq_8_10": "de 8 a 10 veces al día",
@@ -163,11 +232,9 @@ EXTRA_TEXT = {
         "freq_unsure": "no sé cuántas veces",
         "gender_hint": "Elige tu sexo y estado civil: las preguntas de abajo se adaptan a tu elección.",
         "marital_status": "Estado civil",
-        "marital_single": "Soltero/a (nunca me he casado)",
-        "marital_married": "Casado/a",
-        "marital_previously": "Divorciado/a o viudo/a",
         "male_section": "Síntomas específicos de los hombres",
         "female_section": "Síntomas específicos de las mujeres",
+        "child_section": "Preguntas específicas para niños",
         "gender_section_help": "Estas respuestas se añaden al informe para ayudar a tu médico. No modifican la probabilidad estimada.",
         "male_erectile": "Dificultad para lograr o mantener una erección",
         "male_libido": "Disminución del deseo sexual",
@@ -180,6 +247,11 @@ EXTRA_TEXT = {
         "female_hair": "Exceso de vello en la cara o el cuerpo",
         "female_dryness": "Sequedad vaginal o dolor en las relaciones sexuales",
         "female_gdm": "Diabetes durante un embarazo anterior",
+        "child_bedwetting": "Nuevos episodios de enuresis tras haber controlado esfínteres",
+        "child_growth": "Poco aumento de peso o crecimiento más lento de lo normal",
+        "child_fatigue_school": "Cansancio inusual o dificultad para concentrarse en la escuela",
+        "child_skin_infections": "Infecciones cutáneas repetidas o heridas que sanan lentamente",
+        "child_yeast": "Infecciones por hongos recurrentes",
     },
 }
 
@@ -1755,7 +1827,7 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str 
 
 def build_report(lang, timestamp, first, last, phone, email, address, type_key,
                  age, gender, result, probability, symptom_values, extra_values,
-                 gender_values=None, freq_key=None) -> dict:
+                 gender_values=None, freq_key=None, marital_status_key=None) -> dict:
     """Build the report dictionary in the requested language."""
     gender_values = gender_values or {}
     any_extra = any(v == "Yes" for v in extra_values.values()) or any(
@@ -1772,6 +1844,7 @@ def build_report(lang, timestamp, first, last, phone, email, address, type_key,
         "Reported diabetes type": tr(type_key, lang),
         "Age": age,
         "Gender": tr("male" if gender == "Male" else "female", lang),
+        "Marital status": marital_status_label(marital_status_key, gender, lang) if marital_status_key else "",
         "Result": tr("positive_high" if result == 1 else "negative_low", lang),
         "Probability": f"{probability * 100:.1f}%",
         "Notable extra symptoms": tr("yes" if any_extra else "no", lang),
@@ -2028,9 +2101,13 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
             core_texts.append(label)
         extra_texts = [t(k) for k in symptoms.get("extra", []) if k in extra_symptom_keys]
         kind = symptoms.get("gender_kind")
-        g_keys = MALE_SYMPTOM_KEYS if kind == "Male" else FEMALE_SYMPTOM_KEYS
+        if symptoms.get("is_child"):
+            g_keys = child_question_keys(kind)
+            gender_head = t("child_section")
+        else:
+            g_keys = MALE_SYMPTOM_KEYS if kind == "Male" else FEMALE_SYMPTOM_KEYS
+            gender_head = t("male_section" if kind == "Male" else "female_section")
         gender_texts = [t(k) for k in symptoms.get("gender", []) if k in g_keys]
-        gender_head = t("male_section" if kind == "Male" else "female_section")
 
     # ------------------------------------------------------------------ fonts
     values = [str(v) for v in report_data.values()]
@@ -2559,11 +2636,15 @@ def render_main_app():
         gender_label = st.selectbox(tr("gender"), [tr("male"), tr("female")], key="basic_gender")
         gender = "Male" if gender_label == tr("male") else "Female"
     with c7:
-        marital_options = [tr(k) for k in MARITAL_KEYS]
-        marital_label = st.selectbox(tr("marital_status"), marital_options, key="basic_marital")
-        # The first option is "never married" (also the default): the sensitive
-        # questions stay hidden until the patient says they are / were married.
-        ever_married = marital_options.index(marital_label) != 0
+        # Labels agree in gender with the "Gender" choice above (e.g. "أعزب" for a
+        # male patient vs "عزباء" for a female one), and include a "Child" option
+        # that switches the last section of the form to pediatric questions.
+        marital_labels = [marital_status_label(k, gender, lang) for k in MARITAL_STATUS_ORDER]
+        marital_label = st.selectbox(tr("marital_status"), marital_labels, key="basic_marital")
+        marital_status_key = MARITAL_STATUS_ORDER[marital_labels.index(marital_label)]
+        is_child = marital_status_key == "child"
+        # Sensitive adult questions only appear once married or divorced/widowed.
+        ever_married = marital_status_key in ("married", "divorced")
 
     with st.form("patient_form", clear_on_submit=False):
         st.markdown(f'<div class="section-title">👤 {tr("personal")}</div>', unsafe_allow_html=True)
@@ -2638,11 +2719,18 @@ def render_main_app():
                 )
                 extra_values[key] = "Yes" if selected == tr("yes") else "No"
 
-        # Questions that depend on the gender chosen above.
+        # Questions that depend on the gender chosen above (adult male/female
+        # section), or - if the patient is a child - pediatric questions
+        # chosen by the child's gender instead.
         gender_values = {}
-        gender_keys = gender_question_keys(gender, ever_married)
-        gender_icon = "♂️" if gender == "Male" else "♀️"
-        gender_title = tr("male_section" if gender == "Male" else "female_section")
+        if is_child:
+            gender_keys = child_question_keys(gender)
+            gender_icon = "🧒" if gender == "Male" else "👧"
+            gender_title = tr("child_section")
+        else:
+            gender_keys = gender_question_keys(gender, ever_married)
+            gender_icon = "♂️" if gender == "Male" else "♀️"
+            gender_title = tr("male_section" if gender == "Male" else "female_section")
 
         st.markdown("---")
         st.markdown(f'<div class="section-title">{gender_icon} {gender_title}</div>', unsafe_allow_html=True)
@@ -2655,7 +2743,7 @@ def render_main_app():
                 selected = st.selectbox(
                     tr(key),
                     [tr("no"), tr("yes")],
-                    key=f"gender_{gender}_{key}",
+                    key=f"gender_{gender}_{'child' if is_child else 'adult'}_{key}",
                 )
                 gender_values[key] = "Yes" if selected == tr("yes") else "No"
 
@@ -2713,6 +2801,7 @@ def render_main_app():
                 extra_values=extra_values,
                 gender_values=gender_values,
                 freq_key=freq_key,
+                marital_status_key=marital_status_key,
             )
 
             # Shown to the user (current language) ...
@@ -2726,6 +2815,7 @@ def render_main_app():
                 "extra": [k for k in extra_symptom_keys if extra_values.get(k) == "Yes"],
                 "gender": [k for k, v in gender_values.items() if v == "Yes"],
                 "gender_kind": gender,
+                "is_child": is_child,
                 "freq": freq_key,
             }
             st.session_state["last_result"] = int(result)
