@@ -193,6 +193,8 @@ def inject_css():
             --border: #334155;
             --input: #0b1220;
             --input-border: #334155;
+            --input-hover: #172033;
+            --input-text: #f8fafc;
             --page: #0f172a;
             --success: #4ade80;
             --danger: #f87171;
@@ -674,45 +676,91 @@ def inject_css():
         }}
 
         /* ================================================================
-           Form fields - one clean frame per field, identical logic in light
-           and dark mode. Streamlit's own dark layers (#262730) are cleared so
-           they can no longer show through as dark edges / dark side blocks.
+           FORM FIELDS  (FIXED: readable text in Light Mode)
+
+           Why it was broken: when the browser / OS is in dark mode,
+           Streamlit paints its own dark background (#262730) on inputs,
+           number fields and selectboxes. Our text was dark navy, so it
+           became dark-on-dark. Different Streamlit versions use different
+           wrapper elements, so here we style ALL of them
+           (data-baseweb + data-testid) with a higher specificity
+           (".stApp ...") so our colors always win.
            ================================================================ */
 
-        /* 1) Clear Streamlit/BaseWeb's built-in dark layers. */
-        [data-baseweb="input"],
-        [data-baseweb="input"] > div,
-        [data-baseweb="input"] div,
-        [data-baseweb="base-input"],
-        [data-baseweb="textarea"],
-        [data-baseweb="textarea"] > div,
-        [data-baseweb="textarea"] div,
-        [data-baseweb="select"],
-        [data-baseweb="select"] > div,
-        [data-baseweb="select"] > div > div {{
-            background: transparent !important;
-        }}
-
-        /* 2) The visible field frame.
-           Light mode uses a subtle warm ivory/beige so fields are distinct
-           from the white card without looking heavy. */
-        div[data-baseweb="input"],
-        div[data-baseweb="textarea"],
-        div[data-baseweb="select"] > div {{
+        /* 1) The visible frame - exactly ONE frame per field.
+              Text / number / textarea: the wrapper element.
+              Selectbox: the BaseWeb ROOT element (not its first child), so the
+              frame is drawn no matter how this Streamlit version nests it. */
+        .stApp div[data-baseweb="input"],
+        .stApp div[data-baseweb="textarea"],
+        .stApp div[data-baseweb="select"],
+        .stApp [data-testid="stSelectbox"] [role="group"],
+        .stApp [data-testid="stMultiSelect"] [role="group"],
+        .stApp [data-testid="stSelectbox"] > div:has(> input),
+        .stApp [data-testid="stMultiSelect"] > div:has(> input),
+        .stApp [data-testid="stDateInput"] [role="group"],
+        .stApp [data-testid="stTextInputRootElement"],
+        .stApp [data-testid="stNumberInputContainer"],
+        .stApp [data-testid="stTextAreaRootElement"] {{
             background: var(--input) !important;
+            background-color: var(--input) !important;
+            background-image: none !important;
             border: 1px solid var(--input-border) !important;
             border-radius: 12px !important;
-            overflow: hidden;
             box-shadow: none !important;
+            overflow: hidden;
             transition: background .15s ease, border-color .15s ease,
                         box-shadow .15s ease;
         }}
 
-        /* 3) Text inside inputs must stay dark in Light Mode.
-           -webkit-text-fill-color is included because BaseWeb/Streamlit can
-           otherwise keep the browser's dark-theme text color. */
-        input, textarea {{
+        /* 2) Everything nested inside a frame is transparent, so Streamlit's
+              dark layers can never show through and no double borders appear. */
+        .stApp div[data-baseweb="input"] [data-baseweb],
+        .stApp div[data-baseweb="textarea"] [data-baseweb],
+        .stApp [data-testid="stTextInputRootElement"] [data-baseweb],
+        .stApp [data-testid="stNumberInputContainer"] [data-baseweb],
+        .stApp [data-testid="stTextAreaRootElement"] [data-baseweb],
+        .stApp div[data-baseweb="select"] *:not(svg):not(path):not([data-baseweb="tag"]) {{
             background: transparent !important;
+            background-color: transparent !important;
+            background-image: none !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }}
+
+        /* 3) Hover / focus (our blue focus ring replaces Streamlit's red one) */
+        .stApp div[data-baseweb="input"]:hover,
+        .stApp div[data-baseweb="select"]:hover,
+        .stApp [data-testid="stSelectbox"] [role="group"]:hover,
+        .stApp [data-testid="stMultiSelect"] [role="group"]:hover,
+        .stApp [data-testid="stTextInputRootElement"]:hover,
+        .stApp [data-testid="stNumberInputContainer"]:hover {{
+            background: var(--input-hover, var(--input)) !important;
+            background-color: var(--input-hover, var(--input)) !important;
+        }}
+
+        .stApp div[data-baseweb="input"]:focus-within,
+        .stApp div[data-baseweb="textarea"]:focus-within,
+        .stApp div[data-baseweb="select"]:focus-within,
+        .stApp [data-testid="stSelectbox"] [role="group"]:focus-within,
+        .stApp [data-testid="stSelectbox"] [role="group"][data-focus-within],
+        .stApp [data-testid="stMultiSelect"] [role="group"]:focus-within,
+        .stApp [data-testid="stMultiSelect"] [role="group"][data-focus-within],
+        .stApp [data-testid="stTextInputRootElement"]:focus-within,
+        .stApp [data-testid="stNumberInputContainer"]:focus-within,
+        .stApp [data-testid="stTextAreaRootElement"]:focus-within {{
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 3px rgba(37,99,235,.16) !important;
+        }}
+
+        /* 4) Text typed inside inputs (dark navy in light mode, white in dark mode).
+              -webkit-text-fill-color is needed because the browser can otherwise
+              keep its own dark-theme text color. */
+        .stApp input,
+        .stApp textarea {{
+            background: transparent !important;
+            background-color: transparent !important;
             border: 0 !important;
             box-shadow: none !important;
             color: var(--input-text, var(--text)) !important;
@@ -721,87 +769,181 @@ def inject_css():
             opacity: 1 !important;
         }}
 
-        input[type="number"] {{
+        .stApp input[type="number"] {{
             color: var(--input-text, var(--text)) !important;
             -webkit-text-fill-color: var(--input-text, var(--text)) !important;
         }}
 
-        /* BaseWeb Select: force the selected value and placeholder to remain
-           readable instead of inheriting Streamlit's dark-mode text. */
-        [data-baseweb="select"] [role="button"],
-        [data-baseweb="select"] [role="button"] *,
-        [data-baseweb="select"] [aria-selected="true"],
-        [data-baseweb="select"] span {{
+        .stApp input::placeholder,
+        .stApp textarea::placeholder {{
+            color: var(--muted) !important;
+            -webkit-text-fill-color: var(--muted) !important;
+            opacity: .8 !important;
+        }}
+
+        /* Browser autofill would otherwise repaint the field yellow/blue. */
+        .stApp input:-webkit-autofill,
+        .stApp input:-webkit-autofill:hover,
+        .stApp input:-webkit-autofill:focus {{
+            -webkit-box-shadow: 0 0 0 1000px var(--input) inset !important;
+            -webkit-text-fill-color: var(--input-text, var(--text)) !important;
+            caret-color: var(--primary) !important;
+        }}
+
+        /* 5) Selectbox: the chosen value (Yes / No / Male ...) stays readable,
+              and the blinking text cursor is hidden (it is a dropdown, not a text box). */
+        .stApp div[data-baseweb="select"],
+        .stApp div[data-baseweb="select"] *,
+        .stApp div[data-baseweb="select"] [role="combobox"],
+        .stApp div[data-baseweb="select"] [role="combobox"] *,
+        .stApp div[data-baseweb="select"] [role="button"],
+        .stApp div[data-baseweb="select"] [role="button"] *,
+        .stApp div[data-baseweb="select"] span,
+        .stApp div[data-baseweb="select"] input {{
             color: var(--input-text, var(--text)) !important;
             -webkit-text-fill-color: var(--input-text, var(--text)) !important;
             opacity: 1 !important;
         }}
 
-        input::placeholder,
-        textarea::placeholder {{
-            color: var(--muted) !important;
-            opacity: .8 !important;
+        .stApp div[data-baseweb="select"] input,
+        .stApp [data-testid="stSelectbox"] input {{
+            caret-color: transparent !important;
         }}
 
-        /* 4) focus */
-        div[data-baseweb="input"]:focus-within,
-        div[data-baseweb="textarea"]:focus-within,
-        div[data-baseweb="select"] > div:focus-within {{
-            border-color: var(--primary) !important;
-            box-shadow: 0 0 0 3px rgba(37,99,235,.16) !important;
+        .stApp [data-testid="stSelectbox"] [role="group"] *,
+        .stApp [data-testid="stMultiSelect"] [role="group"] * {{
+            color: var(--input-text, var(--text)) !important;
+            -webkit-text-fill-color: var(--input-text, var(--text)) !important;
+            opacity: 1 !important;
         }}
 
-        /* 5) small buttons inside fields (number  - / +  and password eye) */
-        [data-baseweb="input"] button {{
+        /* 6) Small buttons inside fields (number - / + and password eye) */
+        .stApp div[data-baseweb="input"] button,
+        .stApp [data-testid="stNumberInputContainer"] button,
+        .stApp [data-testid="stNumberInputStepDown"],
+        .stApp [data-testid="stNumberInputStepUp"] {{
             background: transparent !important;
+            background-color: transparent !important;
             border: 0 !important;
+            box-shadow: none !important;
             color: var(--muted) !important;
+            opacity: 1 !important;
         }}
 
-        [data-baseweb="input"] button:hover {{
+        .stApp div[data-baseweb="input"] button:hover,
+        .stApp [data-testid="stNumberInputContainer"] button:hover,
+        .stApp [data-testid="stNumberInputStepDown"]:hover,
+        .stApp [data-testid="stNumberInputStepUp"]:hover {{
             background: var(--input-hover, var(--surface-soft)) !important;
             color: var(--primary) !important;
         }}
 
-        /* Keep the +/- controls and their icons visible. */
-        [data-baseweb="input"] button,
-        [data-baseweb="input"] button span,
-        [data-baseweb="input"] button svg {{
-            opacity: 1 !important;
-        }}
-
-        [data-baseweb="input"] button svg,
-        [data-baseweb="select"] svg {{
-            fill: var(--muted) !important;
-            color: var(--muted) !important;
-        }}
-
-        /* Selectbox text + dropdown */
-        [data-baseweb="select"] *,
-        [role="listbox"] *,
-        [role="option"] {{
-            color: var(--input-text, var(--text)) !important;
-            -webkit-text-fill-color: var(--input-text, var(--text)) !important;
-        }}
-
-        /* Dropdown arrow */
-        [data-baseweb="select"] svg {{
+        .stApp div[data-baseweb="input"] button svg,
+        .stApp [data-testid="stNumberInputContainer"] button svg,
+        .stApp div[data-baseweb="select"] svg,
+        .stApp [data-testid="stSelectbox"] [role="group"] button,
+        .stApp [data-testid="stSelectbox"] [role="group"] button svg,
+        .stApp [data-testid="stMultiSelect"] [role="group"] button,
+        .stApp [data-testid="stMultiSelect"] [role="group"] button svg {{
+            background: transparent !important;
             fill: var(--muted) !important;
             color: var(--muted) !important;
             opacity: 1 !important;
         }}
 
+        /* 7) Dropdown list (Yes / No options).
+              It is rendered in a "portal" OUTSIDE .stApp, so these rules
+              intentionally do NOT use the .stApp prefix. */
         div[data-baseweb="popover"],
+        div[data-baseweb="popover"] > div,
+        div[data-baseweb="popover"] ul,
         div[data-baseweb="menu"],
+        ul[role="listbox"],
+        [data-testid="stSelectboxVirtualDropdown"],
         [role="listbox"] {{
             background: var(--surface) !important;
-            border: 1px solid var(--border) !important;
+            background-color: var(--surface) !important;
+            border-color: var(--border) !important;
             color: var(--text) !important;
         }}
 
-        [role="option"]:hover,
-        [role="option"][aria-selected="true"] {{
+        div[data-baseweb="popover"] li,
+        div[data-baseweb="menu"] li,
+        [data-testid="stSelectboxVirtualDropdown"] li,
+        [role="listbox"] li,
+        [role="option"] {{
+            background: var(--surface) !important;
+            background-color: var(--surface) !important;
+            color: var(--text) !important;
+            -webkit-text-fill-color: var(--text) !important;
+        }}
+
+        div[data-baseweb="popover"] li *,
+        div[data-baseweb="menu"] li *,
+        [data-testid="stSelectboxVirtualDropdown"] li *,
+        [role="listbox"] li *,
+        [role="option"] * {{
+            color: var(--text) !important;
+            -webkit-text-fill-color: var(--text) !important;
+            background: transparent !important;
+        }}
+
+        [role="option"] [data-item-hl] {{
+            background: transparent !important;
+            background-color: transparent !important;
+        }}
+
+        [role="option"][data-hovered] [data-item-hl],
+        [role="option"][data-focused] [data-item-hl],
+        [role="option"][aria-selected="true"] [data-item-hl],
+        [role="option"]:hover [data-item-hl] {{
             background: var(--surface-soft) !important;
+            background-color: var(--surface-soft) !important;
+        }}
+
+        [data-testid="stSelectboxVirtualDropdown"],
+        [data-testid="stMultiSelectDropdown"] {{
+            border: 1px solid var(--border) !important;
+            box-shadow: var(--shadow) !important;
+        }}
+
+        [data-testid="stMultiSelectDropdown"] {{
+            background: var(--surface) !important;
+        }}
+
+        div[data-baseweb="popover"] li:hover,
+        div[data-baseweb="menu"] li:hover,
+        [data-testid="stSelectboxVirtualDropdown"] li:hover,
+        [role="listbox"] li:hover,
+        [role="option"]:hover,
+        [role="option"][aria-selected="true"],
+        li[aria-selected="true"] {{
+            background: var(--surface-soft) !important;
+            background-color: var(--surface-soft) !important;
+        }}
+
+        /* 8) Tooltips (hover text of the day/night and restart buttons, help= icons).
+              Streamlit paints them dark; our global text rule made the text dark too,
+              so the label was invisible in Light Mode. They render in a portal, so no
+              .stApp prefix here. */
+        [data-testid="stTooltipContent"],
+        [role="tooltip"] [data-testid="stTooltipContent"],
+        div[data-baseweb="tooltip"],
+        div[data-baseweb="tooltip"] > div {{
+            background: var(--surface) !important;
+            background-color: var(--surface) !important;
+            color: var(--text) !important;
+            border: 1px solid var(--border) !important;
+            border-radius: 10px !important;
+            box-shadow: var(--shadow) !important;
+        }}
+
+        [data-testid="stTooltipContent"] *,
+        div[data-baseweb="tooltip"] * {{
+            color: var(--text) !important;
+            -webkit-text-fill-color: var(--text) !important;
+            background: transparent !important;
+            font-weight: 600 !important;
         }}
 
         /* Field labels */
@@ -845,6 +987,9 @@ def inject_css():
         /* Buttons */
         .stButton > button,
         .stDownloadButton > button,
+        .stFormSubmitButton > button,
+        [data-testid="stBaseButton-secondary"],
+        [data-testid="stBaseButton-secondaryFormSubmit"],
         button[kind="primary"] {{
             border-radius:14px !important;
             min-height:46px !important;
@@ -862,11 +1007,25 @@ def inject_css():
             box-shadow:0 8px 18px rgba(0,0,0,.20) !important;
         }}
 
-        .stButton > button[kind="primary"],
-        button[kind="primary"] {{
+        .stApp .stButton > button[kind="primary"],
+        .stApp .stFormSubmitButton > button[kind="primary"],
+        .stApp .stDownloadButton > button[kind="primary"],
+        .stApp button[kind="primary"],
+        .stApp [data-testid="stBaseButton-primary"],
+        .stApp [data-testid="stBaseButton-primaryFormSubmit"] {{
             background:linear-gradient(135deg,#2563eb,#0284c7) !important;
             color:white !important;
             border:none !important;
+        }}
+
+        .stApp button[kind="primary"] p,
+        .stApp button[kind="primary"] span,
+        .stApp [data-testid="stBaseButton-primary"] p,
+        .stApp [data-testid="stBaseButton-primary"] span,
+        .stApp [data-testid="stBaseButton-primaryFormSubmit"] p,
+        .stApp [data-testid="stBaseButton-primaryFormSubmit"] span {{
+            color:#ffffff !important;
+            -webkit-text-fill-color:#ffffff !important;
         }}
 
         /* Metrics */
