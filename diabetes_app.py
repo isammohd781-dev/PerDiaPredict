@@ -25,7 +25,7 @@ from translations import LANGUAGES, T
 # Flow: splash -> language gate (continue / change language) -> app
 # =============================================================================
 
-_page_icon = "logo.png" if os.path.exists("logo.png") else "🩺"
+_page_icon = "logo.png" if os.path.exists("logo.png") else None
 
 st.set_page_config(
     page_title="PerdiaPredict",
@@ -263,7 +263,7 @@ EXTRA_TEXT = {
         "dob_day": "Day",
         "dob_month": "Month",
         "dob_year": "Year",
-        "dob_choose": "Choose",
+        "dob_choose": "Type or choose",
         "reg_warn_title": "Important warning",
         "reg_warn_text": "There is no “Forgot password” option. We protect your data with complete confidentiality, so passwords cannot be viewed or recovered by anyone. If you forget your password, please contact technical support only. Make sure you will remember it before you confirm.",
         "reg_accept": "I have read and understood this warning",
@@ -365,7 +365,7 @@ EXTRA_TEXT = {
         "dob_day": "اليوم",
         "dob_month": "الشهر",
         "dob_year": "السنة",
-        "dob_choose": "اختر",
+        "dob_choose": "اكتب أو اختر",
         "reg_warn_title": "تحذير مهم",
         "reg_warn_text": "لا يوجد خيار «نسيت كلمة المرور»، لأننا نحمي بياناتكم بسرية تامة ولا يمكن لأي أحد الاطلاع على كلمات المرور أو استرجاعها. في حال نسيان كلمة المرور، يرجى التواصل مع الدعم الفني فقط. تأكد من حفظ كلمة المرور قبل التأكيد.",
         "reg_accept": "قرأتُ التحذير وفهمته",
@@ -467,7 +467,7 @@ EXTRA_TEXT = {
         "dob_day": "Día",
         "dob_month": "Mes",
         "dob_year": "Año",
-        "dob_choose": "Elegir",
+        "dob_choose": "Escribe o elige",
         "reg_warn_title": "Advertencia importante",
         "reg_warn_text": "No existe la opción «Olvidé mi contraseña». Protegemos tus datos con total confidencialidad, por lo que nadie puede ver ni recuperar las contraseñas. Si olvidas tu contraseña, contacta únicamente con el soporte técnico. Asegúrate de recordarla antes de confirmar.",
         "reg_accept": "He leído y entendido esta advertencia",
@@ -590,7 +590,22 @@ GLUCOSE_RANGE = {"mg/dL": (20.0, 1000.0), "mmol/L": (1.1, 55.0)}
 # the technical support, not someone who copies the file - can read a password.
 # That is also why there is no "forgot password": support can only set a new one.
 # ACCOUNTS-DB-START
-DB_FILE = "perdiapredict.db"
+# =============================================================================
+# Accounts stored in an Excel file:  accounts.xlsx   (sheet "users")
+#
+# One row per registered user: ID, first / last name, email, birth date,
+# password hash, created at, last login, failed attempts, locked until.
+#
+# * The password is NEVER written as readable text - only a salted
+#   PBKDF2-SHA256 hash (a one-way code). At sign-in the typed password is
+#   hashed the same way and compared with it.
+# * The file is read into memory once and re-read only when it changes, so
+#   the check at sign-in is instant.
+# * Old accounts from perdiapredict.db (the previous storage) are imported
+#   automatically the first time, if that file exists.
+# =============================================================================
+ACCOUNTS_FILE = "accounts.xlsx"
+DB_FILE = "perdiapredict.db"          # old SQLite storage (only read for the one-time import)
 PBKDF2_ITERATIONS = 260_000
 MIN_PASSWORD_LEN = 8
 MAX_FAILED_LOGINS = 5      # wrong passwords in a row ...
@@ -599,27 +614,23 @@ SUPPORT_WHATSAPP_NUMBER = "+256771715275"
 SUPPORT_WHATSAPP_URL = "https://wa.me/256771715275"
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-USERS_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS users (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    first_name      TEXT    NOT NULL,
-    last_name       TEXT    NOT NULL,
-    email           TEXT    NOT NULL UNIQUE COLLATE NOCASE,
-    birth_date      TEXT    NOT NULL,
-    password_hash   TEXT    NOT NULL,
-    created_at      TEXT    NOT NULL,
-    last_login      TEXT,
-    failed_attempts INTEGER NOT NULL DEFAULT 0,
-    locked_until    TEXT
-)
-"""
+ACCOUNT_FIELDS = [
+    "id", "first_name", "last_name", "email", "birth_date",
+    "password_hash", "created_at", "last_login", "failed_attempts", "locked_until",
+]
+ACCOUNT_HEADERS = [
+    "ID", "First name", "Last name", "Email", "Birth date",
+    "Password hash", "Created at", "Last login", "Failed attempts", "Locked until",
+]
+_FIELD_BY_HEADER = dict(zip(ACCOUNT_HEADERS, ACCOUNT_FIELDS))
 
 
-def _db():
-    conn = sqlite3.connect(DB_FILE, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute(USERS_TABLE_SQL)
-    return conn
+@st.cache_resource
+def _accounts_store():
+    """Shared by every browser session: a lock + the in-memory copy of the file."""
+    import threading
+
+    return {"lock": threading.RLock(), "mtime": None, "rows": []}
 
 
 def normalize_email(email: str) -> str:
@@ -643,74 +654,300 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
+def _cell_text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.isoformat(timespec="seconds")
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value).strip()
+
+
+def _rows_from_sheet(ws) -> list:
+    """Read the accounts out of a worksheet (columns are found by their header names)."""
+    rows_iter = ws.iter_rows(values_only=True)
+    header = next(rows_iter, None)
+    if not header:
+        return []
+
+    index = {}
+    for i, name in enumerate(header):
+        field = _FIELD_BY_HEADER.get(_cell_text(name))
+        if field:
+            index[field] = i
+    if "email" not in index or "password_hash" not in index:
+        return []
+
+    def get(raw, field):
+        i = index.get(field)
+        return _cell_text(raw[i]) if i is not None and i < len(raw) else ""
+
+    def as_int(text):
+        try:
+            return int(float(text))
+        except (TypeError, ValueError):
+            return 0
+
+    out = []
+    for raw in rows_iter:
+        email = normalize_email(get(raw, "email"))
+        pw_hash = get(raw, "password_hash")
+        if not email or not pw_hash:
+            continue
+        out.append({
+            "id": as_int(get(raw, "id")),
+            "first_name": get(raw, "first_name"),
+            "last_name": get(raw, "last_name"),
+            "email": email,
+            "birth_date": get(raw, "birth_date"),
+            "password_hash": pw_hash,
+            "created_at": get(raw, "created_at"),
+            "last_login": get(raw, "last_login"),
+            "failed_attempts": as_int(get(raw, "failed_attempts")),
+            "locked_until": get(raw, "locked_until"),
+        })
+
+    # every account needs a unique positive ID
+    seen, next_id = set(), max([r["id"] for r in out] + [0]) + 1
+    for r in out:
+        if r["id"] <= 0 or r["id"] in seen:
+            r["id"] = next_id
+            next_id += 1
+        seen.add(r["id"])
+    return out
+
+
+def _save_rows(rows: list):
+    """Write the whole list to accounts.xlsx (temp file first, then swap: never half-written)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "users"
+    ws.append(ACCOUNT_HEADERS)
+    for r in rows:
+        ws.append([r.get(f, "") for f in ACCOUNT_FIELDS])
+
+    # Text that starts with "=" must stay text (never run as an Excel formula).
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
+
+    head_fill = PatternFill("solid", fgColor="2563EB")
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = head_fill
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    widths = [7, 16, 16, 32, 13, 60, 20, 20, 15, 20]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
+    ws.freeze_panes = "A2"
+
+    tmp = ACCOUNTS_FILE + ".tmp"
+    wb.save(tmp)
+    os.replace(tmp, ACCOUNTS_FILE)
+
+    store = _accounts_store()
+    store["rows"] = [dict(r) for r in rows]
+    store["mtime"] = os.path.getmtime(ACCOUNTS_FILE)
+
+
+def _import_old_sqlite() -> list:
+    """One-time import of the accounts that were kept in perdiapredict.db."""
+    if not os.path.exists(DB_FILE):
+        return []
+    try:
+        with closing(sqlite3.connect(DB_FILE, timeout=15)) as conn:
+            conn.row_factory = sqlite3.Row
+            found = conn.execute("SELECT * FROM users").fetchall()
+        return [{
+            "id": int(r["id"]),
+            "first_name": r["first_name"] or "",
+            "last_name": r["last_name"] or "",
+            "email": normalize_email(r["email"]),
+            "birth_date": r["birth_date"] or "",
+            "password_hash": r["password_hash"] or "",
+            "created_at": r["created_at"] or "",
+            "last_login": r["last_login"] or "",
+            "failed_attempts": int(r["failed_attempts"] or 0),
+            "locked_until": r["locked_until"] or "",
+        } for r in found if r["email"] and r["password_hash"]]
+    except Exception:
+        return []
+
+
+def _load_rows() -> list:
+    """All accounts (a copy). The Excel file is only re-read when it has changed."""
+    store = _accounts_store()
+    with store["lock"]:
+        if not os.path.exists(ACCOUNTS_FILE):
+            old = _import_old_sqlite()
+            if old:
+                _save_rows(old)
+                return [dict(r) for r in old]
+            store["rows"], store["mtime"] = [], None
+            return []
+
+        mtime = os.path.getmtime(ACCOUNTS_FILE)
+        if store["mtime"] != mtime:
+            from openpyxl import load_workbook
+
+            wb = load_workbook(ACCOUNTS_FILE, read_only=True, data_only=True)
+            try:
+                store["rows"] = _rows_from_sheet(wb.active)
+            finally:
+                wb.close()
+            store["mtime"] = mtime
+        return [dict(r) for r in store["rows"]]
+
+
+def _update_account(email: str, **changes):
+    store = _accounts_store()
+    with store["lock"]:
+        rows = _load_rows()
+        for r in rows:
+            if r["email"] == email:
+                r.update(changes)
+                _save_rows(rows)
+                return
+
+
 def create_user(first_name: str, last_name: str, email: str, birth_date: date, password: str):
     """Save a new account. Returns (True, None) or (False, translation_key_of_the_error)."""
-    now = datetime.now().isoformat(timespec="seconds")
+    email = normalize_email(email)
     try:
-        with closing(_db()) as conn, conn:
-            conn.execute(
-                "INSERT INTO users (first_name, last_name, email, birth_date, password_hash, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    first_name.strip(),
-                    last_name.strip(),
-                    normalize_email(email),
-                    birth_date.isoformat(),
-                    hash_password(password),
-                    now,
-                ),
-            )
+        password_hash = hash_password(password)
+        store = _accounts_store()
+        with store["lock"]:
+            rows = _load_rows()
+            if any(r["email"] == email for r in rows):
+                return False, "auth_email_taken"
+            rows.append({
+                "id": max([r["id"] for r in rows] + [0]) + 1,
+                "first_name": first_name.strip(),
+                "last_name": last_name.strip(),
+                "email": email,
+                "birth_date": birth_date.isoformat(),
+                "password_hash": password_hash,
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+                "last_login": "",
+                "failed_attempts": 0,
+                "locked_until": "",
+            })
+            _save_rows(rows)
         return True, None
-    except sqlite3.IntegrityError:
-        return False, "auth_email_taken"
     except Exception:
         return False, "auth_db_error"
 
 
 def authenticate(email: str, password: str):
-    """Check an email + password. Returns (user_dict_or_None, status) where status is
-    "ok", "invalid" or "locked" (too many wrong passwords in a row)."""
+    """Check an email + password against accounts.xlsx.
+    Returns (user_dict_or_None, status) where status is "ok", "invalid" or "locked"
+    (too many wrong passwords in a row)."""
     email = normalize_email(email)
     now = datetime.now()
-    with closing(_db()) as conn:
-        row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-        if row is None:
-            return None, "invalid"
 
-        if row["locked_until"]:
-            try:
-                if datetime.fromisoformat(row["locked_until"]) > now:
-                    return None, "locked"
-            except ValueError:
-                pass
+    row = next((r for r in _load_rows() if r["email"] == email), None)
+    if row is None:
+        return None, "invalid"
 
-        if verify_password(password, row["password_hash"]):
-            conn.execute(
-                "UPDATE users SET failed_attempts = 0, locked_until = NULL, last_login = ? WHERE id = ?",
-                (now.isoformat(timespec="seconds"), row["id"]),
-            )
-            conn.commit()
-            user = {
-                "id": row["id"],
-                "first_name": row["first_name"],
-                "last_name": row["last_name"],
-                "email": row["email"],
-            }
-            return user, "ok"
+    if row["locked_until"]:
+        try:
+            if datetime.fromisoformat(row["locked_until"]) > now:
+                return None, "locked"
+        except ValueError:
+            pass
 
-        attempts = (row["failed_attempts"] or 0) + 1
-        locked_until = None
-        status = "invalid"
-        if attempts >= MAX_FAILED_LOGINS:
-            locked_until = (now + timedelta(minutes=LOCK_MINUTES)).isoformat(timespec="seconds")
-            attempts = 0
-            status = "locked"
-        conn.execute(
-            "UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?",
-            (attempts, locked_until, row["id"]),
+    if verify_password(password, row["password_hash"]):
+        _update_account(
+            email, failed_attempts=0, locked_until="",
+            last_login=now.isoformat(timespec="seconds"),
         )
-        conn.commit()
-        return None, status
+        return {
+            "id": row["id"],
+            "first_name": row["first_name"],
+            "last_name": row["last_name"],
+            "email": row["email"],
+                "birth_date": row["birth_date"],
+        }, "ok"
+
+    attempts = int(row["failed_attempts"] or 0) + 1
+    locked_until, status = "", "invalid"
+    if attempts >= MAX_FAILED_LOGINS:
+        locked_until = (now + timedelta(minutes=LOCK_MINUTES)).isoformat(timespec="seconds")
+        attempts, status = 0, "locked"
+    _update_account(email, failed_attempts=attempts, locked_until=locked_until)
+    return None, status
+
+
+def render_accounts_admin():
+    """Admin Panel section: the list of accounts, Excel download and Excel restore."""
+    rows = _load_rows()
+    st.markdown(
+        f'<div class="section-title">Registered accounts ({len(rows)})</div>',
+        unsafe_allow_html=True,
+    )
+
+    if rows:
+        table = pd.DataFrame([
+            {
+                "ID": r["id"], "First name": r["first_name"], "Last name": r["last_name"],
+                "Email": r["email"], "Birth date": r["birth_date"],
+                "Created at": r["created_at"], "Last login": r["last_login"],
+            }
+            for r in rows
+        ])
+        st.dataframe(table, use_container_width=True, hide_index=True)
+        with open(ACCOUNTS_FILE, "rb") as f:
+            st.download_button(
+                "Download accounts (Excel)",
+                data=f.read(),
+                file_name=ACCOUNTS_FILE,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="dl_accounts",
+            )
+    else:
+        st.info("No accounts yet.")
+
+    with st.expander("Restore accounts from an Excel backup"):
+        st.caption(
+            "Upload a previously downloaded accounts.xlsx. Accounts whose email already "
+            "exists are skipped, so nothing is overwritten."
+        )
+        upload = st.file_uploader("accounts.xlsx", type=["xlsx"], key="restore_accounts_file")
+        if upload is not None and st.button("Restore now", key="restore_accounts_btn"):
+            try:
+                from io import BytesIO
+                from openpyxl import load_workbook
+
+                wb = load_workbook(BytesIO(upload.getvalue()), read_only=True, data_only=True)
+                incoming = _rows_from_sheet(wb.active)
+                wb.close()
+
+                store = _accounts_store()
+                with store["lock"]:
+                    current = _load_rows()
+                    known = {r["email"] for r in current}
+                    next_id = max([r["id"] for r in current] + [0]) + 1
+                    added = skipped = 0
+                    for r in incoming:
+                        if r["email"] in known or not r["password_hash"].startswith("pbkdf2_sha256$"):
+                            skipped += 1
+                            continue
+                        r["id"] = next_id
+                        next_id += 1
+                        current.append(r)
+                        known.add(r["email"])
+                        added += 1
+                    if added:
+                        _save_rows(current)
+                st.success(f"Restored {added} account(s); skipped {skipped}.")
+            except Exception as exc:
+                st.error(f"Could not read that file: {exc}")
 # ACCOUNTS-DB-END
 
 
@@ -958,7 +1195,7 @@ def inject_css():
 
         /* ================================================================
            HEADER BAR - one tidy frame, same order in every language:
-           [ brand .............. ]  [ Admin Panel ]  [ ☀️ / 🌙 ]  [ 🔄 ]
+           [ brand .............. ]  [ Admin Panel ]  [ / ]  [ ]
            ================================================================ */
         {HEADER} {{
             direction: ltr !important;
@@ -1771,7 +2008,7 @@ def inject_css():
 
         /* ================================================================
            Mobile-only adjustments. Desktop is intentionally unchanged.
-           Row 1: brand (full width).  Row 2: [ Admin Panel ] [ ☀️/🌙 ] [ 🔄 ]
+           Row 1: brand (full width).  Row 2: [ Admin Panel ] [ /] [ ]
            ================================================================ */
         @media (max-width: 640px) {{
             .block-container {{
@@ -1972,7 +2209,7 @@ def render_splash():
             'style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />'
         )
     else:
-        logo_html = "🩺"
+        logo_html = "PP"
 
     # Letter-spacing / uppercase would break Arabic letter joining.
     plain_script = is_rtl() or st.session_state.get("lang", "en") in SPACING_OFF_LANGS
@@ -2109,7 +2346,7 @@ def render_language_gate():
     st.markdown(
         f"""
         <div class="hero">
-            <div class="pill">🌐 {tr('current_language')}: {current_name}</div>
+            <div class="pill">{tr('current_language')}: {current_name}</div>
             <h1>{tr('gate_title')}</h1>
             <p>{tr('gate_intro')}</p>
         </div>
@@ -2122,7 +2359,7 @@ def render_language_gate():
 
         with col_continue:
             if st.button(
-                f"▶️ {tr('continue')}",
+                f"{tr('continue')}",
                 type="primary",
                 use_container_width=True,
                 key="gate_continue",
@@ -2131,7 +2368,7 @@ def render_language_gate():
 
         with col_change:
             if st.button(
-                f"🌐 {tr('change_language')}",
+                f"{tr('change_language')}",
                 use_container_width=True,
                 key="gate_change",
             ):
@@ -2141,7 +2378,7 @@ def render_language_gate():
         st.markdown(
             f"""
             <div class="section-card">
-                <div class="section-title">🌐 {tr('select_language')}</div>
+                <div class="section-title">{tr('select_language')}</div>
                 <div class="section-subtitle">{tr('restart_note')}</div>
             </div>
             """,
@@ -2160,7 +2397,7 @@ def render_language_gate():
                 ):
                     restart_app(code)  # restarts from the splash screen
 
-        if st.button(f"⬅️ {tr('back')}", key="gate_back", use_container_width=True):
+        if st.button(f"{tr('back')}", key="gate_back", use_container_width=True):
             st.session_state["choosing_language"] = False
             st.rerun()
 
@@ -2187,7 +2424,7 @@ def render_header():
                 'style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />'
             )
         else:
-            brand_icon_html = "🩺"
+            brand_icon_html = "PP"
 
         st.markdown(
             f"""
@@ -2205,7 +2442,8 @@ def render_header():
     with menu_col:
         # Restart arrow: clears the session and goes back to the splash screen.
         if st.button(
-            "🔄",
+            "",
+            icon=":material/refresh:",
             key="menu_restart",
             help=tr("menu_restart"),
             use_container_width=True,
@@ -2215,17 +2453,18 @@ def render_header():
     with admin_col:
         # (The Admin Panel is now opened from the sign-in choice page.)
         if st.session_state["page"] == "admin":
-            if st.button(f"⬅️ {tr('back')}", key="admin_back", use_container_width=True):
+            if st.button(f"{tr('back')}", key="admin_back", use_container_width=True):
                 go_to("auth")
         else:
-            if st.button(f"🚪 {tr('logout')}", key="logout_btn", use_container_width=True):
+            if st.button(f"{tr('logout')}", key="logout_btn", use_container_width=True):
                 logout()
 
     with theme_col:
         # Shows the mode you will switch TO (sun while dark, moon while light).
         is_dark = st.session_state.get("dark_mode", True)
         st.button(
-            "☀️" if is_dark else "🌙",
+            "",
+            icon=":material/light_mode:" if is_dark else ":material/dark_mode:",
             key="theme_btn",
             help=tr("light") if is_dark else tr("dark"),
             use_container_width=True,
@@ -2248,10 +2487,10 @@ def render_support_card():
     st.markdown(
         f"""
         <div class="support-card">
-            <div class="support-title">🛟 {tr('support_title')}</div>
+            <div class="support-title">{tr('support_title')}</div>
             <div class="support-text">{tr('support_text')}</div>
             <a class="support-link" href="{SUPPORT_WHATSAPP_URL}" target="_blank" rel="noopener noreferrer">
-                💬 WhatsApp <span dir="ltr">{SUPPORT_WHATSAPP_NUMBER}</span>
+                WhatsApp <span dir="ltr">{SUPPORT_WHATSAPP_NUMBER}</span>
             </a>
         </div>
         """,
@@ -2291,6 +2530,15 @@ _AUTH_UI_TEXT = {
 for _code, _vals in _AUTH_UI_TEXT.items():
     EXTRA_TEXT.setdefault(_code, {}).update(_vals)
 
+# Label of the meal-plan download button (other languages fall back to English).
+_MEAL_DL_TEXT = {
+    "en": {"download_meal_plan": "Download the meal plan (Excel)"},
+    "ar": {"download_meal_plan": "تنزيل جدول النظام الغذائي (Excel)"},
+    "es": {"download_meal_plan": "Descargar el plan de comidas (Excel)"},
+}
+for _code, _vals in _MEAL_DL_TEXT.items():
+    EXTRA_TEXT.setdefault(_code, {}).update(_vals)
+
 
 # Logo (shown inside the round frame of the welcome panel)
 @st.cache_data(show_spinner=False)
@@ -2299,7 +2547,7 @@ def _auth_logo_html() -> str:
         with open(LOGO_PATH, "rb") as _f:
             _b64 = base64.b64encode(_f.read()).decode()
         return f'<img src="data:image/png;base64,{_b64}" alt="PerdiaPredict" />'
-    return '<span class="auth-logo-fallback">🩺</span>'
+    return '<span class="auth-logo-fallback">PP</span>'
 
 
 # CSS for the auth pages only (called by auth_card)
@@ -2799,6 +3047,14 @@ def inject_auth_css():
             text-align: center !important;
         }}
 
+        /* ---------- date of birth: type in the field OR open the list ---------- */
+        .stApp .st-key-reg_day div[data-baseweb="select"] input,
+        .stApp .st-key-reg_month div[data-baseweb="select"] input,
+        .stApp .st-key-reg_year div[data-baseweb="select"] input {{
+            caret-color: #60a5fa !important;
+            cursor: text !important;
+        }}
+
         /* ---------- phones: welcome panel on top, form below ---------- */
         @media (max-width: 640px) {{
             .block-container {{ padding: 1.4rem .6rem 2rem !important; }}
@@ -2871,14 +3127,14 @@ def render_auth_page():
     with auth_card(tr("welcome_title"), tr("auth_intro")):
         _form_title(tr("auth_title"))
 
-        if st.button(f"🔑 {tr('auth_registered')}", type="primary",
+        if st.button(f"{tr('auth_registered')}", type="primary",
                      use_container_width=True, key="auth_btn_login"):
             go_to("login")
-        if st.button(f"✨ {tr('auth_new')}", use_container_width=True, key="auth_btn_register"):
+        if st.button(f"{tr('auth_new')}", use_container_width=True, key="auth_btn_register"):
             go_to("register")
-        if st.button(f"🔒 {tr('admin')}", use_container_width=True, key="auth_btn_admin"):
+        if st.button(f"{tr('admin')}", use_container_width=True, key="auth_btn_admin"):
             go_to("admin")
-        if st.button(f"⬅️ {tr('back')}", use_container_width=True, key="auth_link_back"):
+        if st.button(f"{tr('back')}", use_container_width=True, key="auth_link_back"):
             go_to("language")
 
 
@@ -2897,7 +3153,7 @@ def render_login_page():
                 placeholder=tr("auth_password"), label_visibility="collapsed",
             )
             submitted = st.form_submit_button(
-                f"🔑 {tr('login_button')}", type="primary", use_container_width=True
+                f"{tr('login_button')}", type="primary", use_container_width=True
             )
 
         if submitted:
@@ -2918,13 +3174,45 @@ def render_login_page():
                 else:
                     st.error(tr("login_invalid"))
 
-        if st.button(f"✨ {tr('auth_new')}", key="auth_link_register"):
+        if st.button(f"{tr('auth_new')}", key="auth_link_register"):
             go_to("register")
 
         render_support_card()
 
-        if st.button(f"⬅️ {tr('back')}", key="auth_link_back_login"):
+        if st.button(f"{tr('back')}", key="auth_link_back_login"):
             go_to("auth")
+
+
+# DOB-HELPERS-START
+# Month names shown in the date-of-birth dropdown (other languages use English).
+MONTH_NAMES = {
+    "en": ["January", "February", "March", "April", "May", "June",
+           "July", "August", "September", "October", "November", "December"],
+    "ar": ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+           "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"],
+    "es": ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+           "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"],
+}
+
+
+def month_label(month_number, lang: str = None) -> str:
+    """Name of a month (1-12) in the app language."""
+    lang = lang or st.session_state.get("lang", "en")
+    names = MONTH_NAMES.get(lang) or MONTH_NAMES["en"]
+    return names[int(month_number) - 1]
+
+
+def age_from_birth_date(value):
+    """Age in whole years from an ISO date string (YYYY-MM-DD), limited to 1-120.
+    Returns None if the value is missing or not a valid date."""
+    try:
+        born = date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    today = date.today()
+    years = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+    return max(1, min(120, years))
+# DOB-HELPERS-END
 
 
 def _build_birth_date(day, month, year):
@@ -2954,7 +3242,7 @@ def render_register_page():
             email = st.text_input(f"{tr('auth_email')} *", key="reg_email", max_chars=254)
 
             st.markdown(
-                f'<div class="section-title" style="font-size:.95rem">🎂 {tr("dob")} *</div>',
+                f'<div class="section-title" style="font-size:.95rem">{tr("dob")} *</div>',
                 unsafe_allow_html=True,
             )
             d1, d2, d3 = st.columns(3)
@@ -2965,7 +3253,7 @@ def render_register_page():
                 )
             with d2:
                 month = st.selectbox(
-                    tr("dob_month"), list(range(1, 13)), index=None,
+                    tr("dob_month"), list(range(1, 13)), index=None, format_func=month_label,
                     placeholder=tr("dob_choose"), key="reg_month",
                 )
             with d3:
@@ -2993,7 +3281,7 @@ def render_register_page():
             accepted = st.checkbox(tr("reg_accept"), key="reg_accept")
 
             submitted = st.form_submit_button(
-                f"✨ {tr('reg_button')}", type="primary", use_container_width=True
+                f"{tr('reg_button')}", type="primary", use_container_width=True
             )
 
         if submitted:
@@ -3029,12 +3317,12 @@ def render_register_page():
                 else:
                     st.error(tr(error_key))
 
-        if st.button(f"🔑 {tr('auth_registered')}", key="auth_link_login"):
+        if st.button(f"{tr('auth_registered')}", key="auth_link_login"):
             go_to("login")
 
         render_support_card()
 
-        if st.button(f"⬅️ {tr('back')}", key="auth_link_back_register"):
+        if st.button(f"{tr('back')}", key="auth_link_back_register"):
             go_to("auth")
 
 
@@ -3055,7 +3343,7 @@ def render_admin_page():
                     placeholder=tr("password"), label_visibility="collapsed",
                 )
                 unlock = st.form_submit_button(
-                    f"🔓 {tr('login_button')}", type="primary", use_container_width=True
+                    f"{tr('login_button')}", type="primary", use_container_width=True
                 )
 
             if unlock:
@@ -3070,7 +3358,7 @@ def render_admin_page():
     st.markdown(
         f"""
         <div class="hero">
-            <div class="pill">🔒 {tr('admin_title')}</div>
+            <div class="pill">{tr('admin_title')}</div>
             <h1>{tr('admin_title')}</h1>
             <p>{tr('admin_help')}</p>
         </div>
@@ -3078,6 +3366,7 @@ def render_admin_page():
         unsafe_allow_html=True,
     )
     st.success(tr("access"))
+    render_accounts_admin()
 
     if os.path.exists(SAVE_FILE_XLSX):
         try:
@@ -3097,7 +3386,7 @@ def render_admin_page():
                     )
 
             with col_clean:
-                if st.button(f"🗑️ {tr('clean')}", use_container_width=True):
+                if st.button(f"{tr('clean')}", use_container_width=True):
                     st.session_state["confirm_clean"] = True
 
             if st.session_state.get("confirm_clean", False):
@@ -3269,14 +3558,56 @@ def build_report(lang, timestamp, first, last, phone, address, type_key,
 # Health guide
 # =============================================================================
 
+def _meal_plan_excel(df: pd.DataFrame, rtl: bool = False) -> bytes:
+    """The weekly meal plan as an .xlsx file (bytes)."""
+    import io
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    sheet = re.sub(r"[\\/*?:\[\]]", " ", str(tr("meal_plan"))).strip()[:31] or "Meal plan"
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet)
+        ws = writer.sheets[sheet]
+        if rtl:
+            ws.sheet_view.rightToLeft = True
+
+        head_fill = PatternFill("solid", fgColor="2563EB")
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = head_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        ws.row_dimensions[1].height = 24
+
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.alignment = Alignment(
+                    vertical="top", wrap_text=True, horizontal="right" if rtl else "left"
+                )
+            row[0].font = Font(bold=True)
+
+        ws.column_dimensions["A"].width = 12
+        for letter in "BCDE":
+            ws.column_dimensions[letter].width = 38
+    return buffer.getvalue()
+
+
 def render_meal_plan(veg: bool = False):
-    st.markdown(f'<div class="section-title">📅 {tr("meal_plan")}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-title">{tr("meal_plan")}</div>', unsafe_allow_html=True)
 
     df = pd.DataFrame(
         tr("meal_plan_rows_veg" if veg else "meal_plan_rows"),
         columns=[tr("meal_plan"), tr("breakfast"), tr("lunch"), tr("dinner"), tr("drinks")],
     )
     st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.download_button(
+        tr("download_meal_plan"),
+        data=_meal_plan_excel(df, is_rtl()),
+        file_name="Weekly_Meal_Plan_" + ("veg" if veg else "nonveg") + ".xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="meal_plan_download",
+        use_container_width=True,
+    )
 
 
 def _bullets(key: str) -> str:
@@ -3287,7 +3618,7 @@ def render_offline_health_guide():
     st.markdown(
         f"""
         <div class="section-card">
-            <div class="section-title">🌿 {tr('health_guide')}</div>
+            <div class="section-title">{tr('health_guide')}</div>
             <div class="section-subtitle">{tr('offline')}</div>
         </div>
         """,
@@ -3304,19 +3635,19 @@ def render_offline_health_guide():
     )
     veg = diet_choice == "veg"
 
-    with st.expander(f"🍽️ {tr('plate')}", expanded=True):
+    with st.expander(f"{tr('plate')}", expanded=True):
         st.markdown(_bullets("plate_items"))
 
-    with st.expander(f"🥗 {tr('foods')}"):
+    with st.expander(f"{tr('foods')}"):
         st.markdown(_bullets("foods_items_veg" if veg else "foods_items"))
 
     with st.expander(f"⚠️ {tr('limit')}"):
         st.markdown(_bullets("limit_items"))
 
-    with st.expander(f"🏃 {tr('habits')}"):
+    with st.expander(f"{tr('habits')}"):
         st.markdown(_bullets("habits_items"))
 
-    with st.expander(f"📅 {tr('meal_plan')}"):
+    with st.expander(f"{tr('meal_plan')}"):
         render_meal_plan(veg)
 
 
@@ -4037,10 +4368,21 @@ def save_report_to_excel(report: dict):
 def render_main_app():
     lang = st.session_state["lang"]
 
+    # Auto-fill the patient card from the signed-in account (first name, last
+    # name, and age worked out from the date of birth). The fields stay editable;
+    # a value is only filled in when the field has no value yet.
+    _user = st.session_state.get("user") or {}
+    if "in_first_name" not in st.session_state:
+        st.session_state["in_first_name"] = _user.get("first_name", "")
+    if "in_last_name" not in st.session_state:
+        st.session_state["in_last_name"] = _user.get("last_name", "")
+    if "basic_age" not in st.session_state:
+        st.session_state["basic_age"] = age_from_birth_date(_user.get("birth_date")) or 40
+
     st.markdown(
         f"""
         <div class="hero">
-            <div class="pill">🤖 {tr('readiness')} • {tr('model_status')}</div>
+            <div class="pill">{tr('readiness')} • {tr('model_status')}</div>
             <h1>{tr('assessment')}</h1>
             <p>{tr('assessment_intro')}</p>
         </div>
@@ -4049,7 +4391,7 @@ def render_main_app():
     )
 
     st.markdown(
-        f'<div class="status-card">🔐 {tr("privacy")}</div>',
+        f'<div class="status-card">{tr("privacy")}</div>',
         unsafe_allow_html=True,
     )
 
@@ -4059,7 +4401,7 @@ def render_main_app():
     # (The frame of the card is drawn by the ".st-key-patient_card" CSS rule.)
     with st.container(key="patient_card"):
         # ------------------------------------------------ Personal information
-        st.markdown(f'<div class="section-title">👤 {tr("personal")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-title">{tr("personal")}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="section-subtitle">{tr("gender_hint")}</div>', unsafe_allow_html=True)
 
         c1, c2 = st.columns(2)
@@ -4070,7 +4412,7 @@ def render_main_app():
 
         c5, c6, c7 = st.columns(3)
         with c5:
-            age = st.number_input(tr("age"), min_value=1, max_value=120, value=40, step=1, key="basic_age")
+            age = st.number_input(tr("age"), min_value=1, max_value=120, step=1, key="basic_age")
         with c6:
             gender = st.selectbox(tr("gender"), GENDER_OPTIONS, format_func=gender_label, key="basic_gender")
             if gender == "Transgender":
@@ -4106,7 +4448,7 @@ def render_main_app():
 
         # ------------------------------------------------------ Core symptoms
         st.markdown("---")
-        st.markdown(f'<div class="section-title">🩺 {tr("core")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-title">{tr("core")}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="section-subtitle">{tr("core_help")}</div>', unsafe_allow_html=True)
 
         symptom_values = {}
@@ -4120,346 +4462,4 @@ def render_main_app():
             with target_col:
                 if col == "Polyuria":
                     # "No", or "Yes" together with how many times a day the patient urinates.
-                    freq_options = [tr("no")] + [f"{tr('yes')} - {tr(k)}" for k in POLYURIA_FREQ_KEYS]
-                    selected = st.selectbox(label, freq_options, key="core_polyuria_freq")
-                    if selected == freq_options[0]:
-                        symptom_values[col] = "No"
-                    else:
-                        symptom_values[col] = "Yes"
-                        freq_key = POLYURIA_FREQ_KEYS[freq_options.index(selected) - 1]
-                else:
-                    selected = st.selectbox(
-                        label,
-                        [tr("no"), tr("yes")],
-                        key=f"core_{col}",
-                    )
-                    symptom_values[col] = "Yes" if selected == tr("yes") else "No"
-
-        # ---------------------------------------------------- Additional symptoms
-        st.markdown("---")
-        st.markdown(f'<div class="section-title">➕ {tr("additional")}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="section-subtitle">{tr("optional")}</div>', unsafe_allow_html=True)
-
-        extra_values = {}
-        e_col1, e_col2 = st.columns(2)
-
-        for i, key in enumerate(extra_symptom_keys):
-            target_col = e_col1 if i % 2 == 0 else e_col2
-            with target_col:
-                selected = st.selectbox(
-                    tr(key),
-                    [tr("no"), tr("yes")],
-                    key=f"extra_{key}",
-                )
-                extra_values[key] = "Yes" if selected == tr("yes") else "No"
-
-        # Optional blood sugar / glucose reading (empty = not measured).
-        glu_col1, glu_col2 = st.columns([2, 1])
-        with glu_col1:
-            glucose_value = st.number_input(
-                tr("glucose_level"),
-                min_value=0.0,
-                max_value=1000.0,
-                value=None,
-                step=0.1,
-                format="%.1f",
-                help=tr("glucose_help"),
-                key="glucose_value",
-            )
-        with glu_col2:
-            glucose_unit = st.selectbox(tr("glucose_unit"), GLUCOSE_UNITS, key="glucose_unit")
-
-        # ------------------------------- Questions that depend on the patient
-        # Pediatric questions for a child, the transgender questions for a
-        # transgender adult, otherwise the adult male / female questions.
-        gender_values = {}
-        if is_child:
-            gender_keys = child_question_keys(sex_at_birth)
-            gender_icon = "🧒" if sex_at_birth == "Male" else "👧"
-            gender_title = tr("child_section")
-            key_kind = f"child_{sex_at_birth}"
-        elif gender == "Transgender":
-            gender_keys = list(TRANS_SYMPTOM_KEYS)
-            gender_icon = "⚧️"
-            gender_title = tr("trans_section")
-            key_kind = "trans"
-        else:
-            gender_keys = gender_question_keys(gender, ever_married)
-            gender_icon = "♂️" if gender == "Male" else "♀️"
-            gender_title = tr("male_section" if gender == "Male" else "female_section")
-            key_kind = f"adult_{gender}"
-
-        st.markdown("---")
-        st.markdown(f'<div class="section-title">{gender_icon} {gender_title}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="section-subtitle">{tr("gender_section_help")}</div>', unsafe_allow_html=True)
-
-        g_col1, g_col2 = st.columns(2)
-        for i, key in enumerate(gender_keys):
-            target_col = g_col1 if i % 2 == 0 else g_col2
-            with target_col:
-                selected = st.selectbox(
-                    tr(key),
-                    [tr("no"), tr("yes")],
-                    key=f"gender_{key_kind}_{key}",
-                )
-                gender_values[key] = "Yes" if selected == tr("yes") else "No"
-
-        submitted = st.button(
-            f"🔍 {tr('predict')}",
-            use_container_width=True,
-            type="primary",
-            key="predict_btn",
-        )
-
-    if submitted:
-        clean_first_name = first_name.strip()
-        clean_last_name = last_name.strip()
-        clean_phone = phone.strip()
-        clean_address = address.strip()
-
-        errors = []
-        for value, label in [
-            (clean_first_name, tr("first_name")),
-            (clean_last_name, tr("last_name")),
-            (clean_phone, tr("phone")),
-            (clean_address, tr("address")),
-        ]:
-            if not value:
-                errors.append(f"{label} {tr('required')}")
-
-        # Glucose is optional; if it is filled in, it must be a realistic value.
-        glucose = None
-        if glucose_value:
-            low, high = GLUCOSE_RANGE[glucose_unit]
-            if low <= glucose_value <= high:
-                glucose = (float(glucose_value), glucose_unit)
-            else:
-                errors.append(tr("glucose_invalid"))
-
-        if errors:
-            st.error(tr("required_fields"))
-            for error in errors:
-                st.warning(error)
-        else:
-            # The model only knows Male / Female -> use the sex assigned at birth.
-            raw_input = {"Age": age, "Gender": sex_at_birth, **symptom_values}
-            result, probability = predict_new_patient(raw_input)
-
-            type_key = DIABETES_TYPE_KEYS[[tr(k) for k in DIABETES_TYPE_KEYS].index(diabetes_type)]
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-            report_args = dict(
-                timestamp=timestamp,
-                first=clean_first_name,
-                last=clean_last_name,
-                phone=clean_phone,
-                address=clean_address,
-                type_key=type_key,
-                age=age,
-                gender=gender,
-                result=result,
-                probability=probability,
-                symptom_values=symptom_values,
-                extra_values=extra_values,
-                gender_values=gender_values,
-                freq_key=freq_key,
-                marital_status_key=marital_status_key,
-                birth_sex=sex_at_birth,
-                glucose=glucose,
-            )
-
-            # Shown to the user (current language) ...
-            st.session_state["last_report"] = build_report(lang, **report_args)
-            # ... and the same record in English, so the admin Excel file stays consistent.
-            st.session_state["last_report_en"] = build_report("en", **report_args)
-
-            st.session_state["last_extra"] = any(v == "Yes" for v in extra_values.values())
-            st.session_state["last_symptoms"] = {
-                "core": [c for c in display_labels if symptom_values.get(c) == "Yes"],
-                "extra": [k for k in extra_symptom_keys if extra_values.get(k) == "Yes"],
-                "gender": [k for k, v in gender_values.items() if v == "Yes"],
-                "gender_kind": sex_at_birth if is_child else gender,
-                "is_child": is_child,
-                "freq": freq_key,
-            }
-            st.session_state["last_result"] = int(result)
-            st.session_state["last_probability"] = float(probability)
-            st.session_state["report_saved"] = False
-
-            components.html(
-                """
-                <script>
-                window.parent.scrollTo({top: 0, behavior: 'smooth'});
-                </script>
-                """,
-                height=0,
-            )
-
-    # Results
-    if st.session_state.get("last_report"):
-        report = st.session_state["last_report"]
-        report_en = st.session_state["last_report_en"]
-        result = st.session_state["last_result"]
-        probability = st.session_state["last_probability"]
-
-        st.markdown("---")
-        st.markdown(f'<div class="section-title">📊 {tr("result")}</div>', unsafe_allow_html=True)
-
-        css_class = "result-high" if result == 1 else "result-low"
-        title = tr("high_risk") if result == 1 else tr("low_risk")
-
-        st.markdown(
-            f"""
-            <div class="result-card {css_class}">
-                <div class="result-label">{tr('result')}</div>
-                <div class="result-title">{'⚠️' if result == 1 else '✅'} {title}</div>
-                <div class="score">{probability * 100:.1f}%</div>
-                <div class="score-caption">{tr('probability')}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        st.progress(min(max(probability, 0.0), 1.0))
-
-        with st.expander(f"🩺 {tr('symptom_summary')}", expanded=True):
-            st.write(report.get("Symptom narrative", ""))
-
-        with st.expander(f"💡 {tr('recommendation')}", expanded=True):
-            if result == 1:
-                st.warning(tr("high_recommendation"))
-            else:
-                st.success(tr("low_recommendation"))
-
-            if st.session_state.get("last_extra", False):
-                st.info(tr("extra_notice"))
-
-        render_offline_health_guide()
-
-        if not st.session_state.get("report_saved", False):
-            try:
-                save_report_to_excel(report_en)
-                st.session_state["report_saved"] = True
-            except Exception as exc:
-                st.warning(f"{tr('save_failed')} {exc}")
-
-        st.markdown("---")
-        st.markdown(f'<div class="section-title">📄 {tr("download")}</div>', unsafe_allow_html=True)
-
-        # The report follows the app language. It is generated once per result
-        # (not on every rerun) and falls back to English only if the fonts for
-        # this language are unavailable.
-        pdf_lang = pick_pdf_language(lang)
-        pdf_report = report if pdf_lang == lang else report_en
-        pdf_symptoms = st.session_state.get("last_symptoms")
-        cache_key = (
-            pdf_lang,
-            int(result),
-            tuple(sorted((k, str(v)) for k, v in pdf_report.items())),
-            repr(pdf_symptoms) if pdf_symptoms else None,
-        )
-
-        if st.session_state.get("pdf_cache_key") != cache_key:
-            try:
-                pdf_bytes = generate_pdf_report(
-                    pdf_report, pdf_lang, is_high=(result == 1), symptoms=pdf_symptoms
-                )
-            except Exception:
-                if pdf_lang == "en":
-                    raise
-                pdf_lang = "en"
-                pdf_report = report_en
-                pdf_bytes = generate_pdf_report(
-                    pdf_report, "en", is_high=(result == 1), symptoms=pdf_symptoms
-                )
-            st.session_state["pdf_cache_key"] = cache_key
-            st.session_state["pdf_cache_data"] = pdf_bytes
-            st.session_state["pdf_cache_lang"] = pdf_lang
-
-        pdf_data = st.session_state["pdf_cache_data"]
-        pdf_lang = st.session_state["pdf_cache_lang"]
-
-        if pdf_lang != lang:
-            st.caption(tr("pdf_fallback"))
-
-        safe_name = re.sub(r'[\\/:*?"<>|\s]+', "_", f"{report['First name']}_{report['Last name']}")
-        file_name_pdf = f"Diabetes_Report_{safe_name}.pdf"
-
-        st.download_button(
-            label=f"📥 {tr('download_pdf')}",
-            data=pdf_data,
-            file_name=file_name_pdf,
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True,
-        )
-
-        st.markdown(
-            f'<div class="notice">⚠️ {tr("medical_notice_long")}</div>',
-            unsafe_allow_html=True,
-        )
-
-
-# =============================================================================
-# Admin
-# =============================================================================
-# The Admin Panel page (render_admin_page) now lives in the "AUTH UI" block
-# above, because it shares the split-card design of the sign-in pages.
-
-
-# =============================================================================
-# App router
-# =============================================================================
-
-def render_footer():
-    st.markdown(
-        f"""
-        <div class="footer">
-            🩺 {tr('brand')} · {tr('medical_notice')}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-inject_css()
-inject_hover_css()
-
-current_page = st.session_state["page"]
-
-if current_page == "splash":
-    render_splash()  # plays the animation, then opens the language gate
-    st.stop()
-
-if current_page == "language":
-    render_language_gate()  # "Continue" or "Change language"
-    render_footer()
-    st.stop()
-
-if current_page == "auth":
-    render_auth_page()  # registered / new user / Admin Panel
-    render_footer()
-    st.stop()
-
-if current_page == "login":
-    render_login_page()
-    render_footer()
-    st.stop()
-
-if current_page == "register":
-    render_register_page()
-    render_footer()
-    st.stop()
-
-# The patient form is only for signed-in users (the Admin Panel has its own password).
-if current_page != "admin" and not st.session_state.get("user"):
-    go_to("auth")
-
-render_header()
-
-if current_page == "admin":
-    render_admin_page()
-else:
-    render_main_app()
-
-render_footer()
+               
