@@ -1,8 +1,20 @@
-numpy==2.5.2
-pandas==3.0.5
-scikit-learn==1.9.0
-xgboost==3.4.1
-joblib
+# ---- Web app ----
 streamlit
-openpyxl
-reportlab
+
+# ---- Data & model ----
+pandas
+numpy
+joblib
+openpyxl          # saved_reports.xlsx (read/write reports history)
+
+# IMPORTANT: replace the next line with the exact version printed at the end of
+# train_model.py (for example: scikit-learn==1.7.2). The .pkl files must be
+# loaded with the same scikit-learn version that saved them.
+scikit-learn
+
+# ---- PDF report (with Arabic / Hindi text shaping) ----
+fpdf2
+uharfbuzz
+
+# ---- Only needed if you run train_model.py locally (not needed on Render) ----
+# matplotlib
