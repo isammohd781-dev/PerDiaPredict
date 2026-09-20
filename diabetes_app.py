@@ -1,34 +1,19 @@
 import base64
 import os
 import re
+import shutil
+import tempfile
 import time
+import urllib.request
 from datetime import datetime
-from io import BytesIO
-from xml.sax.saxutils import escape as xml_escape
 
 import joblib
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_LEFT, TA_RIGHT
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from fpdf import FPDF
 
 from translations import LANGUAGES, T
-
-# Optional: needed only to draw Arabic correctly inside the PDF report.
-try:
-    import arabic_reshaper
-    from bidi.algorithm import get_display
-
-    ARABIC_SHAPING_OK = True
-except Exception:
-    ARABIC_SHAPING_OK = False
-
 
 # =============================================================================
 # PERDIAPREDICT - MULTILINGUAL VERSION
@@ -97,11 +82,6 @@ def tr(key: str, lang: str = None):
 
 # Scripts where letter-spacing must be off (it breaks joining / conjuncts).
 SPACING_OFF_LANGS = {"ar", "hi", "zh"}
-
-# Languages the built-in PDF font (DejaVu Sans) can render.
-# Hindi and Chinese need special fonts, so their PDF is produced in English.
-PDF_FONT_LANGS = {"en", "ar", "fr", "es", "de", "tr", "pt", "ru"}
-
 
 def _init_theme():
     """Dark mode by default; ?theme=light in the URL keeps light mode after a refresh."""
@@ -1715,280 +1695,505 @@ def render_offline_health_guide():
 # =============================================================================
 # PDF
 # =============================================================================
-# The PDF needs a Unicode font for Turkish / Arabic characters. Put
-# DejaVuSans.ttf (and DejaVuSans-Bold.ttf) inside a "fonts" folder next to
-# this file. For Arabic also install: arabic-reshaper and python-bidi.
-# If the font is missing, the PDF is generated in English automatically.
+# The report is built with fpdf2 + HarfBuzz:
+#       pip install fpdf2 uharfbuzz
+# HarfBuzz shapes Arabic and Hindi correctly and the layout mirrors for
+# right-to-left languages, so the report follows the app language.
+#
+# Fonts (Noto Sans family) are read from the "fonts" folder next to this file.
+# Any missing font is downloaded once, automatically, the first time it is
+# needed (internet required). To work fully offline, copy the font files into
+# the "fonts" folder yourself. Fonts used:
+#   NotoSans-Regular/Bold.ttf            Latin, Cyrillic, Greek, Turkish ...
+#   NotoSansArabic-Regular/Bold.ttf      Arabic
+#   NotoSansDevanagari-Regular/Bold.ttf  Hindi
+#   NotoSansSC-Regular/Bold.otf          Chinese
 
-_FONT_DIRS = [
-    "fonts",
-    ".",
-    "/usr/share/fonts/truetype/dejavu",
-    "/usr/share/fonts/dejavu",
-    "/usr/share/fonts/TTF",
-]
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FONT_DIR = os.path.join(BASE_DIR, "fonts")
+TMP_FONT_DIR = os.path.join(tempfile.gettempdir(), "perdiapredict_fonts")  # if the app folder is read-only
+
+try:
+    import uharfbuzz  # noqa: F401
+
+    SHAPING_OK = True
+except Exception:
+    SHAPING_OK = False
+
+_NOTO_URL = "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts"
+_CJK_URL = "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/SubsetOTF/SC"
+
+# script -> (font family name, (regular file, bold file), download folder URL)
+PDF_FONTS = {
+    "latin": (
+        "NotoSans",
+        ("NotoSans-Regular.ttf", "NotoSans-Bold.ttf"),
+        f"{_NOTO_URL}/NotoSans/hinted/ttf/",
+    ),
+    "arabic": (
+        "NotoSansArabic",
+        ("NotoSansArabic-Regular.ttf", "NotoSansArabic-Bold.ttf"),
+        f"{_NOTO_URL}/NotoSansArabic/hinted/ttf/",
+    ),
+    "devanagari": (
+        "NotoSansDevanagari",
+        ("NotoSansDevanagari-Regular.ttf", "NotoSansDevanagari-Bold.ttf"),
+        f"{_NOTO_URL}/NotoSansDevanagari/hinted/ttf/",
+    ),
+    "cjk": (
+        "NotoSansSC",
+        ("NotoSansSC-Regular.otf", "NotoSansSC-Bold.otf"),
+        f"{_CJK_URL}/",
+    ),
+}
+
+# Language code -> main non-Latin script of that language.
+LANG_SCRIPT = {
+    "ar": "arabic",
+    "fa": "arabic",
+    "ur": "arabic",
+    "hi": "devanagari",
+    "mr": "devanagari",
+    "ne": "devanagari",
+    "zh": "cjk",
+}
+
+# Used to detect scripts typed by the patient (e.g. an Arabic name inside an
+# English report) so the right font is loaded for those characters too.
+SCRIPT_REGEX = {
+    "arabic": re.compile("[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]"),
+    "devanagari": re.compile("[\u0900-\u097F]"),
+    "cjk": re.compile("[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]"),
+}
+
+# Report colors
+C_NAVY = (11, 31, 77)
+C_BLUE = (37, 99, 235)
+C_SKY = (14, 165, 233)
+C_TEXT = (19, 35, 63)
+C_MUTED = (100, 116, 139)
+C_BORDER = (219, 228, 240)
+C_SOFT = (245, 248, 255)
+C_GREEN = (22, 163, 74)
+C_GREEN_BG = (240, 253, 244)
+C_GREEN_BD = (187, 247, 208)
+C_RED = (220, 38, 38)
+C_RED_BG = (254, 242, 242)
+C_RED_BD = (254, 202, 202)
+C_AMBER_BG = (255, 251, 235)
+C_AMBER_BD = (245, 217, 139)
+C_AMBER_TX = (120, 80, 0)
 
 
-def _find_font_file(filename: str):
-    dirs = list(_FONT_DIRS)
-    try:
-        import matplotlib
+@st.cache_resource(show_spinner=False, ttl=900)
+def _font_file(script: str, bold: bool):
+    """Path of a font file: local 'fonts' folder first, otherwise download it once."""
+    _family, files, base_url = PDF_FONTS[script]
+    name = files[1 if bold else 0]
 
-        dirs.append(os.path.join(matplotlib.get_data_path(), "fonts", "ttf"))
-    except Exception:
-        pass
-
-    for directory in dirs:
-        path = os.path.join(directory, filename)
-        if os.path.exists(path):
+    for directory in (FONT_DIR, "fonts", BASE_DIR, ".", TMP_FONT_DIR):
+        path = os.path.join(directory, name)
+        if os.path.exists(path) and os.path.getsize(path) > 10_000:
             return path
+
+    for folder in (FONT_DIR, TMP_FONT_DIR):
+        target = os.path.join(folder, name)
+        tmp = target + ".part"
+        try:
+            os.makedirs(folder, exist_ok=True)
+            with urllib.request.urlopen(base_url + name, timeout=40) as response, open(tmp, "wb") as out:
+                shutil.copyfileobj(response, out)
+            if os.path.getsize(tmp) < 10_000:
+                raise OSError("downloaded font is too small")
+            os.replace(tmp, target)
+            return target
+        except Exception:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
     return None
 
 
-@st.cache_resource
-def register_pdf_fonts() -> bool:
-    regular = _find_font_file("DejaVuSans.ttf")
-    if not regular:
-        return False
-    bold = _find_font_file("DejaVuSans-Bold.ttf") or regular
-
-    try:
-        pdfmetrics.registerFont(TTFont("PDFRegular", regular))
-        pdfmetrics.registerFont(TTFont("PDFBold", bold))
-        pdfmetrics.registerFontFamily(
-            "PDFRegular",
-            normal="PDFRegular",
-            bold="PDFBold",
-            italic="PDFRegular",
-            boldItalic="PDFBold",
-        )
-        return True
-    except Exception:
-        return False
-
-
 def pick_pdf_language(lang: str) -> str:
-    """Return the language the PDF can actually be rendered in on this server."""
+    """Return the language the PDF can really be produced in on this server.
+
+    It is the app language whenever the needed fonts are available (or can be
+    downloaded); otherwise it falls back to English.
+    """
     if lang == "en":
         return "en"
-    if lang not in PDF_FONT_LANGS:
+
+    script = LANG_SCRIPT.get(lang, "latin")
+    if script in ("arabic", "devanagari") and not SHAPING_OK:
         return "en"
-    if not register_pdf_fonts():
-        return "en"
-    if is_rtl(lang) and not ARABIC_SHAPING_OK:
-        return "en"
+
+    for needed in {"latin", script}:
+        for bold in (False, True):
+            if not _font_file(needed, bold):
+                return "en"
     return lang
 
 
-def _shape(text) -> str:
-    return get_display(arabic_reshaper.reshape(str(text)))
-
-
-def _wrap_rtl(text: str, font_name: str, font_size: float, max_width: float) -> str:
-    """Wrap Arabic text manually (line by line) so the visual order stays correct."""
-    words = str(text).split()
-    lines, current = [], []
-
-    for word in words:
-        trial = " ".join(current + [word])
-        if current and pdfmetrics.stringWidth(_shape(trial), font_name, font_size) > max_width:
-            lines.append(" ".join(current))
-            current = [word]
-        else:
-            current.append(word)
-
-    if current:
-        lines.append(" ".join(current))
-
-    return "<br/>".join(xml_escape(_shape(line)) for line in lines)
+def _rgb(color):
+    return color[0], color[1], color[2]
 
 
 def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = False) -> bytes:
     rtl = is_rtl(lang)
-    has_ttf = register_pdf_fonts()
-    font = "PDFRegular" if has_ttf else "Helvetica"
-    font_bold = "PDFBold" if has_ttf else "Helvetica-Bold"
-    align = TA_RIGHT if rtl else TA_LEFT
 
     def t(key):
         return tr(key, lang)
 
-    def shp(text):
-        return _shape(text) if rtl else str(text)
+    # ------------------------------------------------------------------ fonts
+    values = [str(v) for v in report_data.values()]
+    texts = values + [
+        t(k)
+        for k in (
+            "pdf_title", "pdf_generated", "pdf_patient", "pdf_name", "pdf_age_gender",
+            "phone", "pdf_email", "pdf_address", "pdf_type", "pdf_clinical",
+            "pdf_assessment", "pdf_risk", "probability", "pdf_extra",
+            "pdf_disclaimer_label", "pdf_disclaimer", "medical_notice", "brand",
+        )
+    ]
+    blob = " ".join(texts)
 
-    def flow(text, size=9.5, width=530):
-        """Text for a Paragraph (escaped; manually wrapped for Arabic)."""
-        return _wrap_rtl(text, font, size, width) if rtl else xml_escape(str(text))
+    main_script = LANG_SCRIPT.get(lang, "latin")
+    scripts = {"latin", main_script}
+    for name, rx in SCRIPT_REGEX.items():
+        if rx.search(blob):
+            scripts.add(name)
 
-    def label_paragraph(label, value_text):
-        if rtl:
-            return f"{xml_escape(shp(value_text))} :<b>{xml_escape(shp(label))}</b>"
-        return f"<b>{xml_escape(str(label))}:</b> {xml_escape(str(value_text))}"
+    pdf = _ReportPDF(rtl=rtl)
+    families = {}
+    for script in sorted(scripts):
+        regular = _font_file(script, False)
+        bold = _font_file(script, True)
+        if not (regular and bold):
+            continue
+        family = PDF_FONTS[script][0]
+        pdf.add_font(family, "", regular)
+        pdf.add_font(family, "B", bold)
+        families[script] = family
 
-    def make_rows(pairs):
-        rows = []
-        for label, value in pairs:
-            rows.append([shp(value), shp(label)] if rtl else [shp(label), shp(value)])
-        return rows
+    unicode_ok = "latin" in families
+    if not unicode_ok:
+        # No font files at all: use the built-in font (Latin-1 only).
+        base_font = "helvetica"
+    else:
+        base_font = families.get(main_script, families["latin"])
+        fallbacks = [f for s, f in families.items() if f != base_font]
+        if fallbacks:
+            pdf.set_fallback_fonts(fallbacks, exact_match=True)
 
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=letter,
-        rightMargin=36,
-        leftMargin=36,
-        topMargin=36,
-        bottomMargin=36,
-    )
+    if SHAPING_OK and unicode_ok:
+        pdf.set_text_shaping(True)
 
-    styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        "DocTitle",
-        parent=styles["Title"],
-        fontName=font_bold,
-        fontSize=18,
-        textColor=colors.HexColor("#0d3b66"),
-        spaceAfter=4,
-        alignment=align,
-    )
-    subtitle_style = ParagraphStyle(
-        "DocSubtitle",
-        parent=styles["Normal"],
-        fontName=font,
-        fontSize=11,
-        textColor=colors.HexColor("#555555"),
-        alignment=align,
-    )
-    heading_style = ParagraphStyle(
-        "Heading2Custom",
-        parent=styles["Heading2"],
-        fontName=font_bold,
-        fontSize=12,
-        textColor=colors.HexColor("#0d3b66"),
-        spaceBefore=10,
-        spaceAfter=6,
-        alignment=align,
-    )
-    body_style = ParagraphStyle(
-        "BodyCustom",
-        parent=styles["Normal"],
-        fontName=font,
-        fontSize=9.5,
-        leading=13,
-        alignment=align,
-    )
+    def safe(text):
+        text = str(text)
+        return text if unicode_ok else text.encode("latin-1", "replace").decode("latin-1")
 
-    elements = []
-    title = Paragraph("<b>PERDIAPREDICT</b>", title_style)
-    subtitle = Paragraph(flow(t("pdf_title"), size=11, width=440), subtitle_style)
+    wrap = "CHAR" if lang == "zh" else "WORD"
+    align = "R" if rtl else "L"
 
-    if os.path.exists(LOGO_PATH):
-        logo = Image(LOGO_PATH, width=55, height=55)
-        if rtl:
-            header = Table([[[title, subtitle], logo]], colWidths=[482, 58])
+    pdf.base_font = base_font
+    pdf.footer_notice = safe(t("medical_notice"))
+    pdf.footer_brand = safe(t("brand"))
+    pdf.set_auto_page_break(True, margin=26)
+    pdf.set_margins(14, 14, 14)
+    pdf.alias_nb_pages()
+    pdf.add_page()
+
+    page_w = pdf.w
+    left = pdf.l_margin
+    width = page_w - pdf.l_margin - pdf.r_margin
+    right = left + width
+
+    # ---------------------------------------------------------------- helpers
+    def font(style="", size=10, color=C_TEXT):
+        pdf.set_font(base_font, style, size)
+        pdf.set_text_color(*_rgb(color))
+
+    def measure(text, w, size, style="", lh=5.4):
+        """Height needed to print `text` in a box `w` mm wide."""
+        font(style, size)
+        lines = pdf.multi_cell(
+            w, lh, safe(text), align=align, wrapmode=wrap, dry_run=True, output="LINES"
+        )
+        return max(1, len(lines)) * lh
+
+    def put(text, x, y, w, size=10, style="", color=C_TEXT, lh=5.4, text_align=None):
+        """Print text (wrapped) with its box at x..x+w, top at y. Returns the height."""
+        font(style, size, color)
+        pdf.set_xy(x, y)
+        pdf.multi_cell(
+            w, lh, safe(text), align=text_align or align, wrapmode=wrap,
+            new_x="LEFT", new_y="NEXT",
+        )
+        return pdf.get_y() - y
+
+    def box(x, y, w, h, fill, border=None, radius=3.0, line=0.3):
+        pdf.set_fill_color(*_rgb(fill))
+        if border:
+            pdf.set_draw_color(*_rgb(border))
+            pdf.set_line_width(line)
+            style = "DF"
         else:
-            header = Table([[logo, [title, subtitle]]], colWidths=[58, 482])
-    else:
-        header = Table([[[title, subtitle]]], colWidths=[540])
+            style = "F"
+        pdf.rect(x, y, w, h, style=style, round_corners=True, corner_radius=radius)
 
-    header.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-            ]
+    def ensure(height):
+        if pdf.get_y() + height > pdf.h - 26:
+            pdf.add_page()
+            pdf.set_y(16)
+
+    def section(title, need=0):
+        """Section title. `need` = height of the content below, so title and
+        content are never separated by a page break."""
+        ensure(16 + need)
+        y = pdf.get_y() + 6
+        bar_x = right - 1.6 if rtl else left
+        pdf.set_fill_color(*_rgb(C_BLUE))
+        pdf.rect(bar_x, y, 1.6, 6, style="F")
+        text_x = left if rtl else left + 4.5
+        put(title, text_x, y + 0.2, width - 4.5, size=12.5, style="B", color=C_NAVY, lh=6)
+        pdf.set_y(y + 9.5)
+
+    # -------------------------------------------------------- header (banner)
+    band_h = 42
+    steps = 105
+    for i in range(steps):
+        ratio = i / (steps - 1)
+        col = (
+            int(C_NAVY[0] + (14 - C_NAVY[0]) * ratio),
+            int(C_NAVY[1] + (84 - C_NAVY[1]) * ratio),
+            int(C_NAVY[2] + (150 - C_NAVY[2]) * ratio),
         )
-    )
-    elements.append(header)
+        pdf.set_fill_color(*col)
+        pdf.rect(page_w * i / steps, 0, page_w / steps + 0.4, band_h, style="F")
+    pdf.set_fill_color(*_rgb(C_SKY))
+    pdf.rect(0, band_h, page_w, 1.3, style="F")
 
-    divider = Table([[""]], colWidths=[540], rowHeights=[2])
-    divider.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#2563eb"))]))
-    elements.append(divider)
-    elements.append(Spacer(1, 12))
+    logo_size = 25
+    logo_y = (band_h - logo_size) / 2
+    logo_x = right - logo_size if rtl else left
+    has_logo = os.path.exists(LOGO_PATH)
+    if has_logo:
+        try:
+            pdf.image(LOGO_PATH, x=logo_x, y=logo_y, w=logo_size, h=logo_size)
+        except Exception:
+            has_logo = False
 
-    elements.append(
-        Paragraph(label_paragraph(t("pdf_generated"), report_data.get("Timestamp", "")), body_style)
-    )
-    elements.append(Spacer(1, 10))
-    elements.append(Paragraph(xml_escape(shp(t("pdf_patient"))), heading_style))
-
-    patient_info = make_rows(
-        [
-            (t("pdf_name"), f"{report_data.get('First name', '')} {report_data.get('Last name', '')}"),
-            (t("pdf_age_gender"), f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"),
-            (t("phone"), report_data.get("Phone", "")),
-            (t("pdf_email"), report_data.get("Email", t("na"))),
-            (t("pdf_address"), report_data.get("Address", "")),
-            (t("pdf_type"), report_data.get("Reported diabetes type", "")),
-        ]
-    )
-
-    label_col = 1 if rtl else 0
-    t1 = Table(patient_info, colWidths=[410, 130] if rtl else [130, 410])
-    t1.setStyle(
-        TableStyle(
-            [
-                ("FONTNAME", (0, 0), (-1, -1), font),
-                ("BACKGROUND", (label_col, 0), (label_col, -1), colors.HexColor("#f0f4f8")),
-                ("FONTNAME", (label_col, 0), (label_col, -1), font_bold),
-                ("ALIGN", (0, 0), (-1, -1), "RIGHT" if rtl else "LEFT"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                ("TOPPADDING", (0, 0), (-1, -1), 5),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
-            ]
-        )
-    )
-    elements.append(t1)
-    elements.append(Spacer(1, 12))
-
-    elements.append(Paragraph(xml_escape(shp(t("pdf_clinical"))), heading_style))
-    elements.append(Paragraph(flow(report_data.get("Symptom narrative", "")), body_style))
-    elements.append(Spacer(1, 12))
-
-    elements.append(Paragraph(xml_escape(shp(t("pdf_assessment"))), heading_style))
-    result_color = colors.HexColor("#dc2626") if is_high else colors.HexColor("#16a34a")
-
-    result_rows = make_rows(
-        [
-            (t("pdf_risk"), report_data.get("Result", "")),
-            (t("probability"), report_data.get("Probability", "")),
-            (t("pdf_extra"), report_data.get("Notable extra symptoms", "")),
-        ]
-    )
-    label_col2 = 1 if rtl else 0
-    value_col2 = 0 if rtl else 1
-
-    t2 = Table(result_rows, colWidths=[370, 170] if rtl else [170, 370])
-    t2.setStyle(
-        TableStyle(
-            [
-                ("FONTNAME", (0, 0), (-1, -1), font),
-                ("FONTNAME", (label_col2, 0), (label_col2, -1), font_bold),
-                ("TEXTCOLOR", (value_col2, 0), (value_col2, 0), result_color),
-                ("FONTNAME", (value_col2, 0), (value_col2, 0), font_bold),
-                ("ALIGN", (0, 0), (-1, -1), "RIGHT" if rtl else "LEFT"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#d1d5db")),
-            ]
-        )
-    )
-    elements.append(t2)
-    elements.append(Spacer(1, 18))
-
+    gap = 6
+    stamp_w = 52
+    text_w = width - (logo_size + gap if has_logo else 0) - stamp_w - 6
     if rtl:
-        disclaimer_text = flow(f"{t('pdf_disclaimer_label')}: {t('pdf_disclaimer')}")
+        text_x = right - (logo_size + gap if has_logo else 0) - text_w
     else:
-        disclaimer_text = (
-            f"<b>{xml_escape(t('pdf_disclaimer_label'))}:</b> {xml_escape(t('pdf_disclaimer'))}"
-        )
-    elements.append(Paragraph(disclaimer_text, body_style))
+        text_x = left + (logo_size + gap if has_logo else 0)
 
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
+    put("PERDIAPREDICT", text_x, logo_y + 2, text_w, size=21, style="B",
+        color=(255, 255, 255), lh=9)
+    put(t("pdf_title"), text_x, logo_y + 12.5, text_w, size=10, color=(191, 219, 254), lh=5)
+
+    stamp_x = left if rtl else right - stamp_w
+    stamp_align = "L" if rtl else "R"
+    put(t("pdf_generated"), stamp_x, band_h / 2 - 7, stamp_w, size=8,
+        color=(147, 197, 253), lh=4, text_align=stamp_align)
+    put(report_data.get("Timestamp", ""), stamp_x, band_h / 2 - 2.6, stamp_w, size=11,
+        style="B", color=(255, 255, 255), lh=6, text_align=stamp_align)
+
+    pdf.set_y(band_h + 10)
+
+    # ------------------------------------------------ risk result (main card)
+    accent = C_RED if is_high else C_GREEN
+    tint = C_RED_BG if is_high else C_GREEN_BG
+    tint_border = C_RED_BD if is_high else C_GREEN_BD
+
+    try:
+        probability = float(re.search(r"[\d.]+", str(report_data.get("Probability", "0"))).group())
+    except Exception:
+        probability = 0.0
+    probability = max(0.0, min(100.0, probability))
+
+    card_h = 42
+    ensure(card_h)
+    cy = pdf.get_y()
+    box(left, cy, width, card_h, tint, tint_border, radius=4)
+
+    pad = 6
+    icon = 16
+    icon_x = right - pad - icon if rtl else left + pad
+    box(icon_x, cy + pad, icon, icon, accent, radius=4)
+    pdf.set_draw_color(255, 255, 255)
+    pdf.set_line_width(1.3)
+    if is_high:
+        pdf.line(icon_x + icon / 2, cy + pad + 3.5, icon_x + icon / 2, cy + pad + 9.5)
+        pdf.set_fill_color(255, 255, 255)
+        pdf.ellipse(icon_x + icon / 2 - 0.9, cy + pad + 11.2, 1.8, 1.8, style="F")
+    else:
+        pdf.line(icon_x + 4, cy + pad + 8.5, icon_x + 7, cy + pad + 11.5)
+        pdf.line(icon_x + 7, cy + pad + 11.5, icon_x + 12.2, cy + pad + 4.8)
+
+    prob_w = 46
+    info_w = width - 2 * pad - icon - 5 - prob_w - 4
+    if rtl:
+        info_x = right - pad - icon - 5 - info_w
+        prob_x = left + pad
+    else:
+        info_x = left + pad + icon + 5
+        prob_x = right - pad - prob_w
+
+    put(t("pdf_risk"), info_x, cy + pad - 0.5, info_w, size=8.5, color=C_MUTED, lh=4.2)
+    put(report_data.get("Result", ""), info_x, cy + pad + 4.6, info_w, size=13.5,
+        style="B", color=accent, lh=6.4)
+
+    prob_align = "L" if rtl else "R"
+    put(f"{probability:.1f}%", prob_x, cy + pad - 1.5, prob_w, size=27, style="B",
+        color=accent, lh=12, text_align=prob_align)
+    put(t("probability"), prob_x, cy + pad + 11.2, prob_w, size=8.5, color=C_MUTED,
+        lh=4.2, text_align=prob_align)
+
+    bar_x = left + pad
+    bar_w = width - 2 * pad
+    bar_y = cy + card_h - pad - 3.4
+    box(bar_x, bar_y, bar_w, 3.4, (226, 232, 240), radius=1.7)
+    fill_w = max(3.4, bar_w * probability / 100.0) if probability > 0 else 0
+    if fill_w:
+        fill_x = bar_x + bar_w - fill_w if rtl else bar_x
+        box(fill_x, bar_y, fill_w, 3.4, accent, radius=1.7)
+
+    pdf.set_y(cy + card_h + 4)
+
+    # Extra symptoms row
+    row_h = 12
+    ensure(row_h)
+    ry = pdf.get_y()
+    box(left, ry, width, row_h, (255, 255, 255), C_BORDER, radius=3)
+    half = width / 2
+    lab_x = right - pad - (half - pad) if rtl else left + pad
+    put(t("pdf_extra"), lab_x, ry + 3.4, half - pad, size=9.5, color=C_MUTED, lh=5)
+    val_x = left + pad if rtl else left + half
+    put(report_data.get("Notable extra symptoms", ""), val_x, ry + 3.2, half - pad,
+        size=10.5, style="B", color=C_TEXT, lh=5.4, text_align="L" if rtl else "R")
+    pdf.set_y(ry + row_h)
+
+    # ----------------------------------------------------------- patient card
+    name = f"{report_data.get('First name', '')} {report_data.get('Last name', '')}".strip()
+    age_gender = f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"
+    rows = [
+        [(t("pdf_name"), name), (t("pdf_age_gender"), age_gender)],
+        [(t("phone"), report_data.get("Phone", "")), (t("pdf_email"), report_data.get("Email", t("na")))],
+        [(t("pdf_address"), report_data.get("Address", ""))],
+        [(t("pdf_type"), report_data.get("Reported diabetes type", ""))],
+    ]
+
+    inner_w = width - 2 * pad
+    col_gap = 8
+    col_w = (inner_w - col_gap) / 2
+    label_h = 4.4
+    value_lh = 5.6
+
+    layouts = []
+    total_h = pad - 1
+    for row in rows:
+        cell_w = col_w if len(row) == 2 else inner_w
+        heights = [label_h + measure(v, cell_w, 10.5, "B", value_lh) for _, v in row]
+        row_height = max(heights) + 4.5
+        layouts.append((row, cell_w, row_height))
+        total_h += row_height
+    total_h += pad - 4.5
+
+    section(t("pdf_patient"), need=total_h)
+    py = pdf.get_y()
+    box(left, py, width, total_h, (255, 255, 255), C_BORDER, radius=4)
+
+    cursor = py + pad - 1
+    for index, (row, cell_w, row_height) in enumerate(layouts):
+        for i, (label, value) in enumerate(row):
+            slot = (1 - i) if rtl else i
+            cx = left + pad + slot * (col_w + col_gap) if len(row) == 2 else left + pad
+            put(label, cx, cursor, cell_w, size=8.3, color=C_MUTED, lh=label_h)
+            put(value, cx, cursor + label_h, cell_w, size=10.5, style="B",
+                color=C_TEXT, lh=value_lh)
+        cursor += row_height
+        if index < len(layouts) - 1:
+            pdf.set_draw_color(*_rgb(C_BORDER))
+            pdf.set_line_width(0.2)
+            pdf.line(left + pad, cursor - 2.4, right - pad, cursor - 2.4)
+    pdf.set_y(py + total_h)
+
+    # ------------------------------------------------- clinical presentation
+    narrative = report_data.get("Symptom narrative", "")
+    text_w = width - 2 * pad - 2
+    text_h = measure(narrative, text_w, 10, "", 5.9)
+    ch = text_h + 2 * 5
+    section(t("pdf_clinical"), need=ch)
+    cy2 = pdf.get_y()
+    box(left, cy2, width, ch, C_SOFT, C_BORDER, radius=4)
+    stripe_x = right - 1.6 - 0.2 if rtl else left + 0.2
+    pdf.set_fill_color(*_rgb(C_BLUE))
+    pdf.rect(stripe_x, cy2 + 4, 1.6, ch - 8, style="F")
+    text_x2 = left + pad - 1 if rtl else left + pad + 2
+    put(narrative, text_x2, cy2 + 5, text_w, size=10, color=C_TEXT, lh=5.9)
+    pdf.set_y(cy2 + ch)
+
+    # --------------------------------------------------------------- disclaimer
+    pdf.ln(7)
+    label = t("pdf_disclaimer_label")
+    body = t("pdf_disclaimer")
+    dis_w = width - 2 * pad
+    label_height = 5
+    body_height = measure(body, dis_w, 8.6, "", 4.7)
+    dh = label_height + body_height + 2 * 5 - 1
+    ensure(dh)
+    dy = pdf.get_y()
+    box(left, dy, width, dh, C_AMBER_BG, C_AMBER_BD, radius=3.5)
+    put(label, left + pad, dy + 4.6, dis_w, size=9.2, style="B", color=C_AMBER_TX, lh=5)
+    put(body, left + pad, dy + 4.6 + label_height, dis_w, size=8.6, color=C_AMBER_TX, lh=4.7)
+    pdf.set_y(dy + dh)
+
+    return bytes(pdf.output())
+
+
+class _ReportPDF(FPDF):
+    """A4 report page with a footer (notice + brand + page number)."""
+
+    def __init__(self, rtl: bool = False):
+        super().__init__(orientation="P", unit="mm", format="A4")
+        self.rtl = rtl
+        self.base_font = "helvetica"
+        self.footer_notice = ""
+        self.footer_brand = "PerdiaPredict"
+
+    def footer(self):
+        left = self.l_margin
+        right = self.w - self.r_margin
+        width = right - left
+
+        self.set_y(-21)
+        self.set_draw_color(*_rgb(C_BORDER))
+        self.set_line_width(0.3)
+        self.line(left, self.get_y(), right, self.get_y())
+
+        align = "R" if self.rtl else "L"
+        self.set_font(self.base_font, "", 7.2)
+        self.set_text_color(*_rgb(C_MUTED))
+        self.set_xy(left, self.get_y() + 1.8)
+        self.multi_cell(width, 3.5, self.footer_notice, align=align, new_x="LEFT", new_y="NEXT")
+
+        y = self.get_y() + 0.8
+        # Brand at the start side, page number at the end side (mirrored for RTL).
+        self.set_font(self.base_font, "B", 7.8)
+        self.set_text_color(*_rgb(C_BLUE))
+        self.set_xy(left + width / 2 if self.rtl else left, y)
+        self.cell(width / 2, 4, self.footer_brand, align="R" if self.rtl else "L")
+
+        self.set_font(self.base_font, "", 7.8)
+        self.set_text_color(*_rgb(C_MUTED))
+        self.set_xy(left if self.rtl else left + width / 2, y)
+        self.cell(width / 2, 4, f"{self.page_no()} / {{nb}}", align="L" if self.rtl else "R")
 
 
 # =============================================================================
@@ -2229,17 +2434,38 @@ def render_main_app():
         st.markdown("---")
         st.markdown(f'<div class="section-title">📄 {tr("download")}</div>', unsafe_allow_html=True)
 
+        # The report follows the app language. It is generated once per result
+        # (not on every rerun) and falls back to English only if the fonts for
+        # this language are unavailable.
         pdf_lang = pick_pdf_language(lang)
         pdf_report = report if pdf_lang == lang else report_en
-        pdf_data = generate_pdf_report(pdf_report, pdf_lang, is_high=(result == 1))
+        cache_key = (
+            pdf_lang,
+            int(result),
+            tuple(sorted((k, str(v)) for k, v in pdf_report.items())),
+        )
+
+        if st.session_state.get("pdf_cache_key") != cache_key:
+            try:
+                pdf_bytes = generate_pdf_report(pdf_report, pdf_lang, is_high=(result == 1))
+            except Exception:
+                if pdf_lang == "en":
+                    raise
+                pdf_lang = "en"
+                pdf_report = report_en
+                pdf_bytes = generate_pdf_report(pdf_report, "en", is_high=(result == 1))
+            st.session_state["pdf_cache_key"] = cache_key
+            st.session_state["pdf_cache_data"] = pdf_bytes
+            st.session_state["pdf_cache_lang"] = pdf_lang
+
+        pdf_data = st.session_state["pdf_cache_data"]
+        pdf_lang = st.session_state["pdf_cache_lang"]
 
         if pdf_lang != lang:
             st.caption(tr("pdf_fallback"))
 
-        file_name_pdf = (
-            f"Diabetes_Report_{report['First name']}_{report['Last name']}.pdf"
-            .replace(" ", "_")
-        )
+        safe_name = re.sub(r'[\\/:*?"<>|\s]+', "_", f"{report['First name']}_{report['Last name']}")
+        file_name_pdf = f"Diabetes_Report_{safe_name}.pdf"
 
         st.download_button(
             label=f"📥 {tr('download_pdf')}",
