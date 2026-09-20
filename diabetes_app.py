@@ -71,12 +71,129 @@ def _init_language():
 _init_language()
 
 
+# -----------------------------------------------------------------------------
+# Gender-specific questions + urination frequency.
+# The texts live here (English / Arabic / Spanish); any other language falls
+# back to English automatically (see tr()). To translate them, copy the keys
+# below into translations.py.
+# These answers are added to the report for the doctor; they are NOT features of
+# the trained model, so they do not change the estimated probability.
+# -----------------------------------------------------------------------------
+POLYURIA_FREQ_KEYS = ["freq_8_10", "freq_11_15", "freq_15_plus", "freq_unsure"]
+
+MALE_SYMPTOM_KEYS = [
+    "male_erectile", "male_libido", "male_muscle", "male_genital_itch", "male_fertility",
+]
+FEMALE_SYMPTOM_KEYS = [
+    "female_yeast", "female_uti", "female_periods", "female_hair", "female_dryness", "female_gdm",
+]
+
+# Sensitive questions (sexual health / fertility / past pregnancy). They are only
+# asked when the patient is or has been married; someone who never married only
+# gets the general questions above.
+MALE_INTIMATE_KEYS = ["male_erectile", "male_libido", "male_fertility"]
+FEMALE_INTIMATE_KEYS = ["female_dryness", "female_gdm"]
+
+MARITAL_KEYS = ["marital_single", "marital_married", "marital_previously"]
+
+
+def gender_question_keys(gender: str, ever_married: bool) -> list:
+    """Questions to show for this gender (all of them only if ever married)."""
+    keys = MALE_SYMPTOM_KEYS if gender == "Male" else FEMALE_SYMPTOM_KEYS
+    if ever_married:
+        return list(keys)
+    intimate = MALE_INTIMATE_KEYS if gender == "Male" else FEMALE_INTIMATE_KEYS
+    return [k for k in keys if k not in intimate]
+
+EXTRA_TEXT = {
+    "en": {
+        "freq_8_10": "8-10 times a day",
+        "freq_11_15": "11-15 times a day",
+        "freq_15_plus": "more than 15 times a day",
+        "freq_unsure": "not sure how many times",
+        "gender_hint": "Choose your gender and marital status: the questions below adapt to them.",
+        "marital_status": "Marital status",
+        "marital_single": "Single (never married)",
+        "marital_married": "Married",
+        "marital_previously": "Divorced or widowed",
+        "male_section": "Symptoms specific to men",
+        "female_section": "Symptoms specific to women",
+        "gender_section_help": "These answers are added to your report to help your doctor. They do not change the estimated probability.",
+        "male_erectile": "Difficulty getting or keeping an erection",
+        "male_libido": "Reduced sex drive",
+        "male_muscle": "Loss of muscle mass or strength",
+        "male_genital_itch": "Repeated itching, redness or infection of the genitals",
+        "male_fertility": "Fertility problems (difficulty having children)",
+        "female_yeast": "Recurrent vaginal yeast infections",
+        "female_uti": "Frequent urinary tract infections",
+        "female_periods": "Irregular menstrual periods",
+        "female_hair": "Excess facial or body hair",
+        "female_dryness": "Vaginal dryness or painful intercourse",
+        "female_gdm": "Diabetes during a previous pregnancy",
+    },
+    "ar": {
+        "freq_8_10": "من 8 إلى 10 مرات في اليوم",
+        "freq_11_15": "من 11 إلى 15 مرة في اليوم",
+        "freq_15_plus": "أكثر من 15 مرة في اليوم",
+        "freq_unsure": "لا أعرف عدد المرات",
+        "gender_hint": "اختر الجنس والحالة الاجتماعية لتظهر لك الأسئلة المناسبة.",
+        "marital_status": "الحالة الاجتماعية",
+        "marital_single": "لم أتزوج بعد",
+        "marital_married": "متزوج/ة",
+        "marital_previously": "مطلّق/ة أو أرمل/ة",
+        "male_section": "أعراض خاصة بالرجال",
+        "female_section": "أعراض خاصة بالنساء",
+        "gender_section_help": "تُضاف هذه الإجابات إلى التقرير لمساعدة الطبيب، ولا تغيّر نسبة الاحتمال المقدَّرة.",
+        "male_erectile": "صعوبة في الانتصاب أو الحفاظ عليه",
+        "male_libido": "انخفاض الرغبة الجنسية",
+        "male_muscle": "فقدان الكتلة أو القوة العضلية",
+        "male_genital_itch": "حكة أو احمرار أو التهابات متكررة في المنطقة التناسلية",
+        "male_fertility": "مشاكل في الخصوبة (صعوبة الإنجاب)",
+        "female_yeast": "التهابات فطرية مهبلية متكررة",
+        "female_uti": "التهابات متكررة في المسالك البولية",
+        "female_periods": "عدم انتظام الدورة الشهرية",
+        "female_hair": "زيادة شعر الوجه أو الجسم",
+        "female_dryness": "جفاف مهبلي أو ألم أثناء الجماع",
+        "female_gdm": "الإصابة بسكري الحمل في حمل سابق",
+    },
+    "es": {
+        "freq_8_10": "de 8 a 10 veces al día",
+        "freq_11_15": "de 11 a 15 veces al día",
+        "freq_15_plus": "más de 15 veces al día",
+        "freq_unsure": "no sé cuántas veces",
+        "gender_hint": "Elige tu sexo y estado civil: las preguntas de abajo se adaptan a tu elección.",
+        "marital_status": "Estado civil",
+        "marital_single": "Soltero/a (nunca me he casado)",
+        "marital_married": "Casado/a",
+        "marital_previously": "Divorciado/a o viudo/a",
+        "male_section": "Síntomas específicos de los hombres",
+        "female_section": "Síntomas específicos de las mujeres",
+        "gender_section_help": "Estas respuestas se añaden al informe para ayudar a tu médico. No modifican la probabilidad estimada.",
+        "male_erectile": "Dificultad para lograr o mantener una erección",
+        "male_libido": "Disminución del deseo sexual",
+        "male_muscle": "Pérdida de masa o fuerza muscular",
+        "male_genital_itch": "Picazón, enrojecimiento o infecciones repetidas en los genitales",
+        "male_fertility": "Problemas de fertilidad (dificultad para tener hijos)",
+        "female_yeast": "Infecciones vaginales por hongos recurrentes",
+        "female_uti": "Infecciones urinarias frecuentes",
+        "female_periods": "Menstruación irregular",
+        "female_hair": "Exceso de vello en la cara o el cuerpo",
+        "female_dryness": "Sequedad vaginal o dolor en las relaciones sexuales",
+        "female_gdm": "Diabetes durante un embarazo anterior",
+    },
+}
+
+
 def tr(key: str, lang: str = None):
     """Translate a key. Falls back to English, then to the key itself."""
     lang = lang or st.session_state.get("lang", "en")
     value = T.get(lang, {}).get(key)
     if value is None:
-        value = T["en"].get(key, key)
+        value = EXTRA_TEXT.get(lang, {}).get(key)
+    if value is None:
+        value = T["en"].get(key)
+    if value is None:
+        value = EXTRA_TEXT["en"].get(key, key)
     return value
 
 
@@ -1604,15 +1721,19 @@ def _join(items, lang):
     return tr("list_sep", lang).join(items[:-1]) + tr("and_last", lang) + items[-1]
 
 
-def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str = None) -> str:
+def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str = None,
+                            gender_values: dict = None, freq_key: str = None) -> str:
     lang = lang or st.session_state.get("lang", "en")
 
-    core_yes = [
-        tr(key, lang)
-        for col, key in display_labels.items()
-        if symptom_values.get(col) == "Yes"
-    ]
+    core_yes = []
+    for col, key in display_labels.items():
+        if symptom_values.get(col) == "Yes":
+            label = tr(key, lang)
+            if col == "Polyuria" and freq_key:
+                label = f"{label} ({tr(freq_key, lang)})"
+            core_yes.append(label)
     extra_yes = [tr(key, lang) for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
+    extra_yes += [tr(key, lang) for key, value in (gender_values or {}).items() if value == "Yes"]
 
     if not core_yes and not extra_yes:
         return tr("patient_denies", lang)
@@ -1633,9 +1754,14 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str 
 
 
 def build_report(lang, timestamp, first, last, phone, email, address, type_key,
-                 age, gender, result, probability, symptom_values, extra_values) -> dict:
+                 age, gender, result, probability, symptom_values, extra_values,
+                 gender_values=None, freq_key=None) -> dict:
     """Build the report dictionary in the requested language."""
-    any_extra = any(v == "Yes" for v in extra_values.values())
+    gender_values = gender_values or {}
+    any_extra = any(v == "Yes" for v in extra_values.values()) or any(
+        v == "Yes" for v in gender_values.values()
+    )
+    gender_yes = [tr(k, lang) for k, v in gender_values.items() if v == "Yes"]
     return {
         "Timestamp": timestamp,
         "First name": first,
@@ -1649,7 +1775,11 @@ def build_report(lang, timestamp, first, last, phone, email, address, type_key,
         "Result": tr("positive_high" if result == 1 else "negative_low", lang),
         "Probability": f"{probability * 100:.1f}%",
         "Notable extra symptoms": tr("yes" if any_extra else "no", lang),
-        "Symptom narrative": build_symptom_narrative(symptom_values, extra_values, lang),
+        "Urination frequency": tr(freq_key, lang) if freq_key else "",
+        "Gender-specific symptoms": ", ".join(gender_yes),
+        "Symptom narrative": build_symptom_narrative(
+            symptom_values, extra_values, lang, gender_values=gender_values, freq_key=freq_key
+        ),
     }
 
 
@@ -1794,6 +1924,9 @@ C_PILL_BD = (191, 219, 254)
 C_XPILL_BG = (255, 247, 237)
 C_XPILL_BD = (253, 215, 170)
 C_ORANGE = (234, 88, 12)
+C_GPILL_BG = (245, 243, 255)
+C_GPILL_BD = (221, 214, 254)
+C_VIOLET = (124, 58, 237)
 
 
 @st.cache_resource(show_spinner=False, ttl=900)
@@ -1856,23 +1989,26 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
     """Build the one-page A4 report.
 
     The normal layout is tried first. If the content is too long for a single
-    page (very long address, wordy language, ...), the report is rebuilt with a
-    tighter layout so it still fits on one page.
+    page (many symptoms, long address, wordy language ...), the report is
+    rebuilt with a tighter layout (level 1, then 2) so it still fits on one page.
 
-    `symptoms` = {"core": [model column names], "extra": [extra symptom keys]}
+    `symptoms` = {"core": [...], "extra": [...], "gender": [...],
+                  "gender_kind": "Male"/"Female", "freq": key}
     (the answers the patient marked "Yes"). When it is missing, the report
     falls back to the text paragraph in report_data["Symptom narrative"].
     """
-    data, pages = _render_pdf_report(report_data, lang, is_high, symptoms, compact=False)
-    if pages > 1:
-        small, small_pages = _render_pdf_report(report_data, lang, is_high, symptoms, compact=True)
-        if small_pages <= pages:
-            return small
-    return data
+    best = None
+    for level in (0, 1, 2):
+        data, pages = _render_pdf_report(report_data, lang, is_high, symptoms, level)
+        if pages <= 1:
+            return data
+        if best is None or pages < best[1]:
+            best = (data, pages)
+    return best[0]
 
 
 def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
-                       symptoms, compact: bool):
+                       symptoms, level: int = 0):
     """Returns (pdf_bytes, number_of_pages)."""
     rtl = is_rtl(lang)
 
@@ -1880,14 +2016,25 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         return tr(key, lang)
 
     # ------------------------------------------------------- symptom labels
-    core_texts, extra_texts = [], []
+    core_texts, extra_texts, gender_texts = [], [], []
+    gender_head = ""
     if symptoms:
-        core_texts = [t(display_labels[c]) for c in symptoms.get("core", []) if c in display_labels]
+        for c in symptoms.get("core", []):
+            if c not in display_labels:
+                continue
+            label = t(display_labels[c])
+            if c == "Polyuria" and symptoms.get("freq"):
+                label = f"{label}\n{t(symptoms['freq'])}"   # name + times per day
+            core_texts.append(label)
         extra_texts = [t(k) for k in symptoms.get("extra", []) if k in extra_symptom_keys]
+        kind = symptoms.get("gender_kind")
+        g_keys = MALE_SYMPTOM_KEYS if kind == "Male" else FEMALE_SYMPTOM_KEYS
+        gender_texts = [t(k) for k in symptoms.get("gender", []) if k in g_keys]
+        gender_head = t("male_section" if kind == "Male" else "female_section")
 
     # ------------------------------------------------------------------ fonts
     values = [str(v) for v in report_data.values()]
-    texts = values + core_texts + extra_texts + [
+    texts = values + core_texts + extra_texts + gender_texts + [gender_head] + [
         t(k)
         for k in (
             "pdf_title", "pdf_generated", "pdf_patient", "pdf_name", "pdf_age_gender",
@@ -1951,16 +2098,27 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
     right = left + width
 
     # ------------------------------------------------------------- dimensions
-    # Normal layout first; `compact` is the fallback that squeezes the spacing.
-    if compact:
-        band_h, after_band, card_h = 30, 6, 34
-        sec_top, sec_after = 3.5, 8
-        row_extra, pill_min, pill_gap_y, card_pad = 3.4, 7.2, 1.8, 4
-        dis_gap, dis_size, dis_lh = 4, 8.2, 4.3
-    else:
+    # Level 0 = normal; levels 1 and 2 squeeze the spacing to keep one page.
+    if level >= 2:      # dense: many symptoms + long texts
+        band_h, after_band, card_h = 27, 4, 34
+        sec_top, sec_after = 2.5, 7
+        row_extra, card_pad = 2.8, 3.2
+        pill_min, pill_gap_y, pill_pad_v, pill_size, pill_lh = 6.4, 1.4, 2.2, 8.2, 3.9
+        head_h, head_size, sep = 4.6, 8.2, 4.2
+        dis_gap, dis_size, dis_lh = 3, 7.8, 4.0
+    elif level == 1:    # compact
+        band_h, after_band, card_h = 30, 5, 35
+        sec_top, sec_after = 3.2, 7.5
+        row_extra, card_pad = 3.2, 3.8
+        pill_min, pill_gap_y, pill_pad_v, pill_size, pill_lh = 6.8, 1.6, 2.4, 8.5, 4.1
+        head_h, head_size, sep = 4.8, 8.5, 4.6
+        dis_gap, dis_size, dis_lh = 3.5, 8.0, 4.2
+    else:               # normal
         band_h, after_band, card_h = 34, 8, 37
         sec_top, sec_after = 5.5, 9
-        row_extra, pill_min, pill_gap_y, card_pad = 4.3, 8.2, 2.4, 5
+        row_extra, card_pad = 4.3, 5
+        pill_min, pill_gap_y, pill_pad_v, pill_size, pill_lh = 8.0, 2.4, 2.8, 8.8, 4.4
+        head_h, head_size, sep = 5.5, 8.8, 6.5
         dis_gap, dis_size, dis_lh = 6, 8.6, 4.7
 
     # ---------------------------------------------------------------- helpers
@@ -2164,7 +2322,7 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
 
     # ------------------------------------------------- clinical presentation
     narrative = report_data.get("Symptom narrative", "")
-    have_pills = bool(core_texts or extra_texts)
+    have_pills = bool(core_texts or extra_texts or gender_texts)
 
     if not have_pills:
         # Text version: used when the patient answered "No" to everything, or
@@ -2182,27 +2340,32 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         put(narrative, text_x2, cy2 + 5, text_w, size=10, color=C_TEXT, lh=5.9)
         pdf.set_y(cy2 + ch)
     else:
-        # Symptom "pills" in a tidy grid: core symptoms first, then the
-        # additional ones under their own label.
+        # Symptom "pills" in a tidy grid. Groups: core symptoms, additional
+        # symptoms, and (if any) the symptoms specific to the patient's gender.
         gap_x = 3.2
-        icon_d = 4.4
-        icon_zone = 9.0
-        pill_size, pill_lh = 8.8, 4.4
+        icon_d = 4.0 if level >= 2 else 4.4
+        icon_zone = 8.4 if level >= 2 else 9.0
+        all_texts = core_texts + extra_texts + gender_texts
 
         def pill_text_w(cols):
             return (inner_w - (cols - 1) * gap_x) / cols - icon_zone - 2
 
         def wraps(cols):
-            tw = pill_text_w(cols)
-            return any(measure(x, tw, pill_size, "B", pill_lh) > pill_lh + 0.1
-                       for x in core_texts + extra_texts)
+            tw_ = pill_text_w(cols)
+            return any(
+                measure(part, tw_, pill_size, "B", pill_lh) > pill_lh + 0.1
+                for x in all_texts for part in x.split("\n")
+            )
 
         cols = 3 if wraps(4) else 4
         pw = (inner_w - (cols - 1) * gap_x) / cols
         tw = pill_text_w(cols)
 
         def plan(items):
-            cells = [(x, max(pill_min, measure(x, tw, pill_size, "B", pill_lh) + 2.8)) for x in items]
+            cells = [
+                (x, max(pill_min, measure(x, tw, pill_size, "B", pill_lh) + pill_pad_v))
+                for x in items
+            ]
             grid = [cells[i:i + cols] for i in range(0, len(cells), cols)]
             heights = [max(h for _, h in r) for r in grid]
             return grid, heights
@@ -2210,15 +2373,26 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         def block_height(heights):
             return sum(heights) + pill_gap_y * (len(heights) - 1) if heights else 0
 
-        core_grid, core_hs = plan(core_texts)
-        extra_grid, extra_hs = plan(extra_texts)
+        blocks = [
+            {"head": None, "texts": core_texts, "colors": (C_PILL_BG, C_PILL_BD, C_BLUE),
+             "empty": ("text", t("no_core"))},
+            {"head": t("pdf_extra"), "texts": extra_texts, "colors": (C_XPILL_BG, C_XPILL_BD, C_ORANGE),
+             "empty": ("value", t("no"))},
+        ]
+        if gender_texts:
+            blocks.append({"head": gender_head, "texts": gender_texts,
+                           "colors": (C_GPILL_BG, C_GPILL_BD, C_VIOLET), "empty": None})
 
-        no_core_txt = t("no_core")
-        core_block = block_height(core_hs) if core_texts else measure(no_core_txt, inner_w, 9.5, "", 5)
-        extra_head = 5.5
-        extra_block = extra_head + (2 + block_height(extra_hs) if extra_texts else 0)
-        sep = 6.5
-        ch = card_pad + core_block + sep + extra_block + card_pad
+        for b_ in blocks:
+            b_["grid"], b_["hs"] = plan(b_["texts"])
+            if b_["texts"]:
+                b_["h"] = (head_h + 2 if b_["head"] else 0) + block_height(b_["hs"])
+            elif b_["empty"][0] == "text":
+                b_["h"] = measure(b_["empty"][1], inner_w, 9.5, "", 5)
+            else:
+                b_["h"] = head_h
+
+        ch = 2 * card_pad + sum(b_["h"] for b_ in blocks) + sep * (len(blocks) - 1)
 
         def draw_pills(grid, heights, fill, border, dot, y0):
             y_cur = y0
@@ -2248,28 +2422,29 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         box(left, cy2, width, ch, (255, 255, 255), C_BORDER, radius=4)
         y = cy2 + card_pad
 
-        if core_texts:
-            y_end = draw_pills(core_grid, core_hs, C_PILL_BG, C_PILL_BD, C_BLUE, y)
-        else:
-            put(no_core_txt, left + pad, y, inner_w, size=9.5, color=C_MUTED, lh=5)
-            y_end = y + core_block
-
-        line_y = y_end + sep / 2
-        pdf.set_draw_color(*_rgb(C_BORDER))
-        pdf.set_line_width(0.2)
-        pdf.line(left + pad, line_y, right - pad, line_y)
-
-        y2 = y_end + sep
         label_w = inner_w * 0.62
         value_w = inner_w - label_w
         label_x = right - pad - label_w if rtl else left + pad
-        put(t("pdf_extra"), label_x, y2, label_w, size=8.8, style="B", color=C_MUTED, lh=4.4)
-        if extra_texts:
-            draw_pills(extra_grid, extra_hs, C_XPILL_BG, C_XPILL_BD, C_ORANGE, y2 + extra_head + 2)
-        else:
-            value_x = left + pad if rtl else right - pad - value_w
-            put(report_data.get("Notable extra symptoms", ""), value_x, y2, value_w,
-                size=9.5, style="B", color=C_TEXT, lh=4.4, text_align="L" if rtl else "R")
+        value_x = left + pad if rtl else right - pad - value_w
+
+        for idx, b_ in enumerate(blocks):
+            if idx:
+                pdf.set_draw_color(*_rgb(C_BORDER))
+                pdf.set_line_width(0.2)
+                pdf.line(left + pad, y + sep / 2, right - pad, y + sep / 2)
+                y += sep
+            if b_["head"]:
+                put(b_["head"], label_x, y, label_w, size=head_size, style="B", color=C_MUTED, lh=4.4)
+            if b_["texts"]:
+                top = y + (head_h + 2 if b_["head"] else 0)
+                y = draw_pills(b_["grid"], b_["hs"], *b_["colors"], top)
+            elif b_["empty"][0] == "text":
+                put(b_["empty"][1], left + pad, y, inner_w, size=9.5, color=C_MUTED, lh=5)
+                y += b_["h"]
+            else:
+                put(b_["empty"][1], value_x, y, value_w, size=9.5, style="B", color=C_TEXT,
+                    lh=4.4, text_align="L" if rtl else "R")
+                y += b_["h"]
         pdf.set_y(cy2 + ch)
 
     # --------------------------------------------------------------- disclaimer
@@ -2371,6 +2546,25 @@ def render_main_app():
         unsafe_allow_html=True,
     )
 
+    # Age and gender are asked OUTSIDE the form on purpose: a widget inside a
+    # form does not refresh the page, and the gender choice must refresh it
+    # immediately so the questions specific to men / women can appear.
+    st.markdown(f'<div class="section-title">📋 {tr("basic")}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-subtitle">{tr("gender_hint")}</div>', unsafe_allow_html=True)
+
+    c5, c6, c7 = st.columns(3)
+    with c5:
+        age = st.number_input(tr("age"), min_value=1, max_value=120, value=40, step=1, key="basic_age")
+    with c6:
+        gender_label = st.selectbox(tr("gender"), [tr("male"), tr("female")], key="basic_gender")
+        gender = "Male" if gender_label == tr("male") else "Female"
+    with c7:
+        marital_options = [tr(k) for k in MARITAL_KEYS]
+        marital_label = st.selectbox(tr("marital_status"), marital_options, key="basic_marital")
+        # The first option is "never married" (also the default): the sensitive
+        # questions stay hidden until the patient says they are / were married.
+        ever_married = marital_options.index(marital_label) != 0
+
     with st.form("patient_form", clear_on_submit=False):
         st.markdown(f'<div class="section-title">👤 {tr("personal")}</div>', unsafe_allow_html=True)
         st.markdown("<div class='section-subtitle'></div>", unsafe_allow_html=True)
@@ -2398,20 +2592,11 @@ def render_main_app():
         )
 
         st.markdown("---")
-        st.markdown(f'<div class="section-title">📋 {tr("basic")}</div>', unsafe_allow_html=True)
-
-        c5, c6 = st.columns(2)
-        with c5:
-            age = st.number_input(tr("age"), min_value=1, max_value=120, value=40, step=1)
-        with c6:
-            gender_label = st.selectbox(tr("gender"), [tr("male"), tr("female")])
-            gender = "Male" if gender_label == tr("male") else "Female"
-
-        st.markdown("---")
         st.markdown(f'<div class="section-title">🩺 {tr("core")}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="section-subtitle">{tr("core_help")}</div>', unsafe_allow_html=True)
 
         symptom_values = {}
+        freq_key = None
         s_col1, s_col2 = st.columns(2)
 
         for i, col in enumerate(binary_columns):
@@ -2419,12 +2604,22 @@ def render_main_app():
             label = tr(key)
             target_col = s_col1 if i % 2 == 0 else s_col2
             with target_col:
-                selected = st.selectbox(
-                    label,
-                    [tr("no"), tr("yes")],
-                    key=f"core_{col}",
-                )
-                symptom_values[col] = "Yes" if selected == tr("yes") else "No"
+                if col == "Polyuria":
+                    # "No", or "Yes" together with how many times a day the patient urinates.
+                    freq_options = [tr("no")] + [f"{tr('yes')} - {tr(k)}" for k in POLYURIA_FREQ_KEYS]
+                    selected = st.selectbox(label, freq_options, key="core_polyuria_freq")
+                    if selected == freq_options[0]:
+                        symptom_values[col] = "No"
+                    else:
+                        symptom_values[col] = "Yes"
+                        freq_key = POLYURIA_FREQ_KEYS[freq_options.index(selected) - 1]
+                else:
+                    selected = st.selectbox(
+                        label,
+                        [tr("no"), tr("yes")],
+                        key=f"core_{col}",
+                    )
+                    symptom_values[col] = "Yes" if selected == tr("yes") else "No"
 
         st.markdown("---")
         st.markdown(f'<div class="section-title">➕ {tr("additional")}</div>', unsafe_allow_html=True)
@@ -2442,6 +2637,27 @@ def render_main_app():
                     key=f"extra_{key}",
                 )
                 extra_values[key] = "Yes" if selected == tr("yes") else "No"
+
+        # Questions that depend on the gender chosen above.
+        gender_values = {}
+        gender_keys = gender_question_keys(gender, ever_married)
+        gender_icon = "♂️" if gender == "Male" else "♀️"
+        gender_title = tr("male_section" if gender == "Male" else "female_section")
+
+        st.markdown("---")
+        st.markdown(f'<div class="section-title">{gender_icon} {gender_title}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-subtitle">{tr("gender_section_help")}</div>', unsafe_allow_html=True)
+
+        g_col1, g_col2 = st.columns(2)
+        for i, key in enumerate(gender_keys):
+            target_col = g_col1 if i % 2 == 0 else g_col2
+            with target_col:
+                selected = st.selectbox(
+                    tr(key),
+                    [tr("no"), tr("yes")],
+                    key=f"gender_{gender}_{key}",
+                )
+                gender_values[key] = "Yes" if selected == tr("yes") else "No"
 
         submitted = st.form_submit_button(
             f"🔍 {tr('predict')}",
@@ -2495,6 +2711,8 @@ def render_main_app():
                 probability=probability,
                 symptom_values=symptom_values,
                 extra_values=extra_values,
+                gender_values=gender_values,
+                freq_key=freq_key,
             )
 
             # Shown to the user (current language) ...
@@ -2506,6 +2724,9 @@ def render_main_app():
             st.session_state["last_symptoms"] = {
                 "core": [c for c in display_labels if symptom_values.get(c) == "Yes"],
                 "extra": [k for k in extra_symptom_keys if extra_values.get(k) == "Yes"],
+                "gender": [k for k, v in gender_values.items() if v == "Yes"],
+                "gender_kind": gender,
+                "freq": freq_key,
             }
             st.session_state["last_result"] = int(result)
             st.session_state["last_probability"] = float(probability)
@@ -2581,7 +2802,7 @@ def render_main_app():
             pdf_lang,
             int(result),
             tuple(sorted((k, str(v)) for k, v in pdf_report.items())),
-            (tuple(pdf_symptoms["core"]), tuple(pdf_symptoms["extra"])) if pdf_symptoms else None,
+            repr(pdf_symptoms) if pdf_symptoms else None,
         )
 
         if st.session_state.get("pdf_cache_key") != cache_key:
