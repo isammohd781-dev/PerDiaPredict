@@ -1,21 +1,27 @@
+# =============================================================================
+# PerdiaPredict — Python dependencies
+# =============================================================================
+# Install with:
+#     pip install -r requirements.txt
+# =============================================================================
+
 # ---- Web app ----
-streamlit
+streamlit>=1.30.0
 
 # ---- Data & model ----
-pandas
-numpy
-joblib
-openpyxl          # saved_reports.xlsx (read/write reports history)
+pandas>=2.0.0
+numpy>=1.24.0
+joblib>=1.3.0
+openpyxl>=3.1.0          # accounts.xlsx + saved_reports.xlsx (read/write)
 
 # IMPORTANT: replace the next line with the exact version printed at the end of
 # train_model.py (for example: scikit-learn==1.7.2). The .pkl files must be
 # loaded with the same scikit-learn version that saved them.
-scikit-learn
+scikit-learn==1.7.2
 
 # ---- PDF report (with Arabic / Hindi text shaping) ----
-fpdf2
-uharfbuzz
+fpdf2>=2.7.0
+uharfbuzz>=0.37.0
 
 # ---- Only needed if you run train_model.py locally (not needed on Render) ----
-# matplotlib
-
+# matplotlib>=3.7.0

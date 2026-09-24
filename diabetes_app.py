@@ -77,11 +77,6 @@ _init_language()
 
 # -----------------------------------------------------------------------------
 # Gender-specific questions + urination frequency.
-# The texts live here (English / Arabic / Spanish); any other language falls
-# back to English automatically (see tr()). To translate them, copy the keys
-# below into translations.py.
-# These answers are added to the report for the doctor; they are NOT features of
-# the trained model, so they do not change the estimated probability.
 # -----------------------------------------------------------------------------
 POLYURIA_FREQ_KEYS = ["freq_8_10", "freq_11_15", "freq_15_plus", "freq_unsure"]
 
@@ -92,9 +87,6 @@ FEMALE_SYMPTOM_KEYS = [
     "female_yeast", "female_uti", "female_periods", "female_hair", "female_dryness", "female_gdm",
 ]
 
-# Sensitive questions (sexual health / fertility / past pregnancy). They are only
-# asked when the patient is or has been married; someone who never married only
-# gets the general questions above.
 MALE_INTIMATE_KEYS = ["male_erectile", "male_libido", "male_fertility"]
 FEMALE_INTIMATE_KEYS = ["female_dryness", "female_gdm"]
 
@@ -110,16 +102,6 @@ def gender_question_keys(gender: str, ever_married: bool) -> list:
 
 # -----------------------------------------------------------------------------
 # Marital status, gender-agreeing.
-#
-# "status" is one of: single / married / divorced / child. "child" is not a
-# marital status at all - it lets a parent fill in the form for a child
-# patient, which then shows pediatric questions instead of the adult
-# male/female section below.
-#
-# Each label is written separately for a male ("Male") and a female
-# ("Female") patient so Arabic (and Spanish) agree in gender, e.g.
-# "أعزب" vs "عزباء", "متزوج" vs "متزوجة", "طفل" vs "طفلة". English does not
-# need two forms, so the same text is reused for both.
 # -----------------------------------------------------------------------------
 MARITAL_STATUS_ORDER = ["single", "married", "divorced", "child"]
 
@@ -146,8 +128,7 @@ MARITAL_STATUS_TEXT = {
 
 
 def marital_status_label(status: str, gender: str, lang: str = None) -> str:
-    """Gender-agreeing label for a marital-status option, with an English fallback
-    for languages that have not been given their own wording yet."""
+    """Gender-agreeing label for a marital-status option."""
     lang = lang or st.session_state.get("lang", "en")
     gender = gender if gender in ("Male", "Female") else "Male"
     table = MARITAL_STATUS_TEXT.get(lang) or MARITAL_STATUS_TEXT["en"]
@@ -156,9 +137,7 @@ def marital_status_label(status: str, gender: str, lang: str = None) -> str:
 
 
 # -----------------------------------------------------------------------------
-# Pediatric questions, shown instead of the adult male/female section whenever
-# the marital status is "child". They are informational only (like the adult
-# gender-specific questions) and do not change the estimated probability.
+# Pediatric questions.
 # -----------------------------------------------------------------------------
 CHILD_COMMON_SYMPTOM_KEYS = [
     "child_bedwetting", "child_growth", "child_fatigue_school", "child_skin_infections",
@@ -174,12 +153,21 @@ def child_question_keys(gender: str) -> list:
 
 
 # -----------------------------------------------------------------------------
-# Gender options. "Transgender" also asks for the sex assigned at birth,
-# because the trained model only knows Male / Female (that value is what is
-# fed to the model). The transgender questions are informational only, like
-# the other gender-specific sections, and do not change the probability.
+# Gender options per USCDI v3 / HL7 Gender Harmony.
 # -----------------------------------------------------------------------------
-GENDER_OPTIONS = ["Male", "Female", "Transgender"]
+# Simple gender options: Male / Female / Other
+GENDER_OPTIONS = ["Male", "Female", "Other"]
+
+# General (neutral) questions for patients who choose "Other".
+# These are informational only and do NOT change the estimated probability.
+OTHER_GENERAL_SYMPTOM_KEYS = [
+    "other_fatigue",
+    "other_vision",
+    "other_thirst",
+    "other_weight",
+    "other_healing",
+    "other_infections",
+]
 BIRTH_SEX_OPTIONS = ["Male", "Female"]
 
 TRANS_SYMPTOM_KEYS = [
@@ -188,9 +176,13 @@ TRANS_SYMPTOM_KEYS = [
 
 
 def gender_label(value: str, lang: str = None) -> str:
-    """Display text for a gender value (Male / Female / Transgender)."""
-    key = {"Male": "male", "Female": "female", "Transgender": "transgender"}.get(value, "male")
-    return tr(key, lang)
+    """Display text for a gender value (Male / Female / Other)."""
+    mapping = {
+        "Male": "male",
+        "Female": "female",
+        "Other": "other_gender",
+    }
+    return tr(mapping.get(value, "male"), lang)
 
 
 EXTRA_TEXT = {
@@ -222,6 +214,25 @@ EXTRA_TEXT = {
         "child_skin_infections": "Repeated skin infections or slow-healing sores",
         "child_yeast": "Recurrent yeast infections",
         "transgender": "Transgender",
+        "other_gender": "Other",
+        "other_section": "General questions",
+        "other_section_help": "These are general questions for patients who prefer not to specify male or female. They do not change the estimated probability.",
+        "other_fatigue": "Constant fatigue or tiredness",
+        "other_vision": "Blurred or unclear vision",
+        "other_thirst": "Excessive thirst",
+        "other_weight": "Unexplained weight change",
+        "other_healing": "Slow healing of wounds",
+        "other_infections": "Frequent infections",
+        "sex_at_birth": "Sex Assigned at Birth",
+        "gender_identity": "Gender Identity",
+        "intersex": "Intersex",
+        "unknown": "Unknown / Prefer not to say",
+        "non_binary": "Non-binary",
+        "genderqueer": "Genderqueer",
+        "another_gender": "Another gender category",
+        "prefer_not_disclose": "Prefer not to disclose",
+        "sex_at_birth_help": "Sex recorded on your original birth certificate. Used for medical assessment only.",
+        "gender_identity_help": "How you describe your gender identity. Added to your report to help your doctor.",
         "birth_sex": "Sex assigned at birth",
         "birth_sex_short": "at birth",
         "trans_section": "Questions specific to transgender patients",
@@ -235,6 +246,7 @@ EXTRA_TEXT = {
         "hyperglycemia": "High blood sugar readings (hyperglycemia)",
         "sweet_craving": "Craving for sweet things",
         "glucose_level": "Blood sugar / glucose level",
+        "patient_id_label": "Patient ID",
         "glucose_unit": "Unit",
         "glucose_help": "Leave it empty if you have not measured it. It is added to your report but does not change the estimated probability.",
         "glucose_invalid": "Please enter a realistic blood glucose value for the selected unit, or leave it empty.",
@@ -265,7 +277,7 @@ EXTRA_TEXT = {
         "dob_year": "Year",
         "dob_choose": "Type or choose",
         "reg_warn_title": "Important warning",
-        "reg_warn_text": "There is no “Forgot password” option. We protect your data with complete confidentiality, so passwords cannot be viewed or recovered by anyone. If you forget your password, please contact technical support only. Make sure you will remember it before you confirm.",
+        "reg_warn_text": "There is no 'Forgot password' option. We protect your data with complete confidentiality, so passwords cannot be viewed or recovered by anyone. If you forget your password, please contact technical support only.",
         "reg_accept": "I have read and understood this warning",
         "reg_button": "Create account",
         "reg_fill_all": "Please fill in all the required fields.",
@@ -324,6 +336,25 @@ EXTRA_TEXT = {
         "child_skin_infections": "التهابات جلدية متكررة أو بطء التئام الجروح",
         "child_yeast": "التهابات فطرية متكررة",
         "transgender": "عابر جنسيًا (Transgender)",
+        "other_gender": "آخر",
+        "other_section": "أسئلة عامة",
+        "other_section_help": "هذه أسئلة عامة للمرضى الذين لا يرغبون في تحديد ذكر أو أنثى. لا تغيّر نسبة الاحتمال المقدَّرة.",
+        "other_fatigue": "إرهاق أو تعب مستمر",
+        "other_vision": "تشوش أو ضعف في الرؤية",
+        "other_thirst": "عطش شديد",
+        "other_weight": "تغير غير مبرر في الوزن",
+        "other_healing": "بطء في التئام الجروح",
+        "other_infections": "التهابات متكررة",
+        "sex_at_birth": "الجنس المسجّل عند الولادة",
+        "gender_identity": "الهوية الجنسية",
+        "intersex": "ثنائي الجنس",
+        "unknown": "غير معروف / أفضّل عدم الذكر",
+        "non_binary": "ثنائي غير محدّد",
+        "genderqueer": "جندري كوير",
+        "another_gender": "فئة جندرية أخرى",
+        "prefer_not_disclose": "أفضّل عدم الإفصاح",
+        "sex_at_birth_help": "الجنس المسجّل في شهادة ميلادك الأصلية. يُستخدم للتقييم الطبي فقط.",
+        "gender_identity_help": "كيف تصف هويتك الجنسية. تُضاف إلى تقريرك لمساعدة طبيبك.",
         "birth_sex": "الجنس المحدد عند الولادة",
         "birth_sex_short": "عند الولادة",
         "trans_section": "أسئلة خاصة بالمرضى العابرين جنسيًا",
@@ -337,6 +368,7 @@ EXTRA_TEXT = {
         "hyperglycemia": "ارتفاع سكر الدم (Hyperglycemia)",
         "sweet_craving": "اشتهاء شديد للحلويات والسكريات",
         "glucose_level": "مستوى السكر / الجلوكوز في الدم",
+        "patient_id_label": "الرقم التعريفي للمريض",
         "glucose_unit": "الوحدة",
         "glucose_help": "اتركه فارغًا إن لم تقم بقياسه. يُضاف إلى التقرير ولا يغيّر نسبة الاحتمال المقدَّرة.",
         "glucose_invalid": "يرجى إدخال قيمة سكر منطقية للوحدة المختارة، أو اتركه فارغًا.",
@@ -367,7 +399,7 @@ EXTRA_TEXT = {
         "dob_year": "السنة",
         "dob_choose": "اكتب أو اختر",
         "reg_warn_title": "تحذير مهم",
-        "reg_warn_text": "لا يوجد خيار «نسيت كلمة المرور»، لأننا نحمي بياناتكم بسرية تامة ولا يمكن لأي أحد الاطلاع على كلمات المرور أو استرجاعها. في حال نسيان كلمة المرور، يرجى التواصل مع الدعم الفني فقط. تأكد من حفظ كلمة المرور قبل التأكيد.",
+        "reg_warn_text": "لا يوجد خيار «نسيت كلمة المرور»، لأننا نحمي بياناتكم بسرية تامة ولا يمكن لأي أحد الاطلاع على كلمات المرور أو استرجاعها.",
         "reg_accept": "قرأتُ التحذير وفهمته",
         "reg_button": "إنشاء الحساب",
         "reg_fill_all": "يرجى تعبئة جميع الحقول المطلوبة.",
@@ -426,6 +458,25 @@ EXTRA_TEXT = {
         "child_skin_infections": "Infecciones cutáneas repetidas o heridas que sanan lentamente",
         "child_yeast": "Infecciones por hongos recurrentes",
         "transgender": "Transgénero",
+        "other_gender": "Otro",
+        "other_section": "Preguntas generales",
+        "other_section_help": "Preguntas generales para pacientes que prefieren no especificar hombre o mujer. No modifican la probabilidad estimada.",
+        "other_fatigue": "Fatiga o cansancio constante",
+        "other_vision": "Visión borrosa o poco clara",
+        "other_thirst": "Sed excesiva",
+        "other_weight": "Cambio de peso sin explicación",
+        "other_healing": "Curación lenta de heridas",
+        "other_infections": "Infecciones frecuentes",
+        "sex_at_birth": "Sexo asignado al nacer",
+        "gender_identity": "Identidad de género",
+        "intersex": "Intersexual",
+        "unknown": "Desconocido / Prefiero no decir",
+        "non_binary": "No binario",
+        "genderqueer": "Genderqueer",
+        "another_gender": "Otra categoría de género",
+        "prefer_not_disclose": "Prefiero no divulgarlo",
+        "sex_at_birth_help": "Sexo registrado en tu certificado de nacimiento. Solo para evaluación médica.",
+        "gender_identity_help": "Cómo describes tu identidad de género. Se añade a tu informe.",
         "birth_sex": "Sexo asignado al nacer",
         "birth_sex_short": "al nacer",
         "trans_section": "Preguntas específicas para pacientes transgénero",
@@ -439,6 +490,7 @@ EXTRA_TEXT = {
         "hyperglycemia": "Azúcar alta en sangre (hiperglucemia)",
         "sweet_craving": "Antojo de dulces",
         "glucose_level": "Nivel de azúcar / glucosa en sangre",
+        "patient_id_label": "ID del paciente",
         "glucose_unit": "Unidad",
         "glucose_help": "Déjalo vacío si no lo has medido. Se añade al informe pero no modifica la probabilidad estimada.",
         "glucose_invalid": "Introduce un valor de glucosa realista para la unidad elegida, o déjalo vacío.",
@@ -469,7 +521,7 @@ EXTRA_TEXT = {
         "dob_year": "Año",
         "dob_choose": "Escribe o elige",
         "reg_warn_title": "Advertencia importante",
-        "reg_warn_text": "No existe la opción «Olvidé mi contraseña». Protegemos tus datos con total confidencialidad, por lo que nadie puede ver ni recuperar las contraseñas. Si olvidas tu contraseña, contacta únicamente con el soporte técnico. Asegúrate de recordarla antes de confirmar.",
+        "reg_warn_text": "No existe la opción 'Olvidé mi contraseña'. Protegemos tus datos con total confidencialidad.",
         "reg_accept": "He leído y entendido esta advertencia",
         "reg_button": "Crear cuenta",
         "reg_fill_all": "Completa todos los campos obligatorios.",
@@ -516,11 +568,10 @@ def tr(key: str, lang: str = None):
     return value
 
 
-# Scripts where letter-spacing must be off (it breaks joining / conjuncts).
 SPACING_OFF_LANGS = {"ar", "hi", "zh"}
 
+
 def _init_theme():
-    """Dark mode by default; ?theme=light in the URL keeps light mode after a refresh."""
     if "dark_mode" in st.session_state:
         return
     code = None
@@ -535,7 +586,6 @@ _init_theme()
 
 
 def _toggle_theme():
-    """Called by the day/night button: flips between dark and light mode."""
     is_dark = not st.session_state.get("dark_mode", True)
     st.session_state["dark_mode"] = is_dark
     try:
@@ -549,7 +599,6 @@ def is_rtl(lang: str = None) -> bool:
     return bool(LANGUAGES.get(lang, {}).get("rtl", False))
 
 
-# Keep model feature names in the training language/format.
 display_labels = {
     "Polyuria": "polyuria",
     "Polydipsia": "polydipsia",
@@ -575,51 +624,31 @@ extra_symptom_keys = {
 
 DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "prediabetes"]
 
-# Optional blood-glucose reading. Informational only (added to the report for the
-# doctor); it does not change the estimated probability.
 GLUCOSE_UNITS = ["mg/dL", "mmol/L"]
 GLUCOSE_RANGE = {"mg/dL": (20.0, 1000.0), "mmol/L": (1.1, 55.0)}
 
 
 # =============================================================================
-# Accounts database  (one SQLite file: perdiapredict.db)
-# =============================================================================
-# The file holds every registered user: first / last name, email, date of birth,
-# password, creation date, last login. The password is NEVER stored as readable
-# text: only a salted PBKDF2-SHA256 hash is saved. Nobody - not the admin, not
-# the technical support, not someone who copies the file - can read a password.
-# That is also why there is no "forgot password": support can only set a new one.
-# ACCOUNTS-DB-START
-# =============================================================================
-# Accounts stored in an Excel file:  accounts.xlsx   (sheet "users")
-#
-# One row per registered user: ID, first / last name, email, birth date,
-# password hash, created at, last login, failed attempts, locked until.
-#
-# * The password is NEVER written as readable text - only a salted
-#   PBKDF2-SHA256 hash (a one-way code). At sign-in the typed password is
-#   hashed the same way and compared with it.
-# * The file is read into memory once and re-read only when it changes, so
-#   the check at sign-in is instant.
-# * Old accounts from perdiapredict.db (the previous storage) are imported
-#   automatically the first time, if that file exists.
+# Accounts database (Excel: accounts.xlsx)
 # =============================================================================
 ACCOUNTS_FILE = "accounts.xlsx"
-DB_FILE = "perdiapredict.db"          # old SQLite storage (only read for the one-time import)
+DB_FILE = "perdiapredict.db"
 PBKDF2_ITERATIONS = 260_000
 MIN_PASSWORD_LEN = 8
-MAX_FAILED_LOGINS = 5      # wrong passwords in a row ...
-LOCK_MINUTES = 5           # ... lock that account for this many minutes
+MAX_FAILED_LOGINS = 5
+LOCK_MINUTES = 5
 SUPPORT_WHATSAPP_NUMBER = "+256771715275"
 SUPPORT_WHATSAPP_URL = "https://wa.me/256771715275"
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 ACCOUNT_FIELDS = [
     "id", "first_name", "last_name", "email", "birth_date",
+    "gender", "marital_status",
     "password_hash", "created_at", "last_login", "failed_attempts", "locked_until",
 ]
 ACCOUNT_HEADERS = [
     "ID", "First name", "Last name", "Email", "Birth date",
+    "Gender", "Marital status",
     "Password hash", "Created at", "Last login", "Failed attempts", "Locked until",
 ]
 _FIELD_BY_HEADER = dict(zip(ACCOUNT_HEADERS, ACCOUNT_FIELDS))
@@ -627,9 +656,7 @@ _FIELD_BY_HEADER = dict(zip(ACCOUNT_HEADERS, ACCOUNT_FIELDS))
 
 @st.cache_resource
 def _accounts_store():
-    """Shared by every browser session: a lock + the in-memory copy of the file."""
     import threading
-
     return {"lock": threading.RLock(), "mtime": None, "rows": []}
 
 
@@ -665,7 +692,6 @@ def _cell_text(value) -> str:
 
 
 def _rows_from_sheet(ws) -> list:
-    """Read the accounts out of a worksheet (columns are found by their header names)."""
     rows_iter = ws.iter_rows(values_only=True)
     header = next(rows_iter, None)
     if not header:
@@ -701,6 +727,8 @@ def _rows_from_sheet(ws) -> list:
             "last_name": get(raw, "last_name"),
             "email": email,
             "birth_date": get(raw, "birth_date"),
+            "gender": get(raw, "gender"),
+            "marital_status": get(raw, "marital_status"),
             "password_hash": pw_hash,
             "created_at": get(raw, "created_at"),
             "last_login": get(raw, "last_login"),
@@ -708,7 +736,6 @@ def _rows_from_sheet(ws) -> list:
             "locked_until": get(raw, "locked_until"),
         })
 
-    # every account needs a unique positive ID
     seen, next_id = set(), max([r["id"] for r in out] + [0]) + 1
     for r in out:
         if r["id"] <= 0 or r["id"] in seen:
@@ -719,7 +746,6 @@ def _rows_from_sheet(ws) -> list:
 
 
 def _save_rows(rows: list):
-    """Write the whole list to accounts.xlsx (temp file first, then swap: never half-written)."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
 
@@ -730,7 +756,6 @@ def _save_rows(rows: list):
     for r in rows:
         ws.append([r.get(f, "") for f in ACCOUNT_FIELDS])
 
-    # Text that starts with "=" must stay text (never run as an Excel formula).
     for row in ws.iter_rows(min_row=2):
         for cell in row:
             if isinstance(cell.value, str):
@@ -741,7 +766,7 @@ def _save_rows(rows: list):
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = head_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
-    widths = [7, 16, 16, 32, 13, 60, 20, 20, 15, 20]
+    widths = [7, 16, 16, 32, 13, 10, 16, 60, 20, 20, 15, 20]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"
@@ -756,7 +781,6 @@ def _save_rows(rows: list):
 
 
 def _import_old_sqlite() -> list:
-    """One-time import of the accounts that were kept in perdiapredict.db."""
     if not os.path.exists(DB_FILE):
         return []
     try:
@@ -769,6 +793,8 @@ def _import_old_sqlite() -> list:
             "last_name": r["last_name"] or "",
             "email": normalize_email(r["email"]),
             "birth_date": r["birth_date"] or "",
+            "gender": "",
+            "marital_status": "",
             "password_hash": r["password_hash"] or "",
             "created_at": r["created_at"] or "",
             "last_login": r["last_login"] or "",
@@ -780,7 +806,6 @@ def _import_old_sqlite() -> list:
 
 
 def _load_rows() -> list:
-    """All accounts (a copy). The Excel file is only re-read when it has changed."""
     store = _accounts_store()
     with store["lock"]:
         if not os.path.exists(ACCOUNTS_FILE):
@@ -815,8 +840,8 @@ def _update_account(email: str, **changes):
                 return
 
 
-def create_user(first_name: str, last_name: str, email: str, birth_date: date, password: str):
-    """Save a new account. Returns (True, None) or (False, translation_key_of_the_error)."""
+def create_user(first_name: str, last_name: str, email: str, birth_date: date,
+                password: str, gender: str, marital_status: str = "single"):
     email = normalize_email(email)
     try:
         password_hash = hash_password(password)
@@ -831,6 +856,8 @@ def create_user(first_name: str, last_name: str, email: str, birth_date: date, p
                 "last_name": last_name.strip(),
                 "email": email,
                 "birth_date": birth_date.isoformat(),
+                "gender": gender,
+                "marital_status": marital_status,
                 "password_hash": password_hash,
                 "created_at": datetime.now().isoformat(timespec="seconds"),
                 "last_login": "",
@@ -844,9 +871,6 @@ def create_user(first_name: str, last_name: str, email: str, birth_date: date, p
 
 
 def authenticate(email: str, password: str):
-    """Check an email + password against accounts.xlsx.
-    Returns (user_dict_or_None, status) where status is "ok", "invalid" or "locked"
-    (too many wrong passwords in a row)."""
     email = normalize_email(email)
     now = datetime.now()
 
@@ -871,7 +895,9 @@ def authenticate(email: str, password: str):
             "first_name": row["first_name"],
             "last_name": row["last_name"],
             "email": row["email"],
-                "birth_date": row["birth_date"],
+            "birth_date": row["birth_date"],
+            "gender": row.get("gender", "Male"),
+            "marital_status": row.get("marital_status", "single"),
         }, "ok"
 
     attempts = int(row["failed_attempts"] or 0) + 1
@@ -884,7 +910,6 @@ def authenticate(email: str, password: str):
 
 
 def render_accounts_admin():
-    """Admin Panel section: the list of accounts, Excel download and Excel restore."""
     rows = _load_rows()
     st.markdown(
         f'<div class="section-title">Registered accounts ({len(rows)})</div>',
@@ -896,6 +921,8 @@ def render_accounts_admin():
             {
                 "ID": r["id"], "First name": r["first_name"], "Last name": r["last_name"],
                 "Email": r["email"], "Birth date": r["birth_date"],
+                "Gender": r.get("gender", ""),
+                "Marital status": r.get("marital_status", ""),
                 "Created at": r["created_at"], "Last login": r["last_login"],
             }
             for r in rows
@@ -948,16 +975,13 @@ def render_accounts_admin():
                 st.success(f"Restored {added} account(s); skipped {skipped}.")
             except Exception as exc:
                 st.error(f"Could not read that file: {exc}")
-# ACCOUNTS-DB-END
 
 
 # =============================================================================
 # Responsive / modern UI
 # =============================================================================
 
-# HOVER-CSS-START
 def inject_hover_css():
-    """Light-blue glow when the mouse is over a button (all pages, all languages)."""
     if st.session_state.get("dark_mode", True):
         h_bg, h_border, h_text, h_glow = "rgba(56,189,248,.16)", "#38bdf8", "#bae6fd", "rgba(56,189,248,.30)"
     else:
@@ -992,7 +1016,6 @@ def inject_hover_css():
         """,
         unsafe_allow_html=True,
     )
-# HOVER-CSS-END
 
 
 def inject_css():
@@ -1000,7 +1023,6 @@ def inject_css():
     rtl = is_rtl()
     no_spacing = st.session_state.get("lang", "en") in SPACING_OFF_LANGS
 
-    # HEADER = the header bar (the row that contains the brand logo/name).
     HEADER = '[data-testid="stHorizontalBlock"]:has(.brand)'
 
     spacing_css = ""
@@ -1013,9 +1035,6 @@ def inject_css():
         }
         """
 
-    # Keep the theme entirely in Streamlit/Python so the toggle reliably
-    # changes the CSS on every rerun. Do not depend on JavaScript setting
-    # attributes on Streamlit's parent document.
     if is_dark:
         theme_vars = """
             --primary: #60a5fa;
@@ -1043,8 +1062,6 @@ def inject_css():
         """
         page_bg = "#080d18"
     else:
-        # Light mode: clean white surfaces + a very soft warm ivory for
-        # form fields. The darker navy text keeps every label/value readable.
         theme_vars = """
             --primary: #2563eb;
             --primary-dark: #1d4ed8;
@@ -1071,8 +1088,6 @@ def inject_css():
         """
         page_bg = "#edf4fb"
 
-    # Right-to-left languages (Arabic): mirror the layout and disable letter
-    # spacing, which would otherwise break the joining of Arabic letters.
     if rtl:
         rtl_css = """
         [data-testid="stMain"],
@@ -1105,23 +1120,15 @@ def inject_css():
         }
         input, textarea { text-align: right; }
         """
-        # Header in Arabic: the brand sits at the right edge (icon on the far
-        # right, both text lines right-aligned next to it). The three buttons
-        # read from left to right as:  Restart | Day/Night | Admin Panel
-        # (the reverse of the other languages). On phones the brand stays on
-        # the first row.
         rtl_css += f"""
         {HEADER} .brand-name,
         {HEADER} .brand-tagline {{
             direction: rtl;
             text-align: right !important;
         }}
-
-        /* Buttons, left -> right: restart (col 4), day/night (col 3), admin (col 2) */
         {HEADER} > [data-testid="stColumn"]:nth-child(4) {{ order: 1 !important; }}
         {HEADER} > [data-testid="stColumn"]:nth-child(3) {{ order: 2 !important; }}
         {HEADER} > [data-testid="stColumn"]:nth-child(2) {{ order: 3 !important; }}
-
         @media (min-width: 641px) {{
             {HEADER} > [data-testid="stColumn"]:nth-child(1) {{
                 order: 5 !important;
@@ -1134,12 +1141,6 @@ def inject_css():
     st.markdown(
         f"""
         <style>
-        /* ================================================================
-           PerdiaPredict complete theme
-           The theme is applied to the whole Streamlit interface, not only
-           to text. This fixes the mixed light/dark appearance.
-           ================================================================ */
-
         :root {{
             {theme_vars}
         }}
@@ -1154,7 +1155,6 @@ def inject_css():
             background: {page_bg} !important;
         }}
 
-        /* Main page */
         .stApp {{
             min-height: 100vh;
             background:
@@ -1176,13 +1176,11 @@ def inject_css():
             padding: 3.0rem 1rem 4rem !important;
         }}
 
-        /* Prevent the page from becoming wider than the browser window. */
         html, body, .stApp, [data-testid="stAppViewContainer"] {{
             max-width: 100% !important;
             overflow-x: hidden !important;
         }}
 
-        /* Streamlit top bar / toolbar */
         header[data-testid="stHeader"] {{
             background: color-mix(in srgb, var(--page) 88%, transparent) !important;
             color: var(--text) !important;
@@ -1193,10 +1191,6 @@ def inject_css():
             color: var(--text) !important;
         }}
 
-        /* ================================================================
-           HEADER BAR - one tidy frame, same order in every language:
-           [ brand .............. ]  [ Admin Panel ]  [ / ]  [ ]
-           ================================================================ */
         {HEADER} {{
             direction: ltr !important;
             box-sizing: border-box !important;
@@ -1215,14 +1209,12 @@ def inject_css():
             min-width: 0 !important;
         }}
 
-        /* Column 1: brand (takes all the free space) */
         {HEADER} > [data-testid="stColumn"]:nth-child(1) {{
             flex: 1 1 0 !important;
             width: auto !important;
             min-width: 0 !important;
         }}
 
-        /* Column 2: Admin Panel (fixed width so it never jumps between languages) */
         {HEADER} > [data-testid="stColumn"]:nth-child(2) {{
             flex: 0 0 172px !important;
             width: 172px !important;
@@ -1230,7 +1222,6 @@ def inject_css():
             max-width: 172px !important;
         }}
 
-        /* Column 3 (day/night) and column 4 (restart): equal square buttons */
         {HEADER} > [data-testid="stColumn"]:nth-child(3),
         {HEADER} > [data-testid="stColumn"]:nth-child(4) {{
             flex: 0 0 48px !important;
@@ -1239,14 +1230,12 @@ def inject_css():
             max-width: 48px !important;
         }}
 
-        /* Remove default margins so everything sits on one centre line */
         {HEADER} [data-testid="stElementContainer"],
         {HEADER} [data-testid="stMarkdownContainer"] {{
             margin: 0 !important;
             padding: 0 !important;
         }}
 
-        /* Brand */
         .brand {{
             display: flex;
             align-items: center;
@@ -1285,7 +1274,6 @@ def inject_css():
             margin-top: 1px;
         }}
 
-        /* All three header buttons share one look and one height. */
         {HEADER} .stButton > button {{
             width: 100% !important;
             height: 48px !important;
@@ -1308,9 +1296,6 @@ def inject_css():
             transform: none !important;
         }}
 
-        /* Centre every header-button label, horizontally AND vertically.
-           The lock emoji is taller than the letters and used to push the
-           "Admin Panel" text down, so every wrapper is a centred flex box. */
         {HEADER} .stButton {{
             display: flex !important;
             align-items: center !important;
@@ -1338,20 +1323,15 @@ def inject_css():
             text-align: center !important;
         }}
 
-        /* Small optical nudge for the Admin Panel text (the lock emoji sits low).
-           If it looks too high, set it to 0; if still low, use -2px. */
         {HEADER} > [data-testid="stColumn"]:nth-child(2) .stButton > button p {{
             transform: translateY(-1px);
         }}
 
-        /* Day / night (column 3) and restart (column 4): bigger icons */
         {HEADER} > [data-testid="stColumn"]:nth-child(3) .stButton > button p,
         {HEADER} > [data-testid="stColumn"]:nth-child(4) .stButton > button p {{
             font-size: 1.3rem !important;
         }}
 
-        /* The patient card (personal info + questions): one complete rounded
-           frame, visible in light AND dark mode. */
         [data-testid="stForm"],
         .st-key-patient_card {{
             background: var(--surface) !important;
@@ -1361,7 +1341,6 @@ def inject_css():
             box-shadow: var(--shadow) !important;
         }}
 
-        /* Hero */
         .hero {{
             background:linear-gradient(135deg,#020617 0%,#172554 56%,#075985 100%);
             color:white !important;
@@ -1402,7 +1381,6 @@ def inject_css():
             line-height:1.65;
         }}
 
-        /* Keep every element inside the dark hero readable in Light Mode. */
         .hero,
         .hero *,
         .hero div,
@@ -1432,7 +1410,6 @@ def inject_css():
             margin-bottom:14px;
         }}
 
-        /* Cards */
         .section-card,
         .result-card {{
             background:var(--surface) !important;
@@ -1528,7 +1505,6 @@ def inject_css():
             margin:12px 0;
         }}
 
-        /* Technical-support card (WhatsApp) */
         .support-card {{
             background: var(--surface) !important;
             border: 1px solid var(--border) !important;
@@ -1579,7 +1555,6 @@ def inject_css():
             padding:24px 0 4px;
         }}
 
-        /* ALL normal Streamlit text */
         .stMarkdown, .stText, .stCaption,
         [data-testid="stMarkdownContainer"],
         [data-testid="stWidgetLabel"],
@@ -1593,22 +1568,6 @@ def inject_css():
             color:var(--muted) !important;
         }}
 
-        /* ================================================================
-           FORM FIELDS  (FIXED: readable text in Light Mode)
-
-           Why it was broken: when the browser / OS is in dark mode,
-           Streamlit paints its own dark background (#262730) on inputs,
-           number fields and selectboxes. Our text was dark navy, so it
-           became dark-on-dark. Different Streamlit versions use different
-           wrapper elements, so here we style ALL of them
-           (data-baseweb + data-testid) with a higher specificity
-           (".stApp ...") so our colors always win.
-           ================================================================ */
-
-        /* 1) The visible frame - exactly ONE frame per field.
-              Text / number / textarea: the wrapper element.
-              Selectbox: the BaseWeb ROOT element (not its first child), so the
-              frame is drawn no matter how this Streamlit version nests it. */
         .stApp div[data-baseweb="input"],
         .stApp div[data-baseweb="textarea"],
         .stApp div[data-baseweb="select"],
@@ -1631,8 +1590,6 @@ def inject_css():
                         box-shadow .15s ease;
         }}
 
-        /* 2) Everything nested inside a frame is transparent, so Streamlit's
-              dark layers can never show through and no double borders appear. */
         .stApp div[data-baseweb="input"] [data-baseweb],
         .stApp div[data-baseweb="textarea"] [data-baseweb],
         .stApp [data-testid="stTextInputRootElement"] [data-baseweb],
@@ -1647,7 +1604,6 @@ def inject_css():
             box-shadow: none !important;
         }}
 
-        /* 3) Hover / focus (our blue focus ring replaces Streamlit's red one) */
         .stApp div[data-baseweb="input"]:hover,
         .stApp div[data-baseweb="select"]:hover,
         .stApp [data-testid="stSelectbox"] [role="group"]:hover,
@@ -1672,9 +1628,6 @@ def inject_css():
             box-shadow: 0 0 0 3px rgba(37,99,235,.16) !important;
         }}
 
-        /* 4) Text typed inside inputs (dark navy in light mode, white in dark mode).
-              -webkit-text-fill-color is needed because the browser can otherwise
-              keep its own dark-theme text color. */
         .stApp input,
         .stApp textarea {{
             background: transparent !important;
@@ -1699,7 +1652,6 @@ def inject_css():
             opacity: .8 !important;
         }}
 
-        /* Browser autofill would otherwise repaint the field yellow/blue. */
         .stApp input:-webkit-autofill,
         .stApp input:-webkit-autofill:hover,
         .stApp input:-webkit-autofill:focus {{
@@ -1708,8 +1660,6 @@ def inject_css():
             caret-color: var(--primary) !important;
         }}
 
-        /* 5) Selectbox: the chosen value (Yes / No / Male ...) stays readable,
-              and the blinking text cursor is hidden (it is a dropdown, not a text box). */
         .stApp div[data-baseweb="select"],
         .stApp div[data-baseweb="select"] *,
         .stApp div[data-baseweb="select"] [role="combobox"],
@@ -1735,7 +1685,6 @@ def inject_css():
             opacity: 1 !important;
         }}
 
-        /* 6) Small buttons inside fields (number - / + and password eye) */
         .stApp div[data-baseweb="input"] button,
         .stApp [data-testid="stNumberInputContainer"] button,
         .stApp [data-testid="stNumberInputStepDown"],
@@ -1769,9 +1718,6 @@ def inject_css():
             opacity: 1 !important;
         }}
 
-        /* 7) Dropdown list (Yes / No options).
-              It is rendered in a "portal" OUTSIDE .stApp, so these rules
-              intentionally do NOT use the .stApp prefix. */
         div[data-baseweb="popover"],
         div[data-baseweb="popover"] > div,
         div[data-baseweb="popover"] ul,
@@ -1840,10 +1786,6 @@ def inject_css():
             background-color: var(--surface-soft) !important;
         }}
 
-        /* 8) Tooltips (hover text of the day/night and restart buttons, help= icons).
-              Streamlit paints them dark; our global text rule made the text dark too,
-              so the label was invisible in Light Mode. They render in a portal, so no
-              .stApp prefix here. */
         [data-testid="stTooltipContent"],
         [role="tooltip"] [data-testid="stTooltipContent"],
         div[data-baseweb="tooltip"],
@@ -1864,7 +1806,6 @@ def inject_css():
             font-weight: 600 !important;
         }}
 
-        /* Field labels */
         [data-testid="stWidgetLabel"] p {{
             font-weight: 700 !important;
             font-size: .88rem !important;
@@ -1877,7 +1818,6 @@ def inject_css():
             -webkit-text-fill-color: var(--text) !important;
         }}
 
-        /* Divider lines inside the form: visible but compact */
         [data-testid="stMarkdownContainer"] hr {{
             margin: .5rem 0 !important;
             border: 0 !important;
@@ -1890,7 +1830,16 @@ def inject_css():
             gap: .85rem !important;
         }}
 
-        /* Radio buttons / checkboxes / toggles */
+        /* Hide +/- step buttons on the locked age field */
+        .st-key-basic_age_locked [data-testid="stNumberInputStepDown"],
+        .st-key-basic_age_locked [data-testid="stNumberInputStepUp"],
+        .st-key-basic_age_locked button[aria-label*="Decrement"],
+        .st-key-basic_age_locked button[aria-label*="Increment"],
+        .st-key-basic_age_locked button[aria-label*="Reduce"],
+        .st-key-basic_age_locked button[aria-label*="Increase"] {{
+            display: none !important;
+        }}
+
         [data-testid="stRadio"],
         [data-testid="stCheckbox"],
         [data-testid="stToggle"] {{
@@ -1903,7 +1852,6 @@ def inject_css():
             color:var(--text) !important;
         }}
 
-        /* Buttons */
         .stButton > button,
         .stDownloadButton > button,
         .stFormSubmitButton > button,
@@ -1947,7 +1895,6 @@ def inject_css():
             -webkit-text-fill-color:#ffffff !important;
         }}
 
-        /* Metrics */
         [data-testid="stMetric"] {{
             background:var(--surface) !important;
             border:1px solid var(--border) !important;
@@ -1962,7 +1909,6 @@ def inject_css():
             color:var(--text) !important;
         }}
 
-        /* Expanders: one clean rounded border (no doubled / half lines) */
         .stExpander,
         [data-testid="stExpander"] {{
             border: 1px solid var(--border) !important;
@@ -1985,31 +1931,24 @@ def inject_css():
             background: var(--surface-soft) !important;
         }}
 
-        /* Alerts */
         [data-testid="stAlert"] {{
             background:var(--surface) !important;
             border:1px solid var(--border) !important;
             color:var(--text) !important;
         }}
 
-        /* Dataframes / tables */
         [data-testid="stDataFrame"],
         [data-testid="stTable"] {{
             background:var(--surface) !important;
             color:var(--text) !important;
         }}
 
-        /* File uploader */
         [data-testid="stFileUploaderDropzone"] {{
             background:var(--surface) !important;
             border:1px dashed var(--border) !important;
             color:var(--text) !important;
         }}
 
-        /* ================================================================
-           Mobile-only adjustments. Desktop is intentionally unchanged.
-           Row 1: brand (full width).  Row 2: [ Admin Panel ] [ /] [ ]
-           ================================================================ */
         @media (max-width: 640px) {{
             .block-container {{
                 width: 100% !important;
@@ -2119,7 +2058,6 @@ def inject_css():
             }}
         }}
 
-        /* Right-to-left languages */
         {rtl_css}
         {spacing_css}
         </style>
@@ -2177,7 +2115,6 @@ def go_to(page_name: str):
 
 
 def restart_app(new_lang: str, page: str = "splash"):
-    """Restart the app from the beginning (splash screen) in a new language."""
     keep_dark = st.session_state.get("dark_mode", True)
 
     for key in list(st.session_state.keys()):
@@ -2186,8 +2123,9 @@ def restart_app(new_lang: str, page: str = "splash"):
     st.session_state["lang"] = new_lang if new_lang in LANGUAGES else "en"
     st.session_state["dark_mode"] = keep_dark
     st.session_state["page"] = page
+    st.session_state.pop("current_patient_id", None)
+    st.session_state.pop("basic_gender", None)
 
-    # Remember the language in the URL so a browser refresh keeps it.
     try:
         st.query_params["lang"] = st.session_state["lang"]
     except Exception:
@@ -2211,7 +2149,6 @@ def render_splash():
     else:
         logo_html = "PP"
 
-    # Letter-spacing / uppercase would break Arabic letter joining.
     plain_script = is_rtl() or st.session_state.get("lang", "en") in SPACING_OFF_LANGS
     welcome_spacing = "0" if plain_script else ".35em"
     welcome_transform = "none" if plain_script else "uppercase"
@@ -2330,13 +2267,12 @@ def render_splash():
         unsafe_allow_html=True,
     )
 
-    # Let the animation play, then show the "continue / change language" screen.
     time.sleep(5.2)
     go_to("language")
 
 
 # =============================================================================
-# Language gate (shown right after the splash screen)
+# Language gate
 # =============================================================================
 
 def render_language_gate():
@@ -2395,7 +2331,7 @@ def render_language_gate():
                     use_container_width=True,
                     type="primary" if code == lang else "secondary",
                 ):
-                    restart_app(code)  # restarts from the splash screen
+                    restart_app(code)
 
         if st.button(f"{tr('back')}", key="gate_back", use_container_width=True):
             st.session_state["choosing_language"] = False
@@ -2407,12 +2343,6 @@ def render_language_gate():
 # =============================================================================
 
 def render_header():
-    """Header bar:  brand | Log out (Back on the admin page) | day/night button | restart button.
-
-    All the styling (alignment, sizes, mobile layout) lives in inject_css().
-    The order of the three buttons is the same in every language; in Arabic the
-    brand moves to the right edge (see rtl_css in inject_css()).
-    """
     left, admin_col, theme_col, menu_col = st.columns([5, 3, 1, 1], vertical_alignment="center")
 
     with left:
@@ -2440,7 +2370,6 @@ def render_header():
         )
 
     with menu_col:
-        # Restart arrow: clears the session and goes back to the splash screen.
         if st.button(
             "",
             icon=":material/refresh:",
@@ -2451,7 +2380,6 @@ def render_header():
             restart_app(st.session_state["lang"])
 
     with admin_col:
-        # (The Admin Panel is now opened from the sign-in choice page.)
         if st.session_state["page"] == "admin":
             if st.button(f"{tr('back')}", key="admin_back", use_container_width=True):
                 go_to("auth")
@@ -2460,7 +2388,6 @@ def render_header():
                 logout()
 
     with theme_col:
-        # Shows the mode you will switch TO (sun while dark, moon while light).
         is_dark = st.session_state.get("dark_mode", True)
         st.button(
             "",
@@ -2473,13 +2400,10 @@ def render_header():
 
 
 # =============================================================================
-# Sign-in choice / login / registration pages
-# Flow: language gate -> auth (registered / new / admin) -> login or register -> main
+# Sign-in / login / registration
 # =============================================================================
 
 def logout():
-    """Sign out. Everything typed in the patient form is cleared too, then the
-    sign-in choice page is shown again (language and theme are kept)."""
     restart_app(st.session_state.get("lang", "en"), page="auth")
 
 
@@ -2498,12 +2422,6 @@ def render_support_card():
     )
 
 
-# =============================================================================
-# AUTH UI - split-card design (welcome panel + form panel)
-# Used by: choice page, login, register and the Admin Panel gate.
-# =============================================================================
-
-# New texts (English / Arabic / Spanish). Other languages fall back to English.
 _AUTH_UI_TEXT = {
     "en": {
         "welcome_title": "Welcome!",
@@ -2530,7 +2448,6 @@ _AUTH_UI_TEXT = {
 for _code, _vals in _AUTH_UI_TEXT.items():
     EXTRA_TEXT.setdefault(_code, {}).update(_vals)
 
-# Label of the meal-plan download button (other languages fall back to English).
 _MEAL_DL_TEXT = {
     "en": {"download_meal_plan": "Download the meal plan (Excel)"},
     "ar": {"download_meal_plan": "تنزيل جدول النظام الغذائي (Excel)"},
@@ -2540,7 +2457,6 @@ for _code, _vals in _MEAL_DL_TEXT.items():
     EXTRA_TEXT.setdefault(_code, {}).update(_vals)
 
 
-# Logo (shown inside the round frame of the welcome panel)
 @st.cache_data(show_spinner=False)
 def _auth_logo_html() -> str:
     if os.path.exists(LOGO_PATH):
@@ -2550,20 +2466,17 @@ def _auth_logo_html() -> str:
     return '<span class="auth-logo-fallback">PP</span>'
 
 
-# CSS for the auth pages only (called by auth_card)
 def inject_auth_css():
     is_dark = st.session_state.get("dark_mode", True)
     rtl = is_rtl()
     no_spacing = rtl or st.session_state.get("lang", "en") in SPACING_OFF_LANGS
     letter = "0" if no_spacing else "-.02em"
 
-    # Light-blue hover colours (buttons light up in sky blue under the mouse).
     if is_dark:
         h_bg, h_border, h_text, h_glow = "rgba(56,189,248,.16)", "#38bdf8", "#bae6fd", "rgba(56,189,248,.30)"
     else:
         h_bg, h_border, h_text, h_glow = "rgba(14,165,233,.13)", "#0ea5e9", "#075985", "rgba(14,165,233,.30)"
 
-    # The form half sits on the right; in right-to-left languages it flips.
     form_side = "left" if rtl else "right"
 
     if is_dark:
@@ -2581,13 +2494,6 @@ def inject_auth_css():
         """
         card_shadow = "0 30px 70px rgba(30,64,175,.22), 0 0 0 1px rgba(148,163,184,.25)"
 
-    # ------------------------------------------------------------------
-    # Artwork behind the logo (transparent, so the blue panel shows through).
-    #   * default: a built-in medical illustration (glow, heartbeat line,
-    #     drops, crosses) + a slowly turning orbit ring;
-    #   * your own picture: save it next to this file as auth_art.png
-    #     (or .webp / .jpg / .svg) and it is used instead of the default.
-    # ------------------------------------------------------------------
     art_svg = (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 460 460'>"
         "<defs>"
@@ -2658,7 +2564,6 @@ def inject_auth_css():
             try:
                 with open(_found, "rb") as _f:
                     art_uri = _data_uri(_mime, _f.read())
-                # fade the edges of a personal picture so it blends in
                 art_mask = (
                     "opacity:.55;"
                     "-webkit-mask-image:radial-gradient(circle, #000 50%, transparent 72%);"
@@ -2671,7 +2576,6 @@ def inject_auth_css():
     st.markdown(
         f"""
         <style>
-        /* ---------- page: blue backdrop ---------- */
         .stApp {{
             background: {backdrop} !important;
         }}
@@ -2683,7 +2587,6 @@ def inject_auth_css():
             padding-top: 3.4rem !important;
         }}
 
-        /* ---------- the card ---------- */
         .st-key-auth_card {{
             border-radius: 28px;
             overflow: hidden;
@@ -2725,8 +2628,6 @@ def inject_auth_css():
                 width: 50% !important;
                 min-width: 0 !important;
             }}
-            /* two-column rows inside the form (first/last name, Back/Sign up ...)
-               stay side by side */
             .st-key-auth_right [data-testid="stHorizontalBlock"] {{
                 flex-wrap: nowrap !important;
                 gap: .8rem !important;
@@ -2737,9 +2638,6 @@ def inject_auth_css():
             }}
         }}
 
-        /* ---------- welcome panel (blue) ----------
-           Text sits near the top; the logo (and its artwork) is pinned to the
-           exact centre of the panel, so it lines up with the middle of the form. */
         .st-key-auth_left {{
             position: relative;
             min-height: 660px;
@@ -2804,7 +2702,6 @@ def inject_auth_css():
             margin: 0 auto;
         }}
 
-        /* ---------- logo + artwork behind it ---------- */
         .auth-logo-circle {{
             position: absolute;
             top: calc(50% + 30px);
@@ -2849,12 +2746,11 @@ def inject_auth_css():
         .auth-logo-circle img {{
             width: 100%;
             height: 100%;
-            object-fit: cover;   /* use "contain" if your logo gets cropped */
+            object-fit: cover;
             border-radius: 50%;
         }}
         .auth-logo-fallback {{ font-size: 80px; }}
 
-        /* ---------- form panel ---------- */
         .st-key-auth_right {{
             min-height: 660px;
             padding: 48px 46px 32px;
@@ -2889,7 +2785,6 @@ def inject_auth_css():
             margin: .4rem 0;
         }}
 
-        /* the form itself: no extra frame inside the card */
         .st-key-auth_right [data-testid="stForm"] {{
             border: 0 !important;
             padding: 0 !important;
@@ -2900,7 +2795,6 @@ def inject_auth_css():
             gap: .9rem !important;
         }}
 
-        /* ---------- inputs ---------- */
         .stApp .st-key-auth_right div[data-baseweb="input"],
         .stApp .st-key-auth_right div[data-baseweb="select"],
         .stApp .st-key-auth_right [data-testid="stTextInputRootElement"] {{
@@ -2919,7 +2813,6 @@ def inject_auth_css():
             box-shadow: 0 0 0 4px rgba(37,99,235,.20) !important;
         }}
 
-        /* ---------- buttons ---------- */
         .stApp .st-key-auth_right button[kind="primary"],
         .stApp .st-key-auth_right [data-testid="stBaseButton-primary"],
         .stApp .st-key-auth_right [data-testid="stBaseButton-primaryFormSubmit"] {{
@@ -2975,8 +2868,6 @@ def inject_auth_css():
             text-decoration: none !important;
         }}
 
-        /* quiet text links: Back / Admin Panel (grey) and switch-page (blue).
-           Written after the secondary rules so they win. */
         .stApp .st-key-auth_right [class*="st-key-auth_link"] button,
         .stApp .st-key-auth_right [class*="st-key-auth_swap"] button,
         .stApp .st-key-auth_right [class*="st-key-auth_"][class*="admin"] button {{
@@ -3019,8 +2910,6 @@ def inject_auth_css():
             -webkit-text-fill-color: {h_text} !important;
         }}
 
-        /* links placed alone on a row (choice page): centred, with a little air above.
-           Links inside a two-column row: Back at the start, switch-page at the end. */
         .st-key-auth_right > [class*="st-key-auth_link"],
         .st-key-auth_right > [class*="st-key-auth_"][class*="admin"] {{
             display: flex;
@@ -3047,7 +2936,6 @@ def inject_auth_css():
             text-align: center !important;
         }}
 
-        /* ---------- date of birth: type in the field OR open the list ---------- */
         .stApp .st-key-reg_day div[data-baseweb="select"] input,
         .stApp .st-key-reg_month div[data-baseweb="select"] input,
         .stApp .st-key-reg_year div[data-baseweb="select"] input {{
@@ -3055,7 +2943,6 @@ def inject_auth_css():
             cursor: text !important;
         }}
 
-        /* ---------- phones: welcome panel on top, form below ---------- */
         @media (max-width: 640px) {{
             .block-container {{ padding: 1.4rem .6rem 2rem !important; }}
             .st-key-auth_card {{ background: var(--surface) !important; border-radius: 22px; }}
@@ -3092,9 +2979,6 @@ def inject_auth_css():
 
 @contextmanager
 def auth_card(title: str, subtitle: str):
-    """Split card: purple welcome panel (title, subtitle, round logo) on one side,
-    and a form panel on the other. Everything written inside `with auth_card(...)`
-    goes into the form panel."""
     inject_auth_css()
     with st.container(key="auth_card"):
         left, right = st.columns(2, gap="small")
@@ -3119,9 +3003,7 @@ def _form_title(text: str):
     st.markdown(f'<div class="auth-form-title">{text}</div>', unsafe_allow_html=True)
 
 
-# Page 1: registered / new user / admin
 def render_auth_page():
-    # Leaving the admin area (or coming back here) always locks it again.
     st.session_state.pop("admin_ok", None)
 
     with auth_card(tr("welcome_title"), tr("auth_intro")):
@@ -3138,7 +3020,6 @@ def render_auth_page():
             go_to("language")
 
 
-# Page 2: sign in (registered user)
 def render_login_page():
     with auth_card(tr("welcome_back"), tr("welcome_back_sub")):
         _form_title(tr("login_title"))
@@ -3183,8 +3064,6 @@ def render_login_page():
             go_to("auth")
 
 
-# DOB-HELPERS-START
-# Month names shown in the date-of-birth dropdown (other languages use English).
 MONTH_NAMES = {
     "en": ["January", "February", "March", "April", "May", "June",
            "July", "August", "September", "October", "November", "December"],
@@ -3196,15 +3075,12 @@ MONTH_NAMES = {
 
 
 def month_label(month_number, lang: str = None) -> str:
-    """Name of a month (1-12) in the app language."""
     lang = lang or st.session_state.get("lang", "en")
     names = MONTH_NAMES.get(lang) or MONTH_NAMES["en"]
     return names[int(month_number) - 1]
 
 
 def age_from_birth_date(value):
-    """Age in whole years from an ISO date string (YYYY-MM-DD), limited to 1-120.
-    Returns None if the value is missing or not a valid date."""
     try:
         born = date.fromisoformat(str(value))
     except (TypeError, ValueError):
@@ -3212,11 +3088,43 @@ def age_from_birth_date(value):
     today = date.today()
     years = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
     return max(1, min(120, years))
-# DOB-HELPERS-END
+
+
+def generate_patient_id() -> str:
+    """Return a unique patient ID in the format YYMMDDNN.
+
+    Format:
+      YY  = last 2 digits of year      (26  = 2026)
+      MM  = month, 2 digits            (09  = September)
+      DD  = day,   2 digits            (19  = the 19th)
+      NN  = patient number that day    (01, 02, 03, ...)
+
+    Example: 26091901 = 2026-09-19, patient #01.
+    """
+    today = date.today()
+    prefix = f"{today.year % 100:02d}{today.month:02d}{today.day:02d}"
+
+    # Count how many patients have already been assigned today
+    count_today = 0
+    if os.path.exists(SAVE_FILE_XLSX):
+        try:
+            existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
+            if "Patient ID" in existing.columns:
+                for value in existing["Patient ID"].dropna().astype(str):
+                    value = value.strip()
+                    if value.startswith(prefix) and len(value) >= 10:
+                        count_today += 1
+        except Exception:
+            pass
+
+    next_num = count_today + 1
+    if next_num > 99:
+        # More than 99 patients in one day: extend gracefully
+        return f"{prefix}{next_num:03d}"
+    return f"{prefix}{next_num:02d}"
 
 
 def _build_birth_date(day, month, year):
-    """A real, past date - or None."""
     if day is None or month is None or year is None:
         return None
     try:
@@ -3226,7 +3134,6 @@ def _build_birth_date(day, month, year):
     return born if date(1900, 1, 1) <= born < date.today() else None
 
 
-# Page 3: create an account (new user)
 def render_register_page():
     with auth_card(tr("welcome_new"), tr("welcome_new_sub")):
         _form_title(tr("reg_title"))
@@ -3240,6 +3147,19 @@ def render_register_page():
                 last_name = st.text_input(f"{tr('last_name')} *", key="reg_last", max_chars=60)
 
             email = st.text_input(f"{tr('auth_email')} *", key="reg_email", max_chars=254)
+
+            gender_reg = st.selectbox(
+                f"{tr('gender')} *",
+                GENDER_OPTIONS,
+                format_func=gender_label,
+                key="reg_gender",
+            )
+            marital_status_reg = st.selectbox(
+                f"{tr('marital_status')} *",
+                MARITAL_STATUS_ORDER,
+                format_func=lambda k: marital_status_label(k, gender_reg),
+                key="reg_marital",
+            )
 
             st.markdown(
                 f'<div class="section-title" style="font-size:.95rem">{tr("dob")} *</div>',
@@ -3292,7 +3212,8 @@ def render_register_page():
             dob_chosen = day is not None and month is not None and year is not None
 
             errors = []
-            if not (clean_first and clean_last and clean_email and dob_chosen and password and password2):
+            if not (clean_first and clean_last and clean_email and dob_chosen
+                    and password and password2 and gender_reg and marital_status_reg):
                 errors.append(tr("reg_fill_all"))
             if clean_email and not EMAIL_REGEX.match(clean_email):
                 errors.append(tr("reg_email_invalid"))
@@ -3309,7 +3230,10 @@ def render_register_page():
                 for message in errors:
                     st.error(message)
             else:
-                ok, error_key = create_user(clean_first, clean_last, clean_email, birth, password)
+                ok, error_key = create_user(
+                    clean_first, clean_last, clean_email, birth, password,
+                    gender_reg, marital_status_reg
+                )
                 if ok:
                     user, _status = authenticate(clean_email, password)
                     st.session_state["user"] = user
@@ -3326,13 +3250,11 @@ def render_register_page():
             go_to("auth")
 
 
-# Page 4: Admin Panel (password gate in the same card, then the dashboard)
 def _admin_password_ok(candidate: str) -> bool:
     return hmac.compare_digest(candidate.encode("utf-8"), ADMIN_PASSWORD.encode("utf-8"))
 
 
 def render_admin_page():
-    # ---- 1) locked: password inside the split card ----
     if not st.session_state.get("admin_ok"):
         with auth_card(tr("admin_title"), tr("admin_help")):
             _form_title(tr("admin_title"))
@@ -3354,7 +3276,6 @@ def render_admin_page():
                     st.error(tr("incorrect"))
         return
 
-    # ---- 2) unlocked: the dashboard (same as before) ----
     st.markdown(
         f"""
         <div class="hero">
@@ -3431,7 +3352,6 @@ def _model_probability(raw_input: dict) -> float:
 
 
 def predict_new_patient(raw_input: dict):
-    # Important: all "No" answers must produce exactly 0%.
     yes_symptoms = [c for c in binary_columns if raw_input.get(c) == "Yes"]
 
     if not yes_symptoms:
@@ -3516,7 +3436,7 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str 
 def build_report(lang, timestamp, first, last, phone, address, type_key,
                  age, gender, result, probability, symptom_values, extra_values,
                  gender_values=None, freq_key=None, marital_status_key=None,
-                 birth_sex=None, glucose=None) -> dict:
+                 birth_sex=None, glucose=None, patient_id="") -> dict:
     """Build the report dictionary in the requested language."""
     gender_values = gender_values or {}
     any_extra = any(v == "Yes" for v in extra_values.values()) or any(
@@ -3524,12 +3444,10 @@ def build_report(lang, timestamp, first, last, phone, address, type_key,
     )
     gender_yes = [tr(k, lang) for k, v in gender_values.items() if v == "Yes"]
 
-    # "Transgender (at birth: Female)" - the sex at birth is what the model used.
     gender_text = gender_label(gender, lang)
-    if gender == "Transgender" and birth_sex:
-        gender_text = f"{gender_text} ({tr('birth_sex_short', lang)}: {gender_label(birth_sex, lang)})"
 
     return {
+        "Patient ID": patient_id,
         "Timestamp": timestamp,
         "First name": first,
         "Last name": last,
@@ -3559,7 +3477,6 @@ def build_report(lang, timestamp, first, last, phone, address, type_key,
 # =============================================================================
 
 def _meal_plan_excel(df: pd.DataFrame, rtl: bool = False) -> bytes:
-    """The weekly meal plan as an .xlsx file (bytes)."""
     import io
     from openpyxl.styles import Alignment, Font, PatternFill
 
@@ -3625,7 +3542,6 @@ def render_offline_health_guide():
         unsafe_allow_html=True,
     )
 
-    # Diet preference: the foods list and the weekly meal plan follow it.
     diet_choice = st.radio(
         tr("diet_preference"),
         ["nonveg", "veg"],
@@ -3654,27 +3570,13 @@ def render_offline_health_guide():
 # =============================================================================
 # PDF
 # =============================================================================
-# The report is built with fpdf2 + HarfBuzz:
-#       pip install fpdf2 uharfbuzz
-# HarfBuzz shapes Arabic and Hindi correctly and the layout mirrors for
-# right-to-left languages, so the report follows the app language.
-#
-# Fonts (Noto Sans family) are read from the "fonts" folder next to this file.
-# Any missing font is downloaded once, automatically, the first time it is
-# needed (internet required). To work fully offline, copy the font files into
-# the "fonts" folder yourself. Fonts used:
-#   NotoSans-Regular/Bold.ttf            Latin, Cyrillic, Greek, Turkish ...
-#   NotoSansArabic-Regular/Bold.ttf      Arabic
-#   NotoSansDevanagari-Regular/Bold.ttf  Hindi
-#   NotoSansSC-Regular/Bold.otf          Chinese
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FONT_DIR = os.path.join(BASE_DIR, "fonts")
-TMP_FONT_DIR = os.path.join(tempfile.gettempdir(), "perdiapredict_fonts")  # if the app folder is read-only
+TMP_FONT_DIR = os.path.join(tempfile.gettempdir(), "perdiapredict_fonts")
 
 try:
     import uharfbuzz  # noqa: F401
-
     SHAPING_OK = True
 except Exception:
     SHAPING_OK = False
@@ -3682,7 +3584,6 @@ except Exception:
 _NOTO_URL = "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts"
 _CJK_URL = "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/SubsetOTF/SC"
 
-# script -> (font family name, (regular file, bold file), download folder URL)
 PDF_FONTS = {
     "latin": (
         "NotoSans",
@@ -3706,7 +3607,6 @@ PDF_FONTS = {
     ),
 }
 
-# Language code -> main non-Latin script of that language.
 LANG_SCRIPT = {
     "ar": "arabic",
     "fa": "arabic",
@@ -3717,15 +3617,12 @@ LANG_SCRIPT = {
     "zh": "cjk",
 }
 
-# Used to detect scripts typed by the patient (e.g. an Arabic name inside an
-# English report) so the right font is loaded for those characters too.
 SCRIPT_REGEX = {
     "arabic": re.compile("[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]"),
     "devanagari": re.compile("[\u0900-\u097F]"),
     "cjk": re.compile("[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]"),
 }
 
-# Report colors
 C_NAVY = (11, 31, 77)
 C_BLUE = (37, 99, 235)
 C_SKY = (14, 165, 233)
@@ -3754,7 +3651,6 @@ C_VIOLET = (124, 58, 237)
 
 @st.cache_resource(show_spinner=False, ttl=900)
 def _font_file(script: str, bold: bool):
-    """Path of a font file: local 'fonts' folder first, otherwise download it once."""
     _family, files, base_url = PDF_FONTS[script]
     name = files[1 if bold else 0]
 
@@ -3784,11 +3680,6 @@ def _font_file(script: str, bold: bool):
 
 
 def pick_pdf_language(lang: str) -> str:
-    """Return the language the PDF can really be produced in on this server.
-
-    It is the app language whenever the needed fonts are available (or can be
-    downloaded); otherwise it falls back to English.
-    """
     if lang == "en":
         return "en"
 
@@ -3809,17 +3700,6 @@ def _rgb(color):
 
 def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = False,
                         symptoms: dict = None) -> bytes:
-    """Build the one-page A4 report.
-
-    The normal layout is tried first. If the content is too long for a single
-    page (many symptoms, long address, wordy language ...), the report is
-    rebuilt with a tighter layout (level 1, then 2) so it still fits on one page.
-
-    `symptoms` = {"core": [...], "extra": [...], "gender": [...],
-                  "gender_kind": "Male"/"Female"/"Transgender", "freq": key}
-    (the answers the patient marked "Yes"). When it is missing, the report
-    falls back to the text paragraph in report_data["Symptom narrative"].
-    """
     best = None
     for level in (0, 1, 2):
         data, pages = _render_pdf_report(report_data, lang, is_high, symptoms, level)
@@ -3832,13 +3712,11 @@ def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = Fal
 
 def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
                        symptoms, level: int = 0):
-    """Returns (pdf_bytes, number_of_pages)."""
     rtl = is_rtl(lang)
 
     def t(key):
         return tr(key, lang)
 
-    # ------------------------------------------------------- symptom labels
     core_texts, extra_texts, gender_texts = [], [], []
     gender_head = ""
     if symptoms:
@@ -3847,7 +3725,7 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
                 continue
             label = t(display_labels[c])
             if c == "Polyuria" and symptoms.get("freq"):
-                label = f"{label}\n{t(symptoms['freq'])}"   # name + times per day
+                label = f"{label}\n{t(symptoms['freq'])}"
             core_texts.append(label)
         extra_texts = [t(k) for k in symptoms.get("extra", []) if k in extra_symptom_keys]
         kind = symptoms.get("gender_kind")
@@ -3862,7 +3740,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
             gender_head = t("male_section" if kind == "Male" else "female_section")
         gender_texts = [t(k) for k in symptoms.get("gender", []) if k in g_keys]
 
-    # ------------------------------------------------------------------ fonts
     values = [str(v) for v in report_data.values()]
     texts = values + core_texts + extra_texts + gender_texts + [gender_head] + [
         t(k)
@@ -3896,7 +3773,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
 
     unicode_ok = "latin" in families
     if not unicode_ok:
-        # No font files at all: use the built-in font (Latin-1 only).
         base_font = "helvetica"
     else:
         base_font = families.get(main_script, families["latin"])
@@ -3927,23 +3803,21 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
     width = page_w - pdf.l_margin - pdf.r_margin
     right = left + width
 
-    # ------------------------------------------------------------- dimensions
-    # Level 0 = normal; levels 1 and 2 squeeze the spacing to keep one page.
-    if level >= 2:      # dense: many symptoms + long texts
+    if level >= 2:
         band_h, after_band, card_h = 27, 4, 34
         sec_top, sec_after = 2.5, 7
         row_extra, card_pad = 2.8, 3.2
         pill_min, pill_gap_y, pill_pad_v, pill_size, pill_lh = 6.4, 1.4, 2.2, 8.2, 3.9
         head_h, head_size, sep = 4.6, 8.2, 4.2
         dis_gap, dis_size, dis_lh = 3, 7.8, 4.0
-    elif level == 1:    # compact
+    elif level == 1:
         band_h, after_band, card_h = 30, 5, 35
         sec_top, sec_after = 3.2, 7.5
         row_extra, card_pad = 3.2, 3.8
         pill_min, pill_gap_y, pill_pad_v, pill_size, pill_lh = 6.8, 1.6, 2.4, 8.5, 4.1
         head_h, head_size, sep = 4.8, 8.5, 4.6
         dis_gap, dis_size, dis_lh = 3.5, 8.0, 4.2
-    else:               # normal
+    else:
         band_h, after_band, card_h = 34, 8, 37
         sec_top, sec_after = 5.5, 9
         row_extra, card_pad = 4.3, 5
@@ -3951,13 +3825,11 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         head_h, head_size, sep = 5.5, 8.8, 6.5
         dis_gap, dis_size, dis_lh = 6, 8.6, 4.7
 
-    # ---------------------------------------------------------------- helpers
     def font(style="", size=10, color=C_TEXT):
         pdf.set_font(base_font, style, size)
         pdf.set_text_color(*_rgb(color))
 
     def measure(text, w, size, style="", lh=5.4):
-        """Height needed to print `text` in a box `w` mm wide."""
         font(style, size)
         lines = pdf.multi_cell(
             w, lh, safe(text), align=align, wrapmode=wrap, dry_run=True, output="LINES"
@@ -3965,7 +3837,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         return max(1, len(lines)) * lh
 
     def put(text, x, y, w, size=10, style="", color=C_TEXT, lh=5.4, text_align=None):
-        """Print text (wrapped) with its box at x..x+w, top at y. Returns the height."""
         font(style, size, color)
         pdf.set_xy(x, y)
         pdf.multi_cell(
@@ -3990,8 +3861,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
             pdf.set_y(16)
 
     def section(title, need=0):
-        """Section title. `need` = height of the content below, so title and
-        content are never separated by a page break."""
         ensure(sec_top + sec_after + 4 + need)
         y = pdf.get_y() + sec_top
         bar_x = right - 1.6 if rtl else left
@@ -4001,7 +3870,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         put(title, text_x, y + 0.2, width - 4.5, size=12.5, style="B", color=C_NAVY, lh=6)
         pdf.set_y(y + sec_after)
 
-    # -------------------------------------------------------- header (banner)
     steps = 105
     for i in range(steps):
         ratio = i / (steps - 1)
@@ -4046,7 +3914,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
 
     pdf.set_y(band_h + after_band)
 
-    # ------------------------------------------------ risk result (main card)
     accent = C_RED if is_high else C_GREEN
     tint = C_RED_BG if is_high else C_GREEN_BG
     tint_border = C_RED_BD if is_high else C_GREEN_BD
@@ -4105,18 +3972,23 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
 
     pdf.set_y(cy + card_h + 2)
 
-    # ----------------------------------------------------------- patient card
-    # (name, age / gender, phone, marital status, address, diabetes type)
     name = f"{report_data.get('First name', '')} {report_data.get('Last name', '')}".strip()
     age_gender = f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"
-    rows = [
+    patient_id_text = report_data.get("Patient ID", "")
+    rows = []
+    if patient_id_text:
+        # Fallback: use a simple English label if translations are missing.
+        pid_label = t("patient_id_label")
+        if pid_label == "patient_id_label":
+            pid_label = "Patient ID"
+        rows.append([(pid_label, patient_id_text)])
+    rows.extend([
         [(t("pdf_name"), name), (t("pdf_age_gender"), age_gender)],
         [(t("phone"), report_data.get("Phone", "")),
          (t("marital_status"), report_data.get("Marital status", ""))],
         [(t("pdf_address"), report_data.get("Address", "")),
          (t("pdf_type"), report_data.get("Reported diabetes type", ""))],
-    ]
-    # Optional blood-glucose reading: shown only when the patient entered it.
+    ])
     glucose_text = report_data.get("Glucose level", "")
     if glucose_text:
         rows.append([(t("glucose_level"), glucose_text)])
@@ -4156,13 +4028,10 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
             pdf.line(left + pad, cursor - row_extra / 2, right - pad, cursor - row_extra / 2)
     pdf.set_y(py + total_h)
 
-    # ------------------------------------------------- clinical presentation
     narrative = report_data.get("Symptom narrative", "")
     have_pills = bool(core_texts or extra_texts or gender_texts)
 
     if not have_pills:
-        # Text version: used when the patient answered "No" to everything, or
-        # when no symptom list was passed in.
         text_w = width - 2 * pad - 2
         text_h = measure(narrative, text_w, 10, "", 5.9)
         ch = text_h + 2 * 5
@@ -4176,8 +4045,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         put(narrative, text_x2, cy2 + 5, text_w, size=10, color=C_TEXT, lh=5.9)
         pdf.set_y(cy2 + ch)
     else:
-        # Symptom "pills" in a tidy grid. Groups: core symptoms, additional
-        # symptoms, and (if any) the symptoms specific to the patient's gender.
         gap_x = 3.2
         icon_d = 4.0 if level >= 2 else 4.4
         icon_zone = 8.4 if level >= 2 else 9.0
@@ -4283,7 +4150,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
                 y += b_["h"]
         pdf.set_y(cy2 + ch)
 
-    # --------------------------------------------------------------- disclaimer
     pdf.ln(dis_gap)
     label = t("pdf_disclaimer_label")
     body = t("pdf_disclaimer")
@@ -4302,8 +4168,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
 
 
 class _ReportPDF(FPDF):
-    """A4 report page with a footer (notice + brand + page number)."""
-
     def __init__(self, rtl: bool = False):
         super().__init__(orientation="P", unit="mm", format="A4")
         self.rtl = rtl
@@ -4328,7 +4192,6 @@ class _ReportPDF(FPDF):
         self.multi_cell(width, 3.5, self.footer_notice, align=align, new_x="LEFT", new_y="NEXT")
 
         y = self.get_y() + 0.8
-        # Brand at the start side, page number at the end side (mirrored for RTL).
         self.set_font(self.base_font, "B", 7.8)
         self.set_text_color(*_rgb(C_BLUE))
         self.set_xy(left + width / 2 if self.rtl else left, y)
@@ -4350,7 +4213,6 @@ def save_report_to_excel(report: dict):
     if os.path.exists(SAVE_FILE_XLSX):
         try:
             existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
-            # Old files may still contain the removed "Email" column.
             existing = existing.drop(columns=["Email"], errors="ignore")
             combined = pd.concat([existing, new_row], ignore_index=True)
         except Exception:
@@ -4368,16 +4230,13 @@ def save_report_to_excel(report: dict):
 def render_main_app():
     lang = st.session_state["lang"]
 
-    # Auto-fill the patient card from the signed-in account (first name, last
-    # name, and age worked out from the date of birth). The fields stay editable;
-    # a value is only filled in when the field has no value yet.
     _user = st.session_state.get("user") or {}
+    st.session_state.pop("basic_gender", None)
     if "in_first_name" not in st.session_state:
         st.session_state["in_first_name"] = _user.get("first_name", "")
     if "in_last_name" not in st.session_state:
         st.session_state["in_last_name"] = _user.get("last_name", "")
-    if "basic_age" not in st.session_state:
-        st.session_state["basic_age"] = age_from_birth_date(_user.get("birth_date")) or 40
+    st.session_state.pop("basic_age", None)
 
     st.markdown(
         f"""
@@ -4395,10 +4254,6 @@ def render_main_app():
         unsafe_allow_html=True,
     )
 
-    # Everything lives in ONE card and NOT in st.form on purpose: a widget inside
-    # a form does not refresh the page, but the gender / marital-status choice
-    # must refresh it immediately so the matching questions can appear.
-    # (The frame of the card is drawn by the ".st-key-patient_card" CSS rule.)
     with st.container(key="patient_card"):
         # ------------------------------------------------ Personal information
         st.markdown(f'<div class="section-title">{tr("personal")}</div>', unsafe_allow_html=True)
@@ -4412,29 +4267,46 @@ def render_main_app():
 
         c5, c6, c7 = st.columns(3)
         with c5:
-            age = st.number_input(tr("age"), min_value=1, max_value=120, step=1, key="basic_age")
+            # Age comes from the account's date of birth and cannot be changed.
+            calculated_age = age_from_birth_date(_user.get("birth_date")) or 40
+            age = st.number_input(
+                tr("age"),
+                min_value=1,
+                max_value=120,
+                step=1,
+                value=calculated_age,
+                disabled=True,
+                key="basic_age_locked",
+            )
         with c6:
-            gender = st.selectbox(tr("gender"), GENDER_OPTIONS, format_func=gender_label, key="basic_gender")
-            if gender == "Transgender":
-                # The trained model only knows Male / Female: this answer is what
-                # the model receives (and it also picks the pediatric questions).
-                sex_at_birth = st.selectbox(
-                    tr("birth_sex"), BIRTH_SEX_OPTIONS, format_func=gender_label, key="basic_birth_sex"
-                )
-            else:
-                sex_at_birth = gender
+            # Gender comes from the account and cannot be changed here.
+            gender = _user.get("gender", "") or "Male"
+            if gender not in GENDER_OPTIONS:
+                gender = "Male"
+
+            st.text_input(
+                tr("gender"),
+                value=gender_label(gender),
+                disabled=True,
+                key="basic_gender_locked",
+            )
+
+            # The model only knows Male / Female -> "Other" falls back to "Male".
+            sex_at_birth = gender if gender in ("Male", "Female") else "Male"
         with c7:
-            # Labels agree in gender (e.g. "أعزب" vs "عزباء") and include a "Child"
-            # option that switches the last section to pediatric questions.
-            marital_status_key = st.selectbox(
+            # Marital status comes from the account.
+            marital_status_key = _user.get("marital_status", "single") or "single"
+            if marital_status_key not in MARITAL_STATUS_ORDER:
+                marital_status_key = "single"
+
+            st.text_input(
                 tr("marital_status"),
-                MARITAL_STATUS_ORDER,
-                format_func=lambda k: marital_status_label(k, sex_at_birth, lang),
-                key="basic_marital",
+                value=marital_status_label(marital_status_key, sex_at_birth, lang),
+                disabled=True,
+                key="basic_marital_locked",
             )
 
         is_child = marital_status_key == "child"
-        # Sensitive adult questions only appear once married or divorced/widowed.
         ever_married = marital_status_key in ("married", "divorced")
 
         phone = st.text_input(f"{tr('phone')} *", key="in_phone")
@@ -4461,7 +4333,6 @@ def render_main_app():
             target_col = s_col1 if i % 2 == 0 else s_col2
             with target_col:
                 if col == "Polyuria":
-                    # "No", or "Yes" together with how many times a day the patient urinates.
                     freq_options = [tr("no")] + [f"{tr('yes')} - {tr(k)}" for k in POLYURIA_FREQ_KEYS]
                     selected = st.selectbox(label, freq_options, key="core_polyuria_freq")
                     if selected == freq_options[0]:
@@ -4495,7 +4366,7 @@ def render_main_app():
                 )
                 extra_values[key] = "Yes" if selected == tr("yes") else "No"
 
-        # Optional blood sugar / glucose reading (empty = not measured).
+        # Optional blood sugar / glucose reading
         glu_col1, glu_col2 = st.columns([2, 1])
         with glu_col1:
             glucose_value = st.number_input(
@@ -4512,17 +4383,16 @@ def render_main_app():
             glucose_unit = st.selectbox(tr("glucose_unit"), GLUCOSE_UNITS, key="glucose_unit")
 
         # ------------------------------- Questions that depend on the patient
-        # Pediatric questions for a child, the transgender questions for a
-        # transgender adult, otherwise the adult male / female questions.
         gender_values = {}
         if is_child:
             gender_keys = child_question_keys(sex_at_birth)
             gender_title = tr("child_section")
             key_kind = f"child_{sex_at_birth}"
-        elif gender == "Transgender":
-            gender_keys = list(TRANS_SYMPTOM_KEYS)
-            gender_title = tr("trans_section")
-            key_kind = "trans"
+        elif gender == "Other":
+            # General neutral questions for the "Other" gender option.
+            gender_keys = list(OTHER_GENERAL_SYMPTOM_KEYS)
+            gender_title = tr("other_section")
+            key_kind = "other"
         else:
             gender_keys = gender_question_keys(gender, ever_married)
             gender_title = tr("male_section" if gender == "Male" else "female_section")
@@ -4530,7 +4400,8 @@ def render_main_app():
 
         st.markdown("---")
         st.markdown(f'<div class="section-title">{gender_title}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="section-subtitle">{tr("gender_section_help")}</div>', unsafe_allow_html=True)
+        help_key = "other_section_help" if gender == "Other" and not is_child else "gender_section_help"
+        st.markdown(f'<div class="section-subtitle">{tr(help_key)}</div>', unsafe_allow_html=True)
 
         g_col1, g_col2 = st.columns(2)
         for i, key in enumerate(gender_keys):
@@ -4566,7 +4437,6 @@ def render_main_app():
             if not value:
                 errors.append(f"{label} {tr('required')}")
 
-        # Glucose is optional; if it is filled in, it must be a realistic value.
         glucose = None
         if glucose_value:
             low, high = GLUCOSE_RANGE[glucose_unit]
@@ -4580,12 +4450,15 @@ def render_main_app():
             for error in errors:
                 st.warning(error)
         else:
-            # The model only knows Male / Female -> use the sex assigned at birth.
             raw_input = {"Age": age, "Gender": sex_at_birth, **symptom_values}
             result, probability = predict_new_patient(raw_input)
 
             type_key = DIABETES_TYPE_KEYS[[tr(k) for k in DIABETES_TYPE_KEYS].index(diabetes_type)]
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+            if not st.session_state.get("current_patient_id"):
+                st.session_state["current_patient_id"] = generate_patient_id()
+            patient_id = st.session_state["current_patient_id"]
 
             report_args = dict(
                 timestamp=timestamp,
@@ -4595,7 +4468,7 @@ def render_main_app():
                 address=clean_address,
                 type_key=type_key,
                 age=age,
-                gender=gender,
+                gender=sex_at_birth,
                 result=result,
                 probability=probability,
                 symptom_values=symptom_values,
@@ -4605,11 +4478,10 @@ def render_main_app():
                 marital_status_key=marital_status_key,
                 birth_sex=sex_at_birth,
                 glucose=glucose,
+                patient_id=patient_id,
             )
 
-            # Shown to the user (current language) ...
             st.session_state["last_report"] = build_report(lang, **report_args)
-            # ... and the same record in English, so the admin Excel file stays consistent.
             st.session_state["last_report_en"] = build_report("en", **report_args)
 
             st.session_state["last_extra"] = any(v == "Yes" for v in extra_values.values())
@@ -4617,7 +4489,7 @@ def render_main_app():
                 "core": [c for c in display_labels if symptom_values.get(c) == "Yes"],
                 "extra": [k for k in extra_symptom_keys if extra_values.get(k) == "Yes"],
                 "gender": [k for k, v in gender_values.items() if v == "Yes"],
-                "gender_kind": sex_at_birth if is_child else gender,
+                "gender_kind": sex_at_birth if is_child else sex_at_birth,
                 "is_child": is_child,
                 "freq": freq_key,
             }
@@ -4647,10 +4519,14 @@ def render_main_app():
         css_class = "result-high" if result == 1 else "result-low"
         title = tr("high_risk") if result == 1 else tr("low_risk")
 
+        patient_id_display = report.get("Patient ID", "")
         st.markdown(
             f"""
             <div class="result-card {css_class}">
                 <div class="result-label">{tr('result')}</div>
+                <div style="font-size:.8rem;color:var(--muted);margin-bottom:6px;">
+                    Patient ID: <strong>{patient_id_display}</strong>
+                </div>
                 <div class="result-title">{'⚠️' if result == 1 else '✅'} {title}</div>
                 <div class="score">{probability * 100:.1f}%</div>
                 <div class="score-caption">{tr('probability')}</div>
@@ -4685,9 +4561,6 @@ def render_main_app():
         st.markdown("---")
         st.markdown(f'<div class="section-title">{tr("download")}</div>', unsafe_allow_html=True)
 
-        # The report follows the app language. It is generated once per result
-        # (not on every rerun) and falls back to English only if the fonts for
-        # this language are unavailable.
         pdf_lang = pick_pdf_language(lang)
         pdf_report = report if pdf_lang == lang else report_en
         pdf_symptoms = st.session_state.get("last_symptoms")
@@ -4740,19 +4613,9 @@ def render_main_app():
 
 
 # =============================================================================
-# Admin
-# =============================================================================
-# The Admin Panel page (render_admin_page) now lives in the "AUTH UI" block
-# above, because it shares the split-card design of the sign-in pages.
-
-
-# =============================================================================
 # App router
 # =============================================================================
 
-# ENTER-NAV-START
-# JavaScript that makes the Enter key jump to the next field. It is added once to
-# the page itself (not to the small helper iframe), so it keeps working after reruns.
 _ENTER_NAV_JS = r"""
 (function () {
   if (window.__ppEnterNav) return;
@@ -4769,8 +4632,6 @@ _ENTER_NAV_JS = r"""
     return inp.offsetParent !== null;
   }
 
-  // All fields of a card / form in the order the eye reads them:
-  // top to bottom, and inside one row left to right (right to left in Arabic).
   function fieldsIn(scope) {
     var list = Array.prototype.filter.call(scope.querySelectorAll('input'), isField);
     var rtl = window.getComputedStyle(scope).direction === 'rtl';
@@ -4810,8 +4671,6 @@ _ENTER_NAV_JS = r"""
     if (idx === -1) return;
 
     var isLast = idx === fields.length - 1;
-    // Last field of a form: normal Enter (submits the form).
-    // Last field elsewhere with nothing to jump to: normal Enter.
     if (isLast && (inForm || !predictBtn())) return;
 
     function go() {
@@ -4826,11 +4685,10 @@ _ENTER_NAV_JS = r"""
     }
 
     if (el.closest('[data-baseweb="select"]')) {
-      // Drop-down field: let Enter pick the highlighted option first, then move on.
       setTimeout(go, 90);
     } else {
       e.preventDefault();
-      e.stopPropagation();   // stops Streamlit from submitting the form on this Enter
+      e.stopPropagation();
       go();
     }
   }, true);
@@ -4839,7 +4697,6 @@ _ENTER_NAV_JS = r"""
 
 
 def inject_enter_navigation():
-    """Adds the Enter-key navigation script to the page (once)."""
     import json
 
     components.html(
@@ -4853,7 +4710,6 @@ def inject_enter_navigation():
         "})();</script>",
         height=0,
     )
-# ENTER-NAV-END
 
 
 def render_footer():
@@ -4874,16 +4730,16 @@ inject_hover_css()
 current_page = st.session_state["page"]
 
 if current_page == "splash":
-    render_splash()  # plays the animation, then opens the language gate
+    render_splash()
     st.stop()
 
 if current_page == "language":
-    render_language_gate()  # "Continue" or "Change language"
+    render_language_gate()
     render_footer()
     st.stop()
 
 if current_page == "auth":
-    render_auth_page()  # registered / new user / Admin Panel
+    render_auth_page()
     render_footer()
     st.stop()
 
@@ -4897,7 +4753,6 @@ if current_page == "register":
     render_footer()
     st.stop()
 
-# The patient form is only for signed-in users (the Admin Panel has its own password).
 if current_page != "admin" and not st.session_state.get("user"):
     go_to("auth")
 
