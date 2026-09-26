@@ -41,6 +41,7 @@ MODEL_PATH = "diabetes_model.pkl"
 SCALER_PATH = "age_scaler.pkl"
 COLUMNS_PATH = "feature_columns.pkl"
 SAVE_FILE_XLSX = "saved_reports.xlsx"
+AUDIT_LOG_FILE = "audit_log.xlsx"
 LOGO_PATH = "logo.png"
 
 
@@ -153,13 +154,10 @@ def child_question_keys(gender: str) -> list:
 
 
 # -----------------------------------------------------------------------------
-# Gender options per USCDI v3 / HL7 Gender Harmony.
+# Gender options: Male / Female / Other
 # -----------------------------------------------------------------------------
-# Simple gender options: Male / Female / Other
 GENDER_OPTIONS = ["Male", "Female", "Other"]
 
-# General (neutral) questions for patients who choose "Other".
-# These are informational only and do NOT change the estimated probability.
 OTHER_GENERAL_SYMPTOM_KEYS = [
     "other_fatigue",
     "other_vision",
@@ -289,6 +287,12 @@ EXTRA_TEXT = {
         "auth_email_taken": "This email is already registered. Please sign in instead.",
         "auth_db_error": "Could not save your account. Please try again or contact technical support.",
         "logout": "Log out",
+        "change_password_title": "Set a new password",
+        "change_password_intro": "For security, you must set a new password before continuing.",
+        "new_password": "New password",
+        "confirm_new_password": "Confirm new password",
+        "save_new_password": "Save new password",
+        "password_changed": "Password changed successfully!",
         "foods_items_veg": [
             "Non-starchy vegetables: leafy greens, broccoli, cauliflower, cucumber, tomatoes",
             "Legumes: lentils, chickpeas, beans, moong dal",
@@ -411,6 +415,12 @@ EXTRA_TEXT = {
         "auth_email_taken": "هذا البريد الإلكتروني مسجّل مسبقًا. يرجى تسجيل الدخول بدلًا من ذلك.",
         "auth_db_error": "تعذّر حفظ الحساب. حاول مرة أخرى أو تواصل مع الدعم الفني.",
         "logout": "تسجيل الخروج",
+        "change_password_title": "تعيين كلمة مرور جديدة",
+        "change_password_intro": "لأسباب أمنية، يجب تعيين كلمة مرور جديدة قبل المتابعة.",
+        "new_password": "كلمة المرور الجديدة",
+        "confirm_new_password": "تأكيد كلمة المرور الجديدة",
+        "save_new_password": "حفظ كلمة المرور الجديدة",
+        "password_changed": "تم تغيير كلمة المرور بنجاح!",
         "foods_items_veg": [
             "خضروات غير نشوية: ورقيات، بروكلي، قرنبيط، خيار، طماطم",
             "البقوليات: عدس، حمص، فاصوليا، فول",
@@ -533,6 +543,12 @@ EXTRA_TEXT = {
         "auth_email_taken": "Este correo ya está registrado. Inicia sesión en su lugar.",
         "auth_db_error": "No se pudo guardar la cuenta. Inténtalo de nuevo o contacta con el soporte técnico.",
         "logout": "Cerrar sesión",
+        "change_password_title": "Establecer una nueva contraseña",
+        "change_password_intro": "Por seguridad, debes establecer una nueva contraseña antes de continuar.",
+        "new_password": "Nueva contraseña",
+        "confirm_new_password": "Confirmar nueva contraseña",
+        "save_new_password": "Guardar nueva contraseña",
+        "password_changed": "¡Contraseña cambiada exitosamente!",
         "foods_items_veg": [
             "Verduras sin almidón: hojas verdes, brócoli, coliflor, pepino, tomate",
             "Legumbres: lentejas, garbanzos, frijoles, dal de moong",
@@ -645,11 +661,13 @@ ACCOUNT_FIELDS = [
     "id", "first_name", "last_name", "email", "birth_date",
     "gender", "marital_status",
     "password_hash", "created_at", "last_login", "failed_attempts", "locked_until",
+    "must_change_password",
 ]
 ACCOUNT_HEADERS = [
     "ID", "First name", "Last name", "Email", "Birth date",
     "Gender", "Marital status",
     "Password hash", "Created at", "Last login", "Failed attempts", "Locked until",
+    "Must change password",
 ]
 _FIELD_BY_HEADER = dict(zip(ACCOUNT_HEADERS, ACCOUNT_FIELDS))
 
@@ -730,6 +748,7 @@ def _rows_from_sheet(ws) -> list:
             "gender": get(raw, "gender"),
             "marital_status": get(raw, "marital_status"),
             "password_hash": pw_hash,
+            "must_change_password": 1 if get(raw, "must_change_password") == "1" else 0,
             "created_at": get(raw, "created_at"),
             "last_login": get(raw, "last_login"),
             "failed_attempts": as_int(get(raw, "failed_attempts")),
@@ -766,7 +785,7 @@ def _save_rows(rows: list):
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = head_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
-    widths = [7, 16, 16, 32, 13, 10, 16, 60, 20, 20, 15, 20]
+    widths = [7, 16, 16, 32, 13, 10, 16, 60, 20, 20, 15, 20, 18]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"
@@ -863,6 +882,7 @@ def create_user(first_name: str, last_name: str, email: str, birth_date: date,
                 "last_login": "",
                 "failed_attempts": 0,
                 "locked_until": "",
+                "must_change_password": 0,
             })
             _save_rows(rows)
         return True, None
@@ -890,6 +910,7 @@ def authenticate(email: str, password: str):
             email, failed_attempts=0, locked_until="",
             last_login=now.isoformat(timespec="seconds"),
         )
+        log_action(row["id"], "login", f"email={email}")
         return {
             "id": row["id"],
             "first_name": row["first_name"],
@@ -898,6 +919,7 @@ def authenticate(email: str, password: str):
             "birth_date": row["birth_date"],
             "gender": row.get("gender", "Male"),
             "marital_status": row.get("marital_status", "single"),
+            "must_change_password": int(row.get("must_change_password", 0)),
         }, "ok"
 
     attempts = int(row["failed_attempts"] or 0) + 1
@@ -907,6 +929,46 @@ def authenticate(email: str, password: str):
         attempts, status = 0, "locked"
     _update_account(email, failed_attempts=attempts, locked_until=locked_until)
     return None, status
+
+
+# =============================================================================
+# Audit Log + Password Reset
+# =============================================================================
+
+def log_action(account_id: int, action: str, details: str = ""):
+    """Log a sensitive action to audit_log.xlsx."""
+    try:
+        new_row = pd.DataFrame([{
+            "Timestamp": datetime.now().isoformat(timespec="seconds"),
+            "Account ID": account_id,
+            "Action": action,
+            "Details": details,
+        }])
+
+        if os.path.exists(AUDIT_LOG_FILE):
+            existing = pd.read_excel(AUDIT_LOG_FILE, engine="openpyxl")
+            combined = pd.concat([existing, new_row], ignore_index=True)
+        else:
+            combined = new_row
+
+        combined.to_excel(AUDIT_LOG_FILE, index=False, engine="openpyxl")
+    except Exception:
+        pass
+
+
+def reset_user_password(email: str) -> str:
+    """Reset a user's password to a temporary one. Returns the temp password."""
+    temp_password = secrets.token_urlsafe(12)
+    password_hash = hash_password(temp_password)
+    _update_account(
+        email,
+        password_hash=password_hash,
+        must_change_password=1,
+        failed_attempts=0,
+        locked_until="",
+    )
+    log_action(0, "password_reset", f"target_email={email}")
+    return temp_password
 
 
 def render_accounts_admin():
@@ -928,6 +990,50 @@ def render_accounts_admin():
             for r in rows
         ])
         st.dataframe(table, use_container_width=True, hide_index=True)
+
+        # ============================================================
+        # Password Reset Section (English)
+        # ============================================================
+        with st.container(border=True):
+            st.markdown("#### 🔑 Password Reset")
+
+            user_emails = [r["email"] for r in rows]
+            user_labels = [f'{r["first_name"]} {r["last_name"]} ({r["email"]})' for r in rows]
+
+            col_select, col_btn = st.columns([4, 1])
+
+            with col_select:
+                selected_label = st.selectbox(
+                    "Select patient",
+                    options=[""] + user_labels,
+                    index=0,
+                    key="reset_pw_select",
+                )
+
+            with col_btn:
+                st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                reset_clicked = st.button(
+                    "Reset",
+                    key="reset_pw_btn",
+                    use_container_width=True,
+                    type="primary",
+                )
+
+            if reset_clicked and selected_label:
+                idx = user_labels.index(selected_label)
+                selected_email = user_emails[idx]
+
+                try:
+                    temp = reset_user_password(selected_email)
+                    st.success("Password reset successful")
+                    st.info(
+                        f"**Temporary password**: `{temp}`\n\n"
+                        "Send this to the patient. They will be forced to change it at next login."
+                    )
+                    st.warning("Save this password NOW - it will not be shown again!")
+                except Exception as exc:
+                    st.error(f"Failed: {exc}")
+
         with open(ACCOUNTS_FILE, "rb") as f:
             st.download_button(
                 "Download accounts (Excel)",
@@ -1830,7 +1936,6 @@ def inject_css():
             gap: .85rem !important;
         }}
 
-        /* Hide +/- step buttons on the locked age field */
         .st-key-basic_age_locked [data-testid="stNumberInputStepDown"],
         .st-key-basic_age_locked [data-testid="stNumberInputStepUp"],
         .st-key-basic_age_locked button[aria-label*="Decrement"],
@@ -3091,20 +3196,10 @@ def age_from_birth_date(value):
 
 
 def generate_patient_id() -> str:
-    """Return a unique patient ID in the format YYMMDDNN.
-
-    Format:
-      YY  = last 2 digits of year      (26  = 2026)
-      MM  = month, 2 digits            (09  = September)
-      DD  = day,   2 digits            (19  = the 19th)
-      NN  = patient number that day    (01, 02, 03, ...)
-
-    Example: 26091901 = 2026-09-19, patient #01.
-    """
+    """Return a unique patient ID in the format YYMMDDNN."""
     today = date.today()
     prefix = f"{today.year % 100:02d}{today.month:02d}{today.day:02d}"
 
-    # Count how many patients have already been assigned today
     count_today = 0
     if os.path.exists(SAVE_FILE_XLSX):
         try:
@@ -3119,7 +3214,6 @@ def generate_patient_id() -> str:
 
     next_num = count_today + 1
     if next_num > 99:
-        # More than 99 patients in one day: extend gracefully
         return f"{prefix}{next_num:03d}"
     return f"{prefix}{next_num:02d}"
 
@@ -3288,6 +3382,48 @@ def render_admin_page():
     )
     st.success(tr("access"))
     render_accounts_admin()
+
+    # ============================================================
+    # Audit Log Section (English)
+    # ============================================================
+    with st.container(border=True):
+        st.markdown("#### 📋 Audit Log")
+
+        if os.path.exists(AUDIT_LOG_FILE):
+            try:
+                log_df = pd.read_excel(AUDIT_LOG_FILE, engine="openpyxl")
+                log_df = log_df.sort_values("Timestamp", ascending=False)
+
+                col_filter, col_export = st.columns([4, 1])
+
+                with col_filter:
+                    action_filter = st.selectbox(
+                        "Filter by action",
+                        ["All"] + sorted(log_df["Action"].unique().tolist()),
+                        key="audit_filter",
+                    )
+
+                with col_export:
+                    st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                    with open(AUDIT_LOG_FILE, "rb") as f:
+                        st.download_button(
+                            "⬇️ Export",
+                            data=f.read(),
+                            file_name=AUDIT_LOG_FILE,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_audit",
+                            use_container_width=True,
+                        )
+
+                if action_filter != "All":
+                    log_df = log_df[log_df["Action"] == action_filter]
+
+                st.dataframe(log_df, use_container_width=True, hide_index=True)
+                st.caption(f"Total records: {len(log_df)}")
+            except Exception as exc:
+                st.warning(f"Could not read log: {exc}")
+        else:
+            st.info("No audit records yet.")
 
     if os.path.exists(SAVE_FILE_XLSX):
         try:
@@ -3977,7 +4113,6 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
     patient_id_text = report_data.get("Patient ID", "")
     rows = []
     if patient_id_text:
-        # Fallback: use a simple English label if translations are missing.
         pid_label = t("patient_id_label")
         if pid_label == "patient_id_label":
             pid_label = "Patient ID"
@@ -4230,6 +4365,11 @@ def save_report_to_excel(report: dict):
 def render_main_app():
     lang = st.session_state["lang"]
 
+    _check_user = st.session_state.get("user") or {}
+    if _check_user.get("must_change_password", 0) == 1:
+        render_change_password_page()
+        st.stop()
+
     _user = st.session_state.get("user") or {}
     st.session_state.pop("basic_gender", None)
     if "in_first_name" not in st.session_state:
@@ -4255,7 +4395,6 @@ def render_main_app():
     )
 
     with st.container(key="patient_card"):
-        # ------------------------------------------------ Personal information
         st.markdown(f'<div class="section-title">{tr("personal")}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="section-subtitle">{tr("gender_hint")}</div>', unsafe_allow_html=True)
 
@@ -4267,7 +4406,6 @@ def render_main_app():
 
         c5, c6, c7 = st.columns(3)
         with c5:
-            # Age comes from the account's date of birth and cannot be changed.
             calculated_age = age_from_birth_date(_user.get("birth_date")) or 40
             age = st.number_input(
                 tr("age"),
@@ -4279,7 +4417,6 @@ def render_main_app():
                 key="basic_age_locked",
             )
         with c6:
-            # Gender comes from the account and cannot be changed here.
             gender = _user.get("gender", "") or "Male"
             if gender not in GENDER_OPTIONS:
                 gender = "Male"
@@ -4291,10 +4428,8 @@ def render_main_app():
                 key="basic_gender_locked",
             )
 
-            # The model only knows Male / Female -> "Other" falls back to "Male".
             sex_at_birth = gender if gender in ("Male", "Female") else "Male"
         with c7:
-            # Marital status comes from the account.
             marital_status_key = _user.get("marital_status", "single") or "single"
             if marital_status_key not in MARITAL_STATUS_ORDER:
                 marital_status_key = "single"
@@ -4318,7 +4453,6 @@ def render_main_app():
             key="in_diabetes_type",
         )
 
-        # ------------------------------------------------------ Core symptoms
         st.markdown("---")
         st.markdown(f'<div class="section-title">{tr("core")}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="section-subtitle">{tr("core_help")}</div>', unsafe_allow_html=True)
@@ -4348,7 +4482,6 @@ def render_main_app():
                     )
                     symptom_values[col] = "Yes" if selected == tr("yes") else "No"
 
-        # ---------------------------------------------------- Additional symptoms
         st.markdown("---")
         st.markdown(f'<div class="section-title">{tr("additional")}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="section-subtitle">{tr("optional")}</div>', unsafe_allow_html=True)
@@ -4366,7 +4499,6 @@ def render_main_app():
                 )
                 extra_values[key] = "Yes" if selected == tr("yes") else "No"
 
-        # Optional blood sugar / glucose reading
         glu_col1, glu_col2 = st.columns([2, 1])
         with glu_col1:
             glucose_value = st.number_input(
@@ -4382,14 +4514,12 @@ def render_main_app():
         with glu_col2:
             glucose_unit = st.selectbox(tr("glucose_unit"), GLUCOSE_UNITS, key="glucose_unit")
 
-        # ------------------------------- Questions that depend on the patient
         gender_values = {}
         if is_child:
             gender_keys = child_question_keys(sex_at_birth)
             gender_title = tr("child_section")
             key_kind = f"child_{sex_at_birth}"
         elif gender == "Other":
-            # General neutral questions for the "Other" gender option.
             gender_keys = list(OTHER_GENERAL_SYMPTOM_KEYS)
             gender_title = tr("other_section")
             key_kind = "other"
@@ -4497,6 +4627,12 @@ def render_main_app():
             st.session_state["last_probability"] = float(probability)
             st.session_state["report_saved"] = False
 
+            log_action(
+                _user.get("id", 0),
+                "predict",
+                f"patient_id={patient_id}, result={result}, prob={probability:.2f}",
+            )
+
             components.html(
                 """
                 <script>
@@ -4506,7 +4642,6 @@ def render_main_app():
                 height=0,
             )
 
-    # Results
     if st.session_state.get("last_report"):
         report = st.session_state["last_report"]
         report_en = st.session_state["last_report_en"]
@@ -4610,6 +4745,73 @@ def render_main_app():
             f'<div class="notice">⚠️ {tr("medical_notice_long")}</div>',
             unsafe_allow_html=True,
         )
+
+
+# =============================================================================
+# Password Change (Forced)
+# =============================================================================
+
+def render_change_password_page():
+    """Force the patient to set a new password after admin reset."""
+    user = st.session_state.get("user") or {}
+
+    with auth_card(tr("welcome_back"), tr("change_password_intro")):
+        _form_title(tr("change_password_title"))
+
+        with st.form("change_password_form", clear_on_submit=False):
+            new_pw = st.text_input(
+                tr("new_password"),
+                type="password",
+                key="cp_new",
+                max_chars=128,
+            )
+            confirm_pw = st.text_input(
+                tr("confirm_new_password"),
+                type="password",
+                key="cp_confirm",
+                max_chars=128,
+            )
+            submitted = st.form_submit_button(
+                tr("save_new_password"),
+                type="primary",
+                use_container_width=True,
+            )
+
+        if submitted:
+            errors = []
+            if not new_pw or not confirm_pw:
+                errors.append(tr("reg_fill_all"))
+            if new_pw and len(new_pw) < MIN_PASSWORD_LEN:
+                errors.append(tr("reg_pw_short"))
+            if new_pw and confirm_pw and new_pw != confirm_pw:
+                errors.append(tr("reg_pw_mismatch"))
+
+            if errors:
+                for msg in errors:
+                    st.error(msg)
+            else:
+                try:
+                    store = _accounts_store()
+                    with store["lock"]:
+                        rows = _load_rows()
+                        for r in rows:
+                            if r["email"] == user.get("email"):
+                                r["password_hash"] = hash_password(new_pw)
+                                r["must_change_password"] = 0
+                                break
+                        _save_rows(rows)
+
+                    st.session_state["user"]["must_change_password"] = 0
+                    log_action(
+                        user.get("id", 0),
+                        "password_changed",
+                        f"email={user.get('email')}",
+                    )
+                    st.success(tr("password_changed"))
+                    time.sleep(1.5)
+                    go_to("main")
+                except Exception as exc:
+                    st.error(f"{tr('auth_db_error')} {exc}")
 
 
 # =============================================================================
