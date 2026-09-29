@@ -1,5 +1,6 @@
 import base64
 import hashlib
+from html import escape as html_escape
 import hmac
 import os
 import re
@@ -584,6 +585,44 @@ def tr(key: str, lang: str = None):
     return value
 
 
+PROFILE_COPY = {
+    "en": {"edit":"Edit profile", "save":"Save changes", "cancel":"Cancel", "doctor":"Type confirmed by a doctor", "type_help":"Type 1 (the body makes little or no insulin) · Type 2 (the body does not use insulin well)", "type_locked":"The recorded type can only be set once from ‘Not sure’ after a doctor confirms it.", "question_title":"Questions for your recorded type", "question_note":"These answers are added to the report; they do not change the trained model's percentage.", "general_title":"General questions", "error":"Please enter a valid phone number and country."},
+    "ar": {"edit":"تعديل الملف الشخصي", "save":"حفظ التغييرات", "cancel":"إلغاء", "doctor":"أكد الطبيب نوع السكري", "type_help":"النوع الأول (الجسم ينتج القليل من الإنسولين أو لا ينتجه) · النوع الثاني (الجسم لا يستخدم الإنسولين جيدًا)", "type_locked":"يمكن تحديد النوع مرة واحدة فقط من «لا أعرف» بعد تأكيد الطبيب.", "question_title":"أسئلة حسب النوع المسجّل", "question_note":"تُضاف الإجابات إلى التقرير ولا تغيّر نسبة النموذج المدرّب.", "general_title":"أسئلة عامة", "error":"أدخل دولة ورقم هاتف صحيحين."},
+    "es": {"edit":"Editar perfil", "save":"Guardar cambios", "cancel":"Cancelar", "doctor":"Tipo confirmado por un médico", "type_help":"Tipo 1 (el cuerpo produce poca o ninguna insulina) · Tipo 2 (el cuerpo no usa bien la insulina)", "type_locked":"Solo se puede establecer una vez desde «No sé», tras confirmación médica.", "question_title":"Preguntas según el tipo registrado", "question_note":"Estas respuestas se añaden al informe; no cambian el porcentaje del modelo.", "general_title":"Preguntas generales", "error":"Introduce un país y teléfono válidos."},
+    "hi": {"edit":"प्रोफ़ाइल बदलें", "save":"बदलाव सहेजें", "cancel":"रद्द करें", "doctor":"डॉक्टर ने प्रकार बताया", "type_help":"टाइप 1 (शरीर बहुत कम या कोई इंसुलिन नहीं बनाता) · टाइप 2 (शरीर इंसुलिन का सही उपयोग नहीं करता)", "type_locked":"डॉक्टर की पुष्टि के बाद केवल ‘पता नहीं’ से एक बार बदल सकते हैं।", "question_title":"दर्ज प्रकार के सवाल", "question_note":"ये जवाब रिपोर्ट में जुड़ते हैं; मॉडल का प्रतिशत नहीं बदलते।", "general_title":"सामान्य सवाल", "error":"सही देश और फ़ोन नंबर दें।"},
+    "zh": {"edit":"编辑资料", "save":"保存更改", "cancel":"取消", "doctor":"医生已确认类型", "type_help":"1型（身体产生很少或不产生胰岛素）· 2型（身体不能有效利用胰岛素）", "type_locked":"医生确认后，只能从“不确定”设置一次。", "question_title":"针对已登记类型的问题", "question_note":"答案会加入报告，不改变模型的预测百分比。", "general_title":"一般问题", "error":"请输入有效的国家和电话号码。"},
+}
+
+TYPE_QUESTIONS = {
+    "type1": ["t1_insulin", "t1_low_glucose", "t1_ketones"],
+    "type2": ["t2_family", "t2_activity", "t2_high_glucose"],
+}
+TYPE_QUESTION_TEXT = {
+    "en": {"t1_insulin":"Has a doctor prescribed insulin for you?", "t1_low_glucose":"Have you had episodes of low blood sugar?", "t1_ketones":"Have you ever been told your ketones were high?", "t2_family":"Does a parent or sibling have type 2 diabetes?", "t2_activity":"Are you physically active on most days?", "t2_high_glucose":"Have you previously been told your blood sugar was high?"},
+    "ar": {"t1_insulin":"هل وصف لك الطبيب الإنسولين؟", "t1_low_glucose":"هل مررت بنوبات انخفاض سكر الدم؟", "t1_ketones":"هل أخبرك الطبيب بأن الكيتونات مرتفعة؟", "t2_family":"هل لدى أحد والديك أو إخوتك سكري النوع الثاني؟", "t2_activity":"هل تمارس نشاطًا بدنيًا في معظم الأيام؟", "t2_high_glucose":"هل أُخبرت سابقًا بأن سكر الدم مرتفع؟"},
+    "es": {"t1_insulin":"¿Te recetó insulina un médico?", "t1_low_glucose":"¿Has tenido episodios de azúcar baja?", "t1_ketones":"¿Te han dicho que tus cetonas estaban altas?", "t2_family":"¿Tu padre, madre o hermano tiene diabetes tipo 2?", "t2_activity":"¿Haces actividad física la mayoría de los días?", "t2_high_glucose":"¿Te han dicho antes que tu azúcar estaba alta?"},
+    "hi": {"t1_insulin":"क्या डॉक्टर ने आपको इंसुलिन दी है?", "t1_low_glucose":"क्या आपका ब्लड शुगर कभी कम हुआ है?", "t1_ketones":"क्या आपको कभी बताया गया कि कीटोन अधिक हैं?", "t2_family":"क्या माता-पिता या भाई-बहन को टाइप 2 है?", "t2_activity":"क्या आप अधिकतर दिन व्यायाम करते हैं?", "t2_high_glucose":"क्या पहले आपका ब्लड शुगर अधिक बताया गया था?"},
+    "zh": {"t1_insulin":"医生给您开过胰岛素吗？", "t1_low_glucose":"您发生过低血糖吗？", "t1_ketones":"有人告诉您酮体偏高吗？", "t2_family":"父母或兄弟姐妹有2型糖尿病吗？", "t2_activity":"您大多数日子进行体育活动吗？", "t2_high_glucose":"以前有人告诉您血糖偏高吗？"},
+}
+for _lang, _questions in TYPE_QUESTION_TEXT.items():
+    EXTRA_TEXT.setdefault(_lang, {}).update(_questions)
+
+def profile_copy(key, lang=None):
+    return PROFILE_COPY.get(lang or st.session_state.get("lang"), PROFILE_COPY["en"])[key]
+
+TYPE_EXPLANATIONS = {
+    "en": {"type1": "the body makes little or no insulin", "type2": "the body does not use insulin well"},
+    "ar": {"type1": "الجسم ينتج القليل من الإنسولين أو لا ينتجه", "type2": "الجسم لا يستخدم الإنسولين جيدًا"},
+    "es": {"type1": "el cuerpo produce poca o ninguna insulina", "type2": "el cuerpo no usa bien la insulina"},
+    "hi": {"type1": "शरीर बहुत कम या कोई इंसुलिन नहीं बनाता", "type2": "शरीर इंसुलिन का सही उपयोग नहीं करता"},
+    "zh": {"type1": "身体产生很少或不产生胰岛素", "type2": "身体不能有效利用胰岛素"},
+}
+
+def diabetes_type_label(key, lang=None):
+    lang = lang or st.session_state.get("lang", "en")
+    explanation = TYPE_EXPLANATIONS.get(lang, TYPE_EXPLANATIONS["en"]).get(key)
+    return f"{tr(key, lang)} ({explanation})" if explanation else tr(key, lang)
+
 SPACING_OFF_LANGS = {"ar", "hi", "zh"}
 
 
@@ -638,7 +677,61 @@ extra_symptom_keys = {
     "sweet_craving": "sweet_craving",
 }
 
-DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2", "prediabetes"]
+DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2"]
+
+# African Union member states (including Western Sahara), with E.164 calling codes.
+# Western Sahara uses +212; there is no separate assigned international code.
+COUNTRY_DIAL_CODES = [
+    ("🇩🇿", "Algeria", "+213"), ("🇦🇴", "Angola", "+244"),
+    ("🇧🇯", "Benin", "+229"), ("🇧🇼", "Botswana", "+267"),
+    ("🇧🇫", "Burkina Faso", "+226"), ("🇧🇮", "Burundi", "+257"),
+    ("🇨🇻", "Cabo Verde", "+238"), ("🇨🇲", "Cameroon", "+237"),
+    ("🇨🇫", "Central African Republic", "+236"), ("🇹🇩", "Chad", "+235"),
+    ("🇰🇲", "Comoros", "+269"), ("🇨🇬", "Congo (Republic)", "+242"),
+    ("🇨🇩", "Congo (DRC)", "+243"), ("🇨🇮", "Côte d’Ivoire", "+225"),
+    ("🇩🇯", "Djibouti", "+253"), ("🇪🇬", "Egypt", "+20"),
+    ("🇬🇶", "Equatorial Guinea", "+240"), ("🇪🇷", "Eritrea", "+291"),
+    ("🇸🇿", "Eswatini", "+268"), ("🇪🇹", "Ethiopia", "+251"),
+    ("🇬🇦", "Gabon", "+241"), ("🇬🇲", "Gambia", "+220"),
+    ("🇬🇭", "Ghana", "+233"), ("🇬🇳", "Guinea", "+224"),
+    ("🇬🇼", "Guinea-Bissau", "+245"), ("🇰🇪", "Kenya", "+254"),
+    ("🇱🇸", "Lesotho", "+266"), ("🇱🇷", "Liberia", "+231"),
+    ("🇱🇾", "Libya", "+218"), ("🇲🇬", "Madagascar", "+261"),
+    ("🇲🇼", "Malawi", "+265"), ("🇲🇱", "Mali", "+223"),
+    ("🇲🇷", "Mauritania", "+222"), ("🇲🇺", "Mauritius", "+230"),
+    ("🇲🇦", "Morocco", "+212"), ("🇲🇿", "Mozambique", "+258"),
+    ("🇳🇦", "Namibia", "+264"), ("🇳🇪", "Niger", "+227"),
+    ("🇳🇬", "Nigeria", "+234"), ("🇷🇼", "Rwanda", "+250"),
+    ("🇸🇹", "São Tomé and Príncipe", "+239"), ("🇸🇳", "Senegal", "+221"),
+    ("🇸🇨", "Seychelles", "+248"), ("🇸🇱", "Sierra Leone", "+232"),
+    ("🇸🇴", "Somalia", "+252"), ("🇿🇦", "South Africa", "+27"),
+    ("🇸🇸", "South Sudan", "+211"), ("🇸🇩", "Sudan", "+249"),
+    ("🇹🇿", "Tanzania", "+255"), ("🇹🇬", "Togo", "+228"),
+    ("🇹🇳", "Tunisia", "+216"), ("🇺🇬", "Uganda", "+256"),
+    ("🇪🇭", "Western Sahara", "+212"), ("🇿🇲", "Zambia", "+260"),
+    ("🇿🇼", "Zimbabwe", "+263"),
+    # Additional countries offered in the earlier version.
+    ("🇦🇺", "Australia", "+61"), ("🇧🇩", "Bangladesh", "+880"),
+    ("🇨🇦", "Canada", "+1"), ("🇨🇳", "China", "+86"),
+    ("🇫🇷", "France", "+33"), ("🇩🇪", "Germany", "+49"),
+    ("🇮🇳", "India", "+91"), ("🇵🇰", "Pakistan", "+92"),
+    ("🇶🇦", "Qatar", "+974"), ("🇸🇦", "Saudi Arabia", "+966"),
+    ("🇪🇸", "Spain", "+34"), ("🇦🇪", "United Arab Emirates", "+971"),
+    ("🇬🇧", "United Kingdom", "+44"), ("🇺🇸", "United States", "+1"),
+]
+
+REGISTRATION_TEXT = {
+    "en": ("Country", "Country calling code", "Phone number", "Enter a valid phone number (6–15 digits)."),
+    "ar": ("الدولة", "مفتاح البلد", "رقم الهاتف", "أدخل رقم هاتف صحيحًا (من 6 إلى 15 رقمًا)."),
+    "es": ("País", "Prefijo telefónico", "Número de teléfono", "Introduce un número válido (6 a 15 dígitos)."),
+    "hi": ("देश", "देश कोड", "फ़ोन नंबर", "सही फ़ोन नंबर दर्ज करें (6–15 अंक)।"),
+    "zh": ("国家", "国家区号", "电话号码", "请输入有效电话号码（6–15 位）。"),
+}
+
+
+def registration_text(index):
+    return REGISTRATION_TEXT.get(st.session_state.get("lang"), REGISTRATION_TEXT["en"])[index]
+
 
 GLUCOSE_UNITS = ["mg/dL", "mmol/L"]
 GLUCOSE_RANGE = {"mg/dL": (20.0, 1000.0), "mmol/L": (1.1, 55.0)}
@@ -659,13 +752,13 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 ACCOUNT_FIELDS = [
     "id", "first_name", "last_name", "email", "birth_date",
-    "gender", "marital_status",
+    "gender", "marital_status", "diabetes_type", "country", "dial_code", "phone",
     "password_hash", "created_at", "last_login", "failed_attempts", "locked_until",
     "must_change_password",
 ]
 ACCOUNT_HEADERS = [
     "ID", "First name", "Last name", "Email", "Birth date",
-    "Gender", "Marital status",
+    "Gender", "Marital status", "Diabetes type", "Country", "Dial code", "Phone",
     "Password hash", "Created at", "Last login", "Failed attempts", "Locked until",
     "Must change password",
 ]
@@ -747,6 +840,10 @@ def _rows_from_sheet(ws) -> list:
             "birth_date": get(raw, "birth_date"),
             "gender": get(raw, "gender"),
             "marital_status": get(raw, "marital_status"),
+            "diabetes_type": get(raw, "diabetes_type"),
+            "country": get(raw, "country"),
+            "dial_code": get(raw, "dial_code"),
+            "phone": get(raw, "phone"),
             "password_hash": pw_hash,
             "must_change_password": 1 if get(raw, "must_change_password") == "1" else 0,
             "created_at": get(raw, "created_at"),
@@ -785,7 +882,7 @@ def _save_rows(rows: list):
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = head_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
-    widths = [7, 16, 16, 32, 13, 10, 16, 60, 20, 20, 15, 20, 18]
+    widths = [7, 16, 16, 32, 13, 10, 16, 20, 22, 13, 19, 60, 20, 20, 15, 20, 18]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"
@@ -860,7 +957,8 @@ def _update_account(email: str, **changes):
 
 
 def create_user(first_name: str, last_name: str, email: str, birth_date: date,
-                password: str, gender: str, marital_status: str = "single"):
+                password: str, gender: str, marital_status: str = "single",
+                diabetes_type: str = "", country: str = "", dial_code: str = "", phone: str = ""):
     email = normalize_email(email)
     try:
         password_hash = hash_password(password)
@@ -877,6 +975,10 @@ def create_user(first_name: str, last_name: str, email: str, birth_date: date,
                 "birth_date": birth_date.isoformat(),
                 "gender": gender,
                 "marital_status": marital_status,
+                "diabetes_type": diabetes_type,
+                "country": country,
+                "dial_code": dial_code,
+                "phone": phone,
                 "password_hash": password_hash,
                 "created_at": datetime.now().isoformat(timespec="seconds"),
                 "last_login": "",
@@ -888,6 +990,30 @@ def create_user(first_name: str, last_name: str, email: str, birth_date: date,
         return True, None
     except Exception:
         return False, "auth_db_error"
+
+
+def update_user_profile(email, marital_status, country, dial_code, phone, confirmed_type=None):
+    """Persist allowed profile changes; type can only move from unknown to known."""
+    if marital_status not in MARITAL_STATUS_ORDER or not country.strip():
+        return None
+    digits = phone.removeprefix("+")
+    if not digits.isascii() or not digits.isdigit() or not 6 <= len(digits) <= 15:
+        return None
+    store = _accounts_store()
+    with store["lock"]:
+        rows = _load_rows()
+        row = next((r for r in rows if r["email"] == normalize_email(email)), None)
+        if row is None:
+            return None
+        current_type = row.get("diabetes_type") or "not_sure"
+        if confirmed_type is not None:
+            if current_type != "not_sure" or confirmed_type not in ("type1", "type2"):
+                return None
+            row["diabetes_type"] = confirmed_type
+        row.update(marital_status=marital_status, country=country.strip(),
+                   dial_code=dial_code, phone=phone)
+        _save_rows(rows)
+        return dict(row)
 
 
 def authenticate(email: str, password: str):
@@ -919,6 +1045,10 @@ def authenticate(email: str, password: str):
             "birth_date": row["birth_date"],
             "gender": row.get("gender", "Male"),
             "marital_status": row.get("marital_status", "single"),
+            "diabetes_type": row.get("diabetes_type", ""),
+            "country": row.get("country", ""),
+            "dial_code": row.get("dial_code", ""),
+            "phone": row.get("phone", ""),
             "must_change_password": int(row.get("must_change_password", 0)),
         }, "ok"
 
@@ -985,6 +1115,9 @@ def render_accounts_admin():
                 "Email": r["email"], "Birth date": r["birth_date"],
                 "Gender": r.get("gender", ""),
                 "Marital status": r.get("marital_status", ""),
+                "Diabetes type": r.get("diabetes_type", ""),
+                "Country": r.get("country", ""),
+                "Phone": r.get("phone", ""),
                 "Created at": r["created_at"], "Last login": r["last_login"],
             }
             for r in rows
@@ -3276,6 +3409,28 @@ def render_register_page():
                     placeholder=tr("dob_choose"), key="reg_year",
                 )
 
+            diabetes_type_reg = st.selectbox(
+                f"{tr('diabetes_type')} *", DIABETES_TYPE_KEYS,
+                format_func=diabetes_type_label, key="reg_diabetes_type",
+            )
+
+            country_choice = st.selectbox(
+                f"{registration_text(0)} *", COUNTRY_DIAL_CODES,
+                index=COUNTRY_DIAL_CODES.index(("🇺🇬", "Uganda", "+256")),
+                format_func=lambda item: f"{item[0]} {item[1]}",
+                key="reg_country",
+            )
+            dial_choice = st.selectbox(
+                f"{registration_text(1)} *", COUNTRY_DIAL_CODES,
+                index=COUNTRY_DIAL_CODES.index(("🇺🇬", "Uganda", "+256")),
+                format_func=lambda item: f"{item[0]} {item[1]} ({item[2]})",
+                key="reg_dial_code",
+            )
+            phone_reg = st.text_input(
+                f"{registration_text(2)} *", key="reg_phone", max_chars=24,
+                placeholder="771234567",
+            )
+
             password = st.text_input(
                 f"{tr('auth_password')} *", type="password", key="reg_pw", max_chars=128
             )
@@ -3304,11 +3459,20 @@ def render_register_page():
             clean_email = normalize_email(email)
             birth = _build_birth_date(day, month, year)
             dob_chosen = day is not None and month is not None and year is not None
+            clean_country = country_choice[1]
+            local_phone = re.sub(r"[\s()\-]", "", phone_reg.strip())
+            if local_phone.startswith("0"):
+                local_phone = local_phone.lstrip("0")
+            full_phone = dial_choice[2] + local_phone
 
             errors = []
             if not (clean_first and clean_last and clean_email and dob_chosen
-                    and password and password2 and gender_reg and marital_status_reg):
+                    and password and password2 and gender_reg and marital_status_reg
+                    and clean_country and phone_reg.strip() and diabetes_type_reg):
                 errors.append(tr("reg_fill_all"))
+            if phone_reg.strip() and (not local_phone.isascii() or not local_phone.isdigit()
+                                      or not 6 <= len(full_phone.lstrip("+")) <= 15):
+                errors.append(registration_text(3))
             if clean_email and not EMAIL_REGEX.match(clean_email):
                 errors.append(tr("reg_email_invalid"))
             if dob_chosen and birth is None:
@@ -3326,7 +3490,8 @@ def render_register_page():
             else:
                 ok, error_key = create_user(
                     clean_first, clean_last, clean_email, birth, password,
-                    gender_reg, marital_status_reg
+                    gender_reg, marital_status_reg, diabetes_type_reg,
+                    clean_country, dial_choice[2], full_phone
                 )
                 if ok:
                     user, _status = authenticate(clean_email, password)
@@ -3588,7 +3753,7 @@ def build_report(lang, timestamp, first, last, phone, address, type_key,
         "First name": first,
         "Last name": last,
         "Phone": phone,
-        "Address": address,
+        "Country": address,
         "Reported diabetes type": tr(type_key, lang),
         "Age": age,
         "Gender": gender_text,
@@ -3602,6 +3767,10 @@ def build_report(lang, timestamp, first, last, phone, address, type_key,
         "Urination frequency": tr(freq_key, lang) if freq_key else "",
         "Glucose level": f"{glucose[0]:g} {glucose[1]}" if glucose else "",
         "Gender-specific symptoms": ", ".join(gender_yes),
+        "Type-specific answers": "; ".join(
+            f"{tr(key, lang)}: {tr(value.lower(), lang)}"
+            for key, value in extra_values.items() if key in TYPE_QUESTION_TEXT["en"]
+        ),
         "Symptom narrative": build_symptom_narrative(
             symptom_values, extra_values, lang, gender_values=gender_values, freq_key=freq_key
         ),
@@ -4121,7 +4290,7 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         [(t("pdf_name"), name), (t("pdf_age_gender"), age_gender)],
         [(t("phone"), report_data.get("Phone", "")),
          (t("marital_status"), report_data.get("Marital status", ""))],
-        [(t("pdf_address"), report_data.get("Address", "")),
+        [(registration_text(0), report_data.get("Country", "")),
          (t("pdf_type"), report_data.get("Reported diabetes type", ""))],
     ])
     glucose_text = report_data.get("Glucose level", "")
@@ -4164,6 +4333,9 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
     pdf.set_y(py + total_h)
 
     narrative = report_data.get("Symptom narrative", "")
+    type_answers = report_data.get("Type-specific answers", "")
+    if type_answers:
+        narrative = f"{narrative}\n{type_answers}"
     have_pills = bool(core_texts or extra_texts or gender_texts)
 
     if not have_pills:
@@ -4371,90 +4543,149 @@ def render_main_app():
         st.stop()
 
     _user = st.session_state.get("user") or {}
-    st.session_state.pop("basic_gender", None)
-    if "in_first_name" not in st.session_state:
-        st.session_state["in_first_name"] = _user.get("first_name", "")
-    if "in_last_name" not in st.session_state:
-        st.session_state["in_last_name"] = _user.get("last_name", "")
-    st.session_state.pop("basic_age", None)
+    first_name = (_user.get("first_name") or "").strip()
+    last_name = (_user.get("last_name") or "").strip()
+    age = age_from_birth_date(_user.get("birth_date")) or 40
+    gender = _user.get("gender") or "Male"
+    if gender not in GENDER_OPTIONS:
+        gender = "Male"
+    sex_at_birth = gender if gender in ("Male", "Female") else "Male"
+    marital_status_key = _user.get("marital_status") or "single"
+    if marital_status_key not in MARITAL_STATUS_ORDER:
+        marital_status_key = "single"
+    is_child = marital_status_key == "child"
+    ever_married = marital_status_key in ("married", "divorced")
+    phone = _user.get("phone") or ""
+    country = _user.get("country") or ""
+    type_key = _user.get("diabetes_type") or "not_sure"
+    if type_key not in DIABETES_TYPE_KEYS:
+        type_key = "not_sure"
 
+    # WhatsApp-inspired default avatar: category colors describe the chosen
+    # account type, not a clinical result or model prediction.
+    avatar_colors = {
+        "not_sure": ("#244c59", "#b9e5e6"),
+        "type1": ("#5b3d65", "#ead5f0"),
+        "type2": ("#31577b", "#d5eaff"),
+    }
+    avatar_bg, avatar_ink = avatar_colors[type_key]
+    account_id = _user.get("id")
+    account_id_display = f"PP-{int(account_id):06d}" if account_id else "—"
+    profile_items = [
+        (tr("first_name"), first_name), (tr("last_name"), last_name),
+        (tr("age"), str(age)), (tr("gender"), gender_label(gender, lang)),
+        (tr("marital_status"), marital_status_label(marital_status_key, sex_at_birth, lang)),
+        (tr("phone"), phone), (registration_text(0), country),
+        (tr("diabetes_type"), diabetes_type_label(type_key, lang)),
+    ]
+    profile_html = "".join(
+        f'<div class="profile-detail"><span>{html_escape(str(label))}</span>'
+        f'<strong>{html_escape(str(value or "—"))}</strong></div>'
+        for label, value in profile_items
+    )
     st.markdown(
         f"""
-        <div class="hero">
-            <div class="pill">{tr('readiness')} • {tr('model_status')}</div>
-            <h1>{tr('assessment')}</h1>
-            <p>{tr('assessment_intro')}</p>
-        </div>
+        <style>
+        .patient-profile {{
+            display:grid; grid-template-columns:112px minmax(0,1fr); gap:24px;
+            align-items:center; padding:28px; margin:12px 0 22px;
+            border:1px solid var(--border, #334155); border-radius:26px;
+            background:linear-gradient(125deg, #111c30, #19304b 70%, #244661);
+            color:#f8fafc; box-shadow:0 18px 42px rgba(2,6,23,.16);
+        }}
+        .profile-avatar {{
+            width:108px; height:108px; display:grid; place-items:center;
+            border-radius:50%; background:{avatar_bg}; color:{avatar_ink};
+            box-shadow:0 0 0 6px rgba(255,255,255,.1);
+        }}
+        .profile-avatar svg {{ width:65px; height:65px; }}
+        .profile-content {{ min-width:0; }}
+        .profile-heading {{ font-size:1.55rem; font-weight:800; line-height:1.2; margin:0 0 6px; }}
+        .profile-name-row {{display:flex; flex-wrap:wrap; align-items:center; gap:6px 16px; margin-bottom:8px;}}
+        .profile-name-row .profile-heading {{margin:0;}}
+        .profile-id {{font-size:.83rem; color:#dbeafe; padding:5px 10px; border-radius:999px; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.15);}}
+        .profile-subtitle {{ color:#cbd5e1; margin:0 0 16px; font-size:.92rem; }}
+        .profile-grid {{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px 22px; }}
+        .profile-detail {{ min-width:0; display:flex; flex-direction:column; gap:2px; }}
+        .profile-detail span {{ color:#a9c0df; font-size:.75rem; }}
+        .profile-detail strong {{ color:#fff; font-size:.94rem; overflow-wrap:anywhere; }}
+        @media(max-width:640px) {{
+            .patient-profile {{grid-template-columns:1fr; justify-items:center; padding:22px 18px; text-align:center;}}
+            .profile-avatar {{width:92px;height:92px;}}
+            .profile-grid {{text-align:start; gap:12px;}}
+            .profile-name-row {{justify-content:center;}}
+            .profile-heading {{font-size:1.3rem;}}
+        }}
+        </style>
+        <section class="patient-profile" dir="{'rtl' if lang == 'ar' else 'ltr'}">
+            <div class="profile-avatar" aria-hidden="true">
+                <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="40" cy="25" r="13" fill="currentColor"/>
+                    <path d="M12 67c0-15 12.5-24 28-24s28 9 28 24v2H12v-2z" fill="currentColor"/>
+                </svg>
+            </div>
+            <div class="profile-content">
+                <div class="profile-name-row"><h1 class="profile-heading">{html_escape((first_name + ' ' + last_name).strip() or tr('personal'))}</h1><span class="profile-id">{html_escape(tr('patient_id_label'))}: {html_escape(account_id_display)}</span></div>
+                <p class="profile-subtitle">{html_escape(tr('assessment_intro'))}</p>
+                <div class="profile-grid">{profile_html}</div>
+            </div>
+        </section>
         """,
         unsafe_allow_html=True,
     )
+    if st.button(profile_copy("edit"), key="profile_edit_toggle"):
+        st.session_state["profile_edit_open"] = not st.session_state.get("profile_edit_open", False)
+    if st.session_state.get("profile_edit_open"):
+        with st.form("profile_edit_form"):
+            edited_marital = st.selectbox(
+                tr("marital_status"), MARITAL_STATUS_ORDER,
+                index=MARITAL_STATUS_ORDER.index(marital_status_key),
+                format_func=lambda k: marital_status_label(k, sex_at_birth, lang),
+            )
+            country_options = [item[1] for item in COUNTRY_DIAL_CODES]
+            edited_country = st.selectbox(
+                registration_text(0), country_options,
+                index=country_options.index(country) if country in country_options else 0,
+            )
+            dial_index = next((i for i, item in enumerate(COUNTRY_DIAL_CODES)
+                               if item[2] == (_user.get("dial_code") or "")), 0)
+            edited_dial = st.selectbox(
+                registration_text(1), COUNTRY_DIAL_CODES, index=dial_index,
+                format_func=lambda item: f"{item[0]} {item[1]} ({item[2]})",
+            )
+            edited_phone = st.text_input(registration_text(2), value=phone, max_chars=24)
+            confirmed = None
+            if type_key == "not_sure":
+                st.caption(profile_copy("type_help"))
+                confirmed = st.selectbox(profile_copy("doctor"),
+                                         ["not_sure", "type1", "type2"],
+                                         format_func=diabetes_type_label)
+            else:
+                st.caption(profile_copy("type_locked"))
+            save_edit = st.form_submit_button(profile_copy("save"), type="primary")
+        if save_edit:
+            digits = re.sub(r"[\s()\-]", "", edited_phone.strip())
+            if digits.startswith("+"):
+                full_phone = digits
+            else:
+                full_phone = edited_dial[2] + digits.lstrip("0")
+            change_type = confirmed if confirmed in ("type1", "type2") else None
+            saved = update_user_profile(_user.get("email", ""), edited_marital,
+                                        edited_country, edited_dial[2], full_phone,
+                                        confirmed_type=change_type)
+            if saved:
+                st.session_state["user"].update({key: saved[key] for key in
+                    ("marital_status", "country", "dial_code", "phone", "diabetes_type")})
+                st.session_state["profile_edit_open"] = False
+                st.rerun()
+            else:
+                st.error(profile_copy("error"))
 
-    st.markdown(
-        f'<div class="status-card">{tr("privacy")}</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(f'<div class="status-card">{tr("privacy")}</div>', unsafe_allow_html=True)
 
     with st.container(key="patient_card"):
-        st.markdown(f'<div class="section-title">{tr("personal")}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="section-subtitle">{tr("gender_hint")}</div>', unsafe_allow_html=True)
-
-        c1, c2 = st.columns(2)
-        with c1:
-            first_name = st.text_input(f"{tr('first_name')} *", key="in_first_name")
-        with c2:
-            last_name = st.text_input(f"{tr('last_name')} *", key="in_last_name")
-
-        c5, c6, c7 = st.columns(3)
-        with c5:
-            calculated_age = age_from_birth_date(_user.get("birth_date")) or 40
-            age = st.number_input(
-                tr("age"),
-                min_value=1,
-                max_value=120,
-                step=1,
-                value=calculated_age,
-                disabled=True,
-                key="basic_age_locked",
-            )
-        with c6:
-            gender = _user.get("gender", "") or "Male"
-            if gender not in GENDER_OPTIONS:
-                gender = "Male"
-
-            st.text_input(
-                tr("gender"),
-                value=gender_label(gender),
-                disabled=True,
-                key="basic_gender_locked",
-            )
-
-            sex_at_birth = gender if gender in ("Male", "Female") else "Male"
-        with c7:
-            marital_status_key = _user.get("marital_status", "single") or "single"
-            if marital_status_key not in MARITAL_STATUS_ORDER:
-                marital_status_key = "single"
-
-            st.text_input(
-                tr("marital_status"),
-                value=marital_status_label(marital_status_key, sex_at_birth, lang),
-                disabled=True,
-                key="basic_marital_locked",
-            )
-
-        is_child = marital_status_key == "child"
-        ever_married = marital_status_key in ("married", "divorced")
-
-        phone = st.text_input(f"{tr('phone')} *", key="in_phone")
-        address = st.text_input(f"{tr('address')} *", key="in_address")
-
-        diabetes_type = st.selectbox(
-            tr("diabetes_type"),
-            [tr(k) for k in DIABETES_TYPE_KEYS],
-            key="in_diabetes_type",
-        )
-
         st.markdown("---")
-        st.markdown(f'<div class="section-title">{tr("core")}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-title">{profile_copy("general_title") if type_key == "not_sure" else tr("core")}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="section-subtitle">{tr("core_help")}</div>', unsafe_allow_html=True)
 
         symptom_values = {}
@@ -4498,6 +4729,17 @@ def render_main_app():
                     key=f"extra_{key}",
                 )
                 extra_values[key] = "Yes" if selected == tr("yes") else "No"
+
+        if type_key in TYPE_QUESTIONS:
+            st.markdown("---")
+            st.markdown(f'<div class="section-title">{profile_copy("question_title")}</div>', unsafe_allow_html=True)
+            st.caption(profile_copy("question_note"))
+            tq1, tq2 = st.columns(2)
+            for i, question_key in enumerate(TYPE_QUESTIONS[type_key]):
+                with (tq1 if i % 2 == 0 else tq2):
+                    answer = st.selectbox(tr(question_key), [tr("no"), tr("yes")],
+                                          key=f"type_{type_key}_{question_key}")
+                    extra_values[question_key] = "Yes" if answer == tr("yes") else "No"
 
         glu_col1, glu_col2 = st.columns([2, 1])
         with glu_col1:
@@ -4555,14 +4797,12 @@ def render_main_app():
         clean_first_name = first_name.strip()
         clean_last_name = last_name.strip()
         clean_phone = phone.strip()
-        clean_address = address.strip()
 
         errors = []
         for value, label in [
             (clean_first_name, tr("first_name")),
             (clean_last_name, tr("last_name")),
             (clean_phone, tr("phone")),
-            (clean_address, tr("address")),
         ]:
             if not value:
                 errors.append(f"{label} {tr('required')}")
@@ -4583,7 +4823,6 @@ def render_main_app():
             raw_input = {"Age": age, "Gender": sex_at_birth, **symptom_values}
             result, probability = predict_new_patient(raw_input)
 
-            type_key = DIABETES_TYPE_KEYS[[tr(k) for k in DIABETES_TYPE_KEYS].index(diabetes_type)]
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
             if not st.session_state.get("current_patient_id"):
@@ -4595,7 +4834,7 @@ def render_main_app():
                 first=clean_first_name,
                 last=clean_last_name,
                 phone=clean_phone,
-                address=clean_address,
+                address=country,
                 type_key=type_key,
                 age=age,
                 gender=sex_at_birth,
@@ -4674,6 +4913,8 @@ def render_main_app():
 
         with st.expander(f"{tr('symptom_summary')}", expanded=True):
             st.write(report.get("Symptom narrative", ""))
+            if report.get("Type-specific answers"):
+                st.write(report["Type-specific answers"])
 
         with st.expander(f"{tr('recommendation')}", expanded=True):
             if result == 1:
