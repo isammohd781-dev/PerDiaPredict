@@ -751,13 +751,13 @@ SUPPORT_WHATSAPP_URL = "https://wa.me/256771715275"
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 ACCOUNT_FIELDS = [
-    "id", "first_name", "last_name", "email", "birth_date",
+    "id", "patient_id", "first_name", "last_name", "email", "birth_date",
     "gender", "marital_status", "diabetes_type", "country", "dial_code", "phone",
     "password_hash", "created_at", "last_login", "failed_attempts", "locked_until",
     "must_change_password",
 ]
 ACCOUNT_HEADERS = [
-    "ID", "First name", "Last name", "Email", "Birth date",
+    "ID", "Patient ID", "First name", "Last name", "Email", "Birth date",
     "Gender", "Marital status", "Diabetes type", "Country", "Dial code", "Phone",
     "Password hash", "Created at", "Last login", "Failed attempts", "Locked until",
     "Must change password",
@@ -834,6 +834,7 @@ def _rows_from_sheet(ws) -> list:
             continue
         out.append({
             "id": as_int(get(raw, "id")),
+            "patient_id": get(raw, "patient_id"),
             "first_name": get(raw, "first_name"),
             "last_name": get(raw, "last_name"),
             "email": email,
@@ -882,7 +883,7 @@ def _save_rows(rows: list):
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = head_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
-    widths = [7, 16, 16, 32, 13, 10, 16, 20, 22, 13, 19, 60, 20, 20, 15, 20, 18]
+    widths = [7, 13, 16, 16, 32, 13, 10, 16, 20, 22, 13, 19, 60, 20, 20, 15, 20, 18]
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"
@@ -967,8 +968,10 @@ def create_user(first_name: str, last_name: str, email: str, birth_date: date,
             rows = _load_rows()
             if any(r["email"] == email for r in rows):
                 return False, "auth_email_taken"
+            new_patient_id = generate_patient_id()
             rows.append({
                 "id": max([r["id"] for r in rows] + [0]) + 1,
+                "patient_id": new_patient_id,
                 "first_name": first_name.strip(),
                 "last_name": last_name.strip(),
                 "email": email,
@@ -1039,6 +1042,7 @@ def authenticate(email: str, password: str):
         log_action(row["id"], "login", f"email={email}")
         return {
             "id": row["id"],
+            "patient_id": row.get("patient_id", ""),
             "first_name": row["first_name"],
             "last_name": row["last_name"],
             "email": row["email"],
@@ -1111,7 +1115,9 @@ def render_accounts_admin():
     if rows:
         table = pd.DataFrame([
             {
-                "ID": r["id"], "First name": r["first_name"], "Last name": r["last_name"],
+                "ID": r["id"],
+                "Patient ID": r.get("patient_id", ""),
+                "First name": r["first_name"], "Last name": r["last_name"],
                 "Email": r["email"], "Birth date": r["birth_date"],
                 "Gender": r.get("gender", ""),
                 "Marital status": r.get("marital_status", ""),
@@ -2581,7 +2587,7 @@ def render_language_gate():
 # =============================================================================
 
 def render_header():
-    left, admin_col, theme_col, menu_col = st.columns([5, 3, 1, 1], vertical_alignment="center")
+    left, admin_col, theme_col = st.columns([6, 3, 1], vertical_alignment="center")
 
     with left:
         if os.path.exists(LOGO_PATH):
@@ -2606,16 +2612,6 @@ def render_header():
             """,
             unsafe_allow_html=True,
         )
-
-    with menu_col:
-        if st.button(
-            "",
-            icon=":material/refresh:",
-            key="menu_restart",
-            help=tr("menu_restart"),
-            use_container_width=True,
-        ):
-            restart_app(st.session_state["lang"])
 
     with admin_col:
         if st.session_state["page"] == "admin":
@@ -3329,11 +3325,29 @@ def age_from_birth_date(value):
 
 
 def generate_patient_id() -> str:
-    """Return a unique patient ID in the format YYMMDDNN."""
+    """Return a unique patient ID in the format YYMMDDNN.
+
+    Counts today's patients in BOTH accounts.xlsx and saved_reports.xlsx,
+    so the same number is never reused in either file.
+    """
     today = date.today()
     prefix = f"{today.year % 100:02d}{today.month:02d}{today.day:02d}"
 
-    count_today = 0
+    used = set()
+
+    # Count in accounts.xlsx
+    if os.path.exists(ACCOUNTS_FILE):
+        try:
+            existing = pd.read_excel(ACCOUNTS_FILE, engine="openpyxl")
+            if "Patient ID" in existing.columns:
+                for value in existing["Patient ID"].dropna().astype(str):
+                    value = value.strip()
+                    if value.startswith(prefix) and len(value) >= 10:
+                        used.add(value)
+        except Exception:
+            pass
+
+    # Count in saved_reports.xlsx
     if os.path.exists(SAVE_FILE_XLSX):
         try:
             existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
@@ -3341,10 +3355,11 @@ def generate_patient_id() -> str:
                 for value in existing["Patient ID"].dropna().astype(str):
                     value = value.strip()
                     if value.startswith(prefix) and len(value) >= 10:
-                        count_today += 1
+                        used.add(value)
         except Exception:
             pass
 
+    count_today = len(used)
     next_num = count_today + 1
     if next_num > 99:
         return f"{prefix}{next_num:03d}"
@@ -4569,8 +4584,12 @@ def render_main_app():
         "type2": ("#31577b", "#d5eaff"),
     }
     avatar_bg, avatar_ink = avatar_colors[type_key]
-    account_id = _user.get("id")
-    account_id_display = f"PP-{int(account_id):06d}" if account_id else "—"
+    stored_patient_id = _user.get("patient_id", "")
+    if not stored_patient_id:
+        # Fallback for old accounts created before this feature
+        account_id = _user.get("id")
+        stored_patient_id = f"PP-{int(account_id):06d}" if account_id else "—"
+    account_id_display = stored_patient_id
     profile_items = [
         (tr("first_name"), first_name), (tr("last_name"), last_name),
         (tr("age"), str(age)), (tr("gender"), gender_label(gender, lang)),
@@ -4583,11 +4602,10 @@ def render_main_app():
         f'<strong>{html_escape(str(value or "—"))}</strong></div>'
         for label, value in profile_items
     )
-    st.markdown(
-        f"""
+    st.markdown(f"""
         <style>
-        .patient-profile {{
-            display:grid; grid-template-columns:112px minmax(0,1fr); gap:24px;
+        .st-key-profile_summary {{
+            display:block;
             align-items:center; padding:28px; margin:12px 0 22px;
             border:1px solid var(--border, #334155); border-radius:26px;
             background:linear-gradient(125deg, #111c30, #19304b 70%, #244661);
@@ -4609,32 +4627,74 @@ def render_main_app():
         .profile-detail {{ min-width:0; display:flex; flex-direction:column; gap:2px; }}
         .profile-detail span {{ color:#a9c0df; font-size:.75rem; }}
         .profile-detail strong {{ color:#fff; font-size:.94rem; overflow-wrap:anywhere; }}
+        /* Keep the dark profile card readable despite global light-theme rules. */
+        .st-key-profile_summary h1.profile-heading {{
+            color:#f8fafc !important;
+            -webkit-text-fill-color:#f8fafc !important;
+        }}
+        .st-key-profile_summary .profile-id {{
+            color:#f8fafc !important;
+            background:#334b65 !important;
+            border-color:#60738c !important;
+            font-weight:600;
+            unicode-bidi:isolate;
+        }}
+        .st-key-profile_summary .profile-subtitle {{ color:#cbd5e1 !important; }}
+        .st-key-profile_summary .profile-detail span {{ color:#b8cee8 !important; }}
+        .st-key-profile_summary .profile-detail strong {{ color:#fff !important; }}
+        .st-key-profile_summary .profile-edit-text {{ color:#e2e8f0 !important; }}
+        .profile-avatar-actions {{display:none;}}
+        .profile-edit-text {{
+            display:none;
+        }}
         @media(max-width:640px) {{
-            .patient-profile {{grid-template-columns:1fr; justify-items:center; padding:22px 18px; text-align:center;}}
+            .st-key-profile_summary {{padding:22px 18px;}}
             .profile-avatar {{width:92px;height:92px;}}
             .profile-grid {{text-align:start; gap:12px;}}
             .profile-name-row {{justify-content:center;}}
             .profile-heading {{font-size:1.3rem;}}
+            .profile-avatar-actions {{
+                display:block;
+                margin-top:12px;
+            }}
+            .profile-edit-text {{
+                display:inline-block;
+                padding:8px 14px;
+                border-radius:10px;
+                background:rgba(255,255,255,.10);
+                border:1px solid rgba(255,255,255,.20);
+                color:#e2e8f0;
+                font-size:.85rem;
+                font-weight:600;
+                cursor:pointer;
+            }}
         }}
+        .st-key-profile_summary .profile-avatar {{margin:0 auto 18px;}}
+        .st-key-profile_summary [data-testid="stButton"] button {{font-size:.82rem; padding:.4rem .6rem;}}
         </style>
-        <section class="patient-profile" dir="{'rtl' if lang == 'ar' else 'ltr'}">
+    """, unsafe_allow_html=True)
+    with st.container(key="profile_summary"):
+        avatar_col, info_col = st.columns([1, 5], vertical_alignment="center")
+        with avatar_col:
+            st.markdown("""
             <div class="profile-avatar" aria-hidden="true">
                 <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="40" cy="25" r="13" fill="currentColor"/>
                     <path d="M12 67c0-15 12.5-24 28-24s28 9 28 24v2H12v-2z" fill="currentColor"/>
                 </svg>
             </div>
+            """, unsafe_allow_html=True)
+            if st.button(profile_copy("edit"), key="profile_edit_toggle", use_container_width=True):
+                st.session_state["profile_edit_open"] = not st.session_state.get("profile_edit_open", False)
+        with info_col:
+            st.markdown(f"""
             <div class="profile-content">
                 <div class="profile-name-row"><h1 class="profile-heading">{html_escape((first_name + ' ' + last_name).strip() or tr('personal'))}</h1><span class="profile-id">{html_escape(tr('patient_id_label'))}: {html_escape(account_id_display)}</span></div>
                 <p class="profile-subtitle">{html_escape(tr('assessment_intro'))}</p>
                 <div class="profile-grid">{profile_html}</div>
             </div>
-        </section>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button(profile_copy("edit"), key="profile_edit_toggle"):
-        st.session_state["profile_edit_open"] = not st.session_state.get("profile_edit_open", False)
+
+            """, unsafe_allow_html=True)
     if st.session_state.get("profile_edit_open"):
         with st.form("profile_edit_form"):
             edited_marital = st.selectbox(
@@ -4825,9 +4885,8 @@ def render_main_app():
 
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-            if not st.session_state.get("current_patient_id"):
-                st.session_state["current_patient_id"] = generate_patient_id()
-            patient_id = st.session_state["current_patient_id"]
+            # Use the patient's stored ID for consistency with the profile.
+            patient_id = _user.get("patient_id") or generate_patient_id()
 
             report_args = dict(
                 timestamp=timestamp,
