@@ -1,31 +1,57 @@
-# PerdiaPredict — التحديث الكامل
+# PerdiaPredict — Complete Update
 
-1. احتفظ بنسخة احتياطية من مجلد البرنامج الحالي.
-2. فك ضغط الحزمة وانسخ ملفاتها إلى مجلد البرنامج، مع إبقاء ملفات المرضى الحالية `accounts.xlsx` و`audit_log.xlsx` و`saved_reports.xlsx` و`patient_history.db` وأي صور/خطوط لديك. الحزمة لا تتضمن بيانات حسابات أو مرضى.
-3. انسخ ملفات النموذج الثلاثة و`model_metadata.json` و`screening_model.py` مع التطبيق؛ لا تخلط النموذج القديم بالجديد.
-4. ثبّت المتطلبات ثم شغّل:
+## Installation and Update
+
+1. Back up your current application folder.
+2. Extract the update package and copy its files into the application folder. Keep your existing patient and account files: `accounts.xlsx`, `audit_log.xlsx`, `saved_reports.xlsx`, and `patient_history.db`. Also keep any existing images and fonts. The package does not include account or patient data.
+3. Copy all three model files, `model_metadata.json`, and `screening_model.py` together with the application. Do not mix files from the old and new model versions.
+4. Install the required dependencies and start the application:
 
 ```bash
 python -m pip install -r requirements.txt
 streamlit run diabetes_app.py
 ```
 
-للتأكد من الاستدلال:
+## Inference Verification
+
+Run the following command to verify model inference:
 
 ```bash
 python test_inference.py
 ```
 
-لإعادة إنتاج التدريب والتقييم (يستبدل ملفات النموذج والتقييم داخل هذا المجلد):
+## Training and Evaluation
+
+To reproduce model training and evaluation, run:
 
 ```bash
 python train_model.py
 ```
 
-`MODEL_EVALUATION.md` يتضمن النتائج والحدود والمصادر، و`heldout_predictions.csv` النتائج التفصيلية، و`model_metadata.json` المقاييس والإصدار وبصمات الملفات. المتطلبات تثبت scikit-learn 1.8.0، وهي نسخة إنتاج النموذج. `age_scaler.pkl` للتوافق فقط؛ معالجة العمر الفعلية داخل النموذج، فلا تطبقها ثانية.
+**Note:** This command overwrites the model and evaluation files in the current folder.
 
-هذا نظام فحص تعليمي. تشخيص السكري يحتاج فحوصات طبية؛ نسبة النموذج ليست تشخيصًا. تغيير النسبة بين إصدارات مختلفة لا يثبت تحسن المريض أو تدهوره.
+The following files document the evaluation:
 
-## تحديث تصميم التقرير
+- `MODEL_EVALUATION.md`: Results, limitations, and sources.
+- `heldout_predictions.csv`: Detailed predictions for the held-out evaluation data.
+- `model_metadata.json`: Evaluation metrics, model version, and file fingerprints.
 
-الهيدر بخلفية بيضاء مع الشعار وتاريخ ووقت الفحص منفصلين، ويتكرر في الصفحات الطويلة. بيانات المريض في جدول، ثم نتيجة الفحص والعرض السريري ومعلومات النموذج. انسخ `diabetes_app.py` واحتفظ بشعارك الحالي `logo.png`. أصلحنا أيضًا ترميز UTF-8 في `test_inference.py` لتشغيله على Windows. لا حاجة لإعادة تدريب النموذج لهذا التحديث.
+The requirements pin scikit-learn to version **1.8.0**, which was used to produce the model.
+
+`age_scaler.pkl` is retained for compatibility only. Age preprocessing is handled inside the model, so do not apply the scaler a second time.
+
+## Educational Use
+
+This application is an educational screening system. A diabetes diagnosis requires medical testing; the model's predicted percentage is not a diagnosis.
+
+A change in the predicted percentage between different model versions does not establish that a patient's condition has improved or worsened.
+
+## Report Design Update
+
+The report header has a white background and displays the application logo, with the screening date and time shown separately. The header repeats on longer reports.
+
+Patient details appear in a table, followed by the screening result, clinical presentation, and model information.
+
+To apply this design update, copy the updated `diabetes_app.py` file and keep your existing `logo.png`.
+
+UTF-8 encoding in `test_inference.py` has also been corrected for Windows compatibility. This report design update does not require model retraining.
