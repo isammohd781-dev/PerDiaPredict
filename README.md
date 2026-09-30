@@ -1,19 +1,31 @@
----
-title: PerdiaPredict
-emoji: 🩺
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 8501
-pinned: false
----
+# PerdiaPredict — التحديث الكامل
 
-# PerdiaPredict
+1. احتفظ بنسخة احتياطية من مجلد البرنامج الحالي.
+2. فك ضغط الحزمة وانسخ ملفاتها إلى مجلد البرنامج، مع إبقاء ملفات المرضى الحالية `accounts.xlsx` و`audit_log.xlsx` و`saved_reports.xlsx` و`patient_history.db` وأي صور/خطوط لديك. الحزمة لا تتضمن بيانات حسابات أو مرضى.
+3. انسخ ملفات النموذج الثلاثة و`model_metadata.json` و`screening_model.py` مع التطبيق؛ لا تخلط النموذج القديم بالجديد.
+4. ثبّت المتطلبات ثم شغّل:
 
-Early Stage Diabetes Prediction Web App using Streamlit and Machine Learning.
-
-Educational screening only. This tool is not a medical diagnosis.
-
-## Run locally
-pip install -r requirements.txt
+```bash
+python -m pip install -r requirements.txt
 streamlit run diabetes_app.py
+```
+
+للتأكد من الاستدلال:
+
+```bash
+python test_inference.py
+```
+
+لإعادة إنتاج التدريب والتقييم (يستبدل ملفات النموذج والتقييم داخل هذا المجلد):
+
+```bash
+python train_model.py
+```
+
+`MODEL_EVALUATION.md` يتضمن النتائج والحدود والمصادر، و`heldout_predictions.csv` النتائج التفصيلية، و`model_metadata.json` المقاييس والإصدار وبصمات الملفات. المتطلبات تثبت scikit-learn 1.8.0، وهي نسخة إنتاج النموذج. `age_scaler.pkl` للتوافق فقط؛ معالجة العمر الفعلية داخل النموذج، فلا تطبقها ثانية.
+
+هذا نظام فحص تعليمي. تشخيص السكري يحتاج فحوصات طبية؛ نسبة النموذج ليست تشخيصًا. تغيير النسبة بين إصدارات مختلفة لا يثبت تحسن المريض أو تدهوره.
+
+## تحديث تصميم التقرير
+
+الهيدر بخلفية بيضاء مع الشعار وتاريخ ووقت الفحص منفصلين، ويتكرر في الصفحات الطويلة. بيانات المريض في جدول، ثم نتيجة الفحص والعرض السريري ومعلومات النموذج. انسخ `diabetes_app.py` واحتفظ بشعارك الحالي `logo.png`. أصلحنا أيضًا ترميز UTF-8 في `test_inference.py` لتشغيله على Windows. لا حاجة لإعادة تدريب النموذج لهذا التحديث.

@@ -2,6 +2,7 @@ import base64
 import hashlib
 from html import escape as html_escape
 import hmac
+import json
 import os
 import re
 import secrets
@@ -20,6 +21,7 @@ import streamlit.components.v1 as components
 from fpdf import FPDF
 
 from translations import LANGUAGES, T
+from screening_model import load_screening_artifacts, predict_screening
 
 # =============================================================================
 # PERDIAPREDICT - MULTILINGUAL VERSION
@@ -2316,18 +2318,16 @@ def inject_css():
 
 @st.cache_resource
 def load_artifacts():
-    missing = [p for p in [MODEL_PATH, SCALER_PATH, COLUMNS_PATH] if not os.path.exists(p)]
-    if missing:
-        st.error(tr("err_missing").format(files=", ".join(missing)))
+    try:
+        loaded_model, columns, metadata = load_screening_artifacts(MODEL_PATH, COLUMNS_PATH)
+        return loaded_model, None, columns, metadata
+    except Exception as exc:
+        st.error(str(exc))
         st.stop()
 
-    model = joblib.load(MODEL_PATH)
-    scaler = joblib.load(SCALER_PATH)
-    feature_columns = joblib.load(COLUMNS_PATH)
-    return model, scaler, feature_columns
 
+model, scaler, feature_columns, model_metadata = load_artifacts()
 
-model, scaler, feature_columns = load_artifacts()
 binary_columns = [c for c in feature_columns if c not in ("Age", "Gender")]
 
 
@@ -3656,51 +3656,11 @@ def render_admin_page():
 # =============================================================================
 
 def _model_probability(raw_input: dict) -> float:
-    df_new = pd.DataFrame([raw_input])
-    df_new["Gender"] = df_new["Gender"].map({"Male": 1, "Female": 0})
-
-    for col in binary_columns:
-        df_new[col] = df_new[col].map({"Yes": 1, "No": 0})
-
-    df_new["Age"] = scaler.transform(df_new[["Age"]])
-    df_new = df_new[feature_columns]
-    return float(model.predict_proba(df_new)[0][1])
+    return predict_screening(model, feature_columns, model_metadata, raw_input)[1]
 
 
 def predict_new_patient(raw_input: dict):
-    yes_symptoms = [c for c in binary_columns if raw_input.get(c) == "Yes"]
-
-    if not yes_symptoms:
-        return 0, 0.0
-
-    actual_probability = _model_probability(raw_input)
-
-    baseline_input = dict(raw_input)
-    for col in binary_columns:
-        baseline_input[col] = "No"
-
-    baseline_probability = _model_probability(baseline_input)
-
-    contributions = []
-    for col in yes_symptoms:
-        one_symptom_input = dict(baseline_input)
-        one_symptom_input[col] = "Yes"
-        symptom_probability = _model_probability(one_symptom_input)
-        contribution = max(0.0, symptom_probability - baseline_probability)
-        contributions.append(contribution)
-
-    total_positive_evidence = sum(contributions)
-
-    if total_positive_evidence <= 0:
-        symptom_factor = len(yes_symptoms) / max(len(binary_columns), 1)
-    else:
-        symptom_factor = min(total_positive_evidence / 0.50, 1.0)
-
-    probability = actual_probability * symptom_factor
-    probability = max(0.0, min(1.0, probability))
-    prediction = 1 if probability >= 0.50 else 0
-
-    return prediction, probability
+    return predict_screening(model, feature_columns, model_metadata, raw_input)
 
 
 # =============================================================================
@@ -3778,6 +3738,10 @@ def build_report(lang, timestamp, first, last, phone, address, type_key,
         ),
         "Result": tr("positive_high" if result == 1 else "negative_low", lang),
         "Probability": f"{probability * 100:.1f}%",
+        "Model version": model_metadata["model_version"],
+        "Probability method": model_metadata["selected_model"] + " / tested pipeline predict_proba",
+        "Decision threshold": str(model_metadata["threshold"]),
+        "Clinical interpretation": "Educational screening estimate; not a diagnosis or an externally validated individual risk.",
         "Notable extra symptoms": tr("yes" if any_extra else "no", lang),
         "Urination frequency": tr(freq_key, lang) if freq_key else "",
         "Glucose level": f"{glucose[0]:g} {glucose[1]}" if glucose else "",
@@ -4190,301 +4154,125 @@ def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
         put(title, text_x, y + 0.2, width - 4.5, size=12.5, style="B", color=C_NAVY, lh=6)
         pdf.set_y(y + sec_after)
 
-    steps = 105
-    for i in range(steps):
-        ratio = i / (steps - 1)
-        col = (
-            int(C_NAVY[0] + (14 - C_NAVY[0]) * ratio),
-            int(C_NAVY[1] + (84 - C_NAVY[1]) * ratio),
-            int(C_NAVY[2] + (150 - C_NAVY[2]) * ratio),
-        )
-        pdf.set_fill_color(*col)
-        pdf.rect(page_w * i / steps, 0, page_w / steps + 0.4, band_h, style="F")
-    pdf.set_fill_color(*_rgb(C_SKY))
-    pdf.rect(0, band_h, page_w, 1.3, style="F")
+    # Print-friendly clinical layout. Repeated header on continuation pages.
+    ar = lang == "ar"
+    def copy(en, arabic):
+        return arabic if ar else en
 
-    logo_size = band_h - 10
-    logo_y = (band_h - logo_size) / 2
-    logo_x = right - logo_size if rtl else left
-    has_logo = os.path.exists(LOGO_PATH)
-    if has_logo:
-        try:
-            pdf.image(LOGO_PATH, x=logo_x, y=logo_y, w=logo_size, h=logo_size)
-        except Exception:
-            has_logo = False
-
-    gap = 6
-    stamp_w = 52
-    text_w = width - (logo_size + gap if has_logo else 0) - stamp_w - 6
-    if rtl:
-        text_x = right - (logo_size + gap if has_logo else 0) - text_w
-    else:
-        text_x = left + (logo_size + gap if has_logo else 0)
-
-    put("PERDIAPREDICT", text_x, logo_y + 2, text_w, size=21, style="B",
-        color=(255, 255, 255), lh=9)
-    put(t("pdf_title"), text_x, logo_y + 12.5, text_w, size=10, color=(191, 219, 254), lh=5)
-
-    stamp_x = left if rtl else right - stamp_w
-    stamp_align = "L" if rtl else "R"
-    put(t("pdf_generated"), stamp_x, band_h / 2 - 7, stamp_w, size=8,
-        color=(147, 197, 253), lh=4, text_align=stamp_align)
-    put(report_data.get("Timestamp", ""), stamp_x, band_h / 2 - 2.6, stamp_w, size=11,
-        style="B", color=(255, 255, 255), lh=6, text_align=stamp_align)
-
-    pdf.set_y(band_h + after_band)
-
-    accent = C_RED if is_high else C_GREEN
-    tint = C_RED_BG if is_high else C_GREEN_BG
-    tint_border = C_RED_BD if is_high else C_GREEN_BD
-
-    try:
-        probability = float(re.search(r"[\d.]+", str(report_data.get("Probability", "0"))).group())
-    except Exception:
-        probability = 0.0
-    probability = max(0.0, min(100.0, probability))
-
-    ensure(card_h)
-    cy = pdf.get_y()
-    box(left, cy, width, card_h, tint, tint_border, radius=4)
-
-    pad = 6
-    icon = 16
-    icon_x = right - pad - icon if rtl else left + pad
-    box(icon_x, cy + pad, icon, icon, accent, radius=4)
-    pdf.set_draw_color(255, 255, 255)
-    pdf.set_line_width(1.3)
-    if is_high:
-        pdf.line(icon_x + icon / 2, cy + pad + 3.5, icon_x + icon / 2, cy + pad + 9.5)
+    timestamp = str(report_data.get("Timestamp") or "")
+    date_part, _, time_part = timestamp.partition(" ")
+    def report_header():
         pdf.set_fill_color(255, 255, 255)
-        pdf.ellipse(icon_x + icon / 2 - 0.9, cy + pad + 11.2, 1.8, 1.8, style="F")
-    else:
-        pdf.line(icon_x + 4, cy + pad + 8.5, icon_x + 7, cy + pad + 11.5)
-        pdf.line(icon_x + 7, cy + pad + 11.5, icon_x + 12.2, cy + pad + 4.8)
+        pdf.rect(0, 0, page_w, 47, style="F")
+        logo_size = 21
+        logo_x = right - logo_size if rtl else left
+        text_x = right - logo_size - 5 - 104 if rtl else left + logo_size + 5
+        has_logo = os.path.exists(LOGO_PATH)
+        if has_logo:
+            try:
+                pdf.image(LOGO_PATH, x=logo_x, y=12, w=logo_size, h=logo_size)
+            except Exception:
+                has_logo = False
+        if not has_logo:
+            # A clear brand monogram when a logo file has not been provided.
+            box(logo_x, 12, logo_size, logo_size, C_NAVY, radius=2)
+            put("PP", logo_x, 18, logo_size, size=17, style="B", color=(255,255,255), text_align="C")
+        put("PERDIAPREDICT", text_x, 12, 104, size=18, style="B", color=C_NAVY, lh=8)
+        put(t("pdf_title"), text_x, 22, 104, size=9, color=C_MUTED, lh=4.5)
+        put(copy("Educational screening report", "تقرير فحص تعليمي"), text_x, 33, 104, size=8, color=C_MUTED, lh=4)
+        stamp_x = left if rtl else right - 47
+        stamp_align = "L" if rtl else "R"
+        put(copy("Assessment date", "تاريخ الفحص"), stamp_x, 12, 47, size=7.5, color=C_MUTED, lh=4, text_align=stamp_align)
+        put(date_part or "-", stamp_x, 16.5, 47, size=10, style="B", lh=5, text_align=stamp_align)
+        put(copy("Assessment time", "وقت الفحص"), stamp_x, 25, 47, size=7.5, color=C_MUTED, lh=4, text_align=stamp_align)
+        put(time_part or "-", stamp_x, 29.5, 47, size=10, style="B", lh=5, text_align=stamp_align)
+        pdf.set_draw_color(18, 115, 130)
+        pdf.set_line_width(.8)
+        pdf.line(left, 43, right, 43)
+        pdf.set_y(49)
 
-    prob_w = 46
-    info_w = width - 2 * pad - icon - 5 - prob_w - 4
-    if rtl:
-        info_x = right - pad - icon - 5 - info_w
-        prob_x = left + pad
-    else:
-        info_x = left + pad + icon + 5
-        prob_x = right - pad - prob_w
+    pdf.header = report_header
+    pdf.set_margins(14, 49, 14)
+    report_header()
 
-    put(t("pdf_risk"), info_x, cy + pad - 0.5, info_w, size=8.5, color=C_MUTED, lh=4.2)
-    put(report_data.get("Result", ""), info_x, cy + pad + 4.6, info_w, size=13.5,
-        style="B", color=accent, lh=6.4)
+    def ensure(height):
+        if pdf.get_y() + height > pdf.h - 26:
+            pdf.add_page()
+            pdf.set_y(49)
 
-    prob_align = "L" if rtl else "R"
-    put(f"{probability:.1f}%", prob_x, cy + pad - 1.5, prob_w, size=27, style="B",
-        color=accent, lh=12, text_align=prob_align)
-    put(t("probability"), prob_x, cy + pad + 11.2, prob_w, size=8.5, color=C_MUTED,
-        lh=4.2, text_align=prob_align)
+    def section(title, need=0):
+        ensure(12 + need)
+        y = pdf.get_y() + 3
+        box(left, y, width, 8, (237,243,246), radius=.5)
+        put(title, left + 3, y + 1.2, width - 6, size=10, style="B", color=C_NAVY, lh=5.5)
+        pdf.set_y(y + 11)
 
-    bar_x = left + pad
-    bar_w = width - 2 * pad
-    bar_y = cy + card_h - pad - 3.4
-    box(bar_x, bar_y, bar_w, 3.4, (226, 232, 240), radius=1.7)
-    fill_w = max(3.4, bar_w * probability / 100.0) if probability > 0 else 0
-    if fill_w:
-        fill_x = bar_x + bar_w - fill_w if rtl else bar_x
-        box(fill_x, bar_y, fill_w, 3.4, accent, radius=1.7)
+    def table(rows):
+        for row in rows:
+            cell_w = width / len(row)
+            heights = [5 + measure(value or "-", cell_w - 6, 10, "B", 5) + 5 for label,value in row]
+            h = max(heights)
+            ensure(h)
+            y = pdf.get_y()
+            pdf.set_draw_color(*_rgb(C_BORDER))
+            pdf.set_line_width(.2)
+            pdf.rect(left, y, width, h)
+            for index,(label,value) in enumerate(row):
+                slot = len(row)-1-index if rtl else index
+                x = left + slot * cell_w
+                if slot:
+                    pdf.line(x, y, x, y+h)
+                put(label, x+3, y+2, cell_w-6, size=7.8, color=C_MUTED, lh=4)
+                put(value or "-", x+3, y+7, cell_w-6, size=10, style="B", lh=5)
+            pdf.set_y(y+h)
 
-    pdf.set_y(cy + card_h + 2)
+    def paragraph(text, size=9.5, color=C_TEXT):
+        text = str(text or "-")
+        font("", size, color)
+        pdf.set_x(left+2)
+        pdf.multi_cell(width-4, 5.2, safe(text), align=align, wrapmode=wrap, new_x="LEFT", new_y="NEXT")
+        pdf.ln(2)
 
     name = f"{report_data.get('First name', '')} {report_data.get('Last name', '')}".strip()
-    age_gender = f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"
-    patient_id_text = report_data.get("Patient ID", "")
-    rows = []
-    if patient_id_text:
-        pid_label = t("patient_id_label")
-        if pid_label == "patient_id_label":
-            pid_label = "Patient ID"
-        rows.append([(pid_label, patient_id_text)])
-    rows.extend([
-        [(t("pdf_name"), name), (t("pdf_age_gender"), age_gender)],
-        [(t("phone"), report_data.get("Phone", "")),
-         (t("marital_status"), report_data.get("Marital status", ""))],
-        [(registration_text(0), report_data.get("Country", "")),
-         (t("pdf_type"), report_data.get("Reported diabetes type", ""))],
-    ])
-    glucose_text = report_data.get("Glucose level", "")
-    if glucose_text:
-        rows.append([(t("glucose_level"), glucose_text)])
+    section(t("pdf_patient"), 45)
+    rows = [
+        [(copy("Patient ID", "رقم المريض"), str(report_data.get("Patient ID", ""))), (t("pdf_name"),name)],
+        [(t("pdf_age_gender"), f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"), (t("marital_status"),str(report_data.get("Marital status", "")))],
+        [(t("phone"),str(report_data.get("Phone", ""))), (t("pdf_address"),str(report_data.get("Country", "")))],
+    ]
+    table(rows)
 
-    inner_w = width - 2 * pad
-    col_gap = 8
-    col_w = (inner_w - col_gap) / 2
-    label_h = 4.4
-    value_lh = 5.6
+    section(t("pdf_assessment"), 35)
+    accent = C_RED if is_high else (18,115,90)
+    y=pdf.get_y()
+    box(left, y, width, 18, (247,250,251), C_BORDER, radius=.5)
+    result_x = left + width/2 if rtl else left+3
+    score_x = left+3 if rtl else left+width/2
+    put(t("pdf_risk"), result_x, y+2, width/2-6, size=7.8, color=C_MUTED, lh=4)
+    put(report_data.get("Result", "-"),result_x,y+7,width/2-6,size=11,style="B",color=accent,lh=6)
+    put(t("probability"),score_x,y+2,width/2-6,size=7.8,color=C_MUTED,lh=4)
+    put(report_data.get("Probability", "-"),score_x,y+7,width/2-6,size=14,style="B",color=accent,lh=6)
+    pdf.set_y(y+18)
+    table([[(t("pdf_type"),str(report_data.get("Reported diabetes type", ""))), (t("glucose_level"),str(report_data.get("Glucose level") or copy("Not recorded", "غير مسجل")))]])
 
-    layouts = []
-    total_h = pad - 1
-    for row in rows:
-        cell_w = col_w if len(row) == 2 else inner_w
-        heights = [label_h + measure(v, cell_w, 10.5, "B", value_lh) for _, v in row]
-        row_height = max(heights) + row_extra
-        layouts.append((row, cell_w, row_height))
-        total_h += row_height
-    total_h += pad - row_extra
+    section(t("pdf_clinical"), 16)
+    # Keep the narrative even when symptom pills were formerly displayed.
+    paragraph(report_data.get("Symptom narrative", ""))
+    selected = core_texts + extra_texts + gender_texts
+    if selected:
+        paragraph(copy("Reported symptoms: ", "الأعراض المبلغ عنها: ") + "; ".join(selected))
+    if report_data.get("Type-specific answers"):
+        paragraph(report_data["Type-specific answers"], size=8.8)
 
-    section(t("pdf_patient"), need=total_h)
-    py = pdf.get_y()
-    box(left, py, width, total_h, (255, 255, 255), C_BORDER, radius=4)
+    section(copy("Model information", "معلومات النموذج"), 16)
+    table([[ (copy("Model version", "إصدار النموذج"),str(report_data.get("Model version") or copy("Not recorded", "غير مسجل"))),
+             (copy("Decision threshold", "عتبة القرار"),str(report_data.get("Decision threshold") or copy("Not recorded", "غير مسجل"))) ]])
+    if report_data.get("Probability method"):
+        pdf.ln(2)
+        paragraph(copy("Probability method: ", "طريقة حساب النسبة: ") + str(report_data["Probability method"]), size=8)
 
-    cursor = py + pad - 1
-    for index, (row, cell_w, row_height) in enumerate(layouts):
-        for i, (label, value) in enumerate(row):
-            slot = (1 - i) if rtl else i
-            cx = left + pad + slot * (col_w + col_gap) if len(row) == 2 else left + pad
-            put(label, cx, cursor, cell_w, size=8.3, color=C_MUTED, lh=label_h)
-            put(value, cx, cursor + label_h, cell_w, size=10.5, style="B",
-                color=C_TEXT, lh=value_lh)
-        cursor += row_height
-        if index < len(layouts) - 1:
-            pdf.set_draw_color(*_rgb(C_BORDER))
-            pdf.set_line_width(0.2)
-            pdf.line(left + pad, cursor - row_extra / 2, right - pad, cursor - row_extra / 2)
-    pdf.set_y(py + total_h)
-
-    narrative = report_data.get("Symptom narrative", "")
-    type_answers = report_data.get("Type-specific answers", "")
-    if type_answers:
-        narrative = f"{narrative}\n{type_answers}"
-    have_pills = bool(core_texts or extra_texts or gender_texts)
-
-    if not have_pills:
-        text_w = width - 2 * pad - 2
-        text_h = measure(narrative, text_w, 10, "", 5.9)
-        ch = text_h + 2 * 5
-        section(t("pdf_clinical"), need=ch)
-        cy2 = pdf.get_y()
-        box(left, cy2, width, ch, C_SOFT, C_BORDER, radius=4)
-        stripe_x = right - 1.6 - 0.2 if rtl else left + 0.2
-        pdf.set_fill_color(*_rgb(C_BLUE))
-        pdf.rect(stripe_x, cy2 + 4, 1.6, ch - 8, style="F")
-        text_x2 = left + pad - 1 if rtl else left + pad + 2
-        put(narrative, text_x2, cy2 + 5, text_w, size=10, color=C_TEXT, lh=5.9)
-        pdf.set_y(cy2 + ch)
-    else:
-        gap_x = 3.2
-        icon_d = 4.0 if level >= 2 else 4.4
-        icon_zone = 8.4 if level >= 2 else 9.0
-        all_texts = core_texts + extra_texts + gender_texts
-
-        def pill_text_w(cols):
-            return (inner_w - (cols - 1) * gap_x) / cols - icon_zone - 2
-
-        def wraps(cols):
-            tw_ = pill_text_w(cols)
-            return any(
-                measure(part, tw_, pill_size, "B", pill_lh) > pill_lh + 0.1
-                for x in all_texts for part in x.split("\n")
-            )
-
-        cols = 3 if wraps(4) else 4
-        pw = (inner_w - (cols - 1) * gap_x) / cols
-        tw = pill_text_w(cols)
-
-        def plan(items):
-            cells = [
-                (x, max(pill_min, measure(x, tw, pill_size, "B", pill_lh) + pill_pad_v))
-                for x in items
-            ]
-            grid = [cells[i:i + cols] for i in range(0, len(cells), cols)]
-            heights = [max(h for _, h in r) for r in grid]
-            return grid, heights
-
-        def block_height(heights):
-            return sum(heights) + pill_gap_y * (len(heights) - 1) if heights else 0
-
-        blocks = [
-            {"head": None, "texts": core_texts, "colors": (C_PILL_BG, C_PILL_BD, C_BLUE),
-             "empty": ("text", t("no_core"))},
-            {"head": t("pdf_extra"), "texts": extra_texts, "colors": (C_XPILL_BG, C_XPILL_BD, C_ORANGE),
-             "empty": ("value", t("no"))},
-        ]
-        if gender_texts:
-            blocks.append({"head": gender_head, "texts": gender_texts,
-                           "colors": (C_GPILL_BG, C_GPILL_BD, C_VIOLET), "empty": None})
-
-        for b_ in blocks:
-            b_["grid"], b_["hs"] = plan(b_["texts"])
-            if b_["texts"]:
-                b_["h"] = (head_h + 2 if b_["head"] else 0) + block_height(b_["hs"])
-            elif b_["empty"][0] == "text":
-                b_["h"] = measure(b_["empty"][1], inner_w, 9.5, "", 5)
-            else:
-                b_["h"] = head_h
-
-        ch = 2 * card_pad + sum(b_["h"] for b_ in blocks) + sep * (len(blocks) - 1)
-
-        def draw_pills(grid, heights, fill, border, dot, y0):
-            y_cur = y0
-            for row_cells, rh in zip(grid, heights):
-                for i, (txt, _h) in enumerate(row_cells):
-                    slot = (cols - 1 - i) if rtl else i
-                    px = left + pad + slot * (pw + gap_x)
-                    box(px, y_cur, pw, rh, fill, border, radius=2.6, line=0.25)
-                    ix = px + pw - 2.8 - icon_d if rtl else px + 2.8
-                    iy = y_cur + (rh - icon_d) / 2
-                    pdf.set_fill_color(*_rgb(dot))
-                    pdf.ellipse(ix, iy, icon_d, icon_d, style="F")
-                    mx, my = ix + icon_d / 2, iy + icon_d / 2
-                    pdf.set_draw_color(255, 255, 255)
-                    pdf.set_line_width(0.5)
-                    pdf.line(mx - 1.2, my + 0.1, mx - 0.3, my + 1.0)
-                    pdf.line(mx - 0.3, my + 1.0, mx + 1.3, my - 0.9)
-                    th = measure(txt, tw, pill_size, "B", pill_lh)
-                    tx = px + 2 if rtl else px + icon_zone
-                    put(txt, tx, y_cur + (rh - th) / 2, tw, size=pill_size, style="B",
-                        color=C_TEXT, lh=pill_lh)
-                y_cur += rh + pill_gap_y
-            return y_cur - pill_gap_y
-
-        section(t("pdf_clinical"), need=ch)
-        cy2 = pdf.get_y()
-        box(left, cy2, width, ch, (255, 255, 255), C_BORDER, radius=4)
-        y = cy2 + card_pad
-
-        label_w = inner_w * 0.62
-        value_w = inner_w - label_w
-        label_x = right - pad - label_w if rtl else left + pad
-        value_x = left + pad if rtl else right - pad - value_w
-
-        for idx, b_ in enumerate(blocks):
-            if idx:
-                pdf.set_draw_color(*_rgb(C_BORDER))
-                pdf.set_line_width(0.2)
-                pdf.line(left + pad, y + sep / 2, right - pad, y + sep / 2)
-                y += sep
-            if b_["head"]:
-                put(b_["head"], label_x, y, label_w, size=head_size, style="B", color=C_MUTED, lh=4.4)
-            if b_["texts"]:
-                top = y + (head_h + 2 if b_["head"] else 0)
-                y = draw_pills(b_["grid"], b_["hs"], *b_["colors"], top)
-            elif b_["empty"][0] == "text":
-                put(b_["empty"][1], left + pad, y, inner_w, size=9.5, color=C_MUTED, lh=5)
-                y += b_["h"]
-            else:
-                put(b_["empty"][1], value_x, y, value_w, size=9.5, style="B", color=C_TEXT,
-                    lh=4.4, text_align="L" if rtl else "R")
-                y += b_["h"]
-        pdf.set_y(cy2 + ch)
-
-    pdf.ln(dis_gap)
-    label = t("pdf_disclaimer_label")
-    body = t("pdf_disclaimer")
-    dis_w = width - 2 * pad
-    label_height = 5
-    body_height = measure(body, dis_w, dis_size, "", dis_lh)
-    dh = label_height + body_height + 2 * 5 - 1
-    ensure(dh)
-    dy = pdf.get_y()
-    box(left, dy, width, dh, C_AMBER_BG, C_AMBER_BD, radius=3.5)
-    put(label, left + pad, dy + 4.6, dis_w, size=9.2, style="B", color=C_AMBER_TX, lh=5)
-    put(body, left + pad, dy + 4.6 + label_height, dis_w, size=dis_size, color=C_AMBER_TX, lh=dis_lh)
-    pdf.set_y(dy + dh)
+    section(t("pdf_disclaimer_label"), 18)
+    paragraph(t("pdf_disclaimer"),size=8.5,color=C_MUTED)
 
     return bytes(pdf.output()), pdf.page_no()
 
@@ -4531,23 +4319,344 @@ class _ReportPDF(FPDF):
 
 def save_report_to_excel(report: dict):
     new_row = pd.DataFrame([report])
-
     if os.path.exists(SAVE_FILE_XLSX):
-        try:
-            existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
-            existing = existing.drop(columns=["Email"], errors="ignore")
-            combined = pd.concat([existing, new_row], ignore_index=True)
-        except Exception:
-            combined = new_row
+        existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
+        existing = existing.drop(columns=["Email"], errors="ignore")
+        assessment_id = report.get("Assessment ID")
+        if assessment_id and "Assessment ID" in existing.columns:
+            if existing["Assessment ID"].fillna("").astype(str).eq(str(assessment_id)).any():
+                return
+        combined = pd.concat([existing, new_row], ignore_index=True)
     else:
         combined = new_row
-
     combined.to_excel(SAVE_FILE_XLSX, index=False, engine="openpyxl")
 
 
 # =============================================================================
 # Main app
 # =============================================================================
+
+# Patient history: immutable assessments scoped to the signed-in account.
+HISTORY_DB = "patient_history.db"
+
+
+def history_text(en, ar):
+    return ar if st.session_state.get("lang") == "ar" else en
+
+
+@contextmanager
+def history_connection():
+    with closing(sqlite3.connect(HISTORY_DB, timeout=30)) as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS patient_assessments (
+            record_id TEXT PRIMARY KEY, owner_email TEXT NOT NULL,
+            patient_id TEXT NOT NULL, recorded_at TEXT NOT NULL, payload TEXT NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS history_owner ON patient_assessments(owner_email, recorded_at)")
+        with conn:
+            yield conn
+
+
+def record_assessment(user, report, answers=None, record_id=None):
+    owner = normalize_email(user.get("email", ""))
+    if not owner:
+        raise ValueError("A signed-in account is required to save history.")
+    record_id = record_id or secrets.token_hex(16)
+    payload = {"report": report, "answers": answers,
+               "record_id": record_id}
+    with history_connection() as conn:
+        conn.execute("INSERT OR IGNORE INTO patient_assessments VALUES (?, ?, ?, ?, ?)",
+                     (record_id, owner, str(report.get("Patient ID", "")),
+                      str(report.get("Timestamp", "")), json.dumps(payload, ensure_ascii=False)))
+    return record_id
+
+
+def load_patient_history(user):
+    owner = normalize_email(user.get("email", ""))
+    if not owner:
+        return []
+    # Import legacy reports only by an exact, non-empty patient ID; never by name.
+    patient_id = str(user.get("patient_id") or "").strip()
+    if patient_id and os.path.exists(SAVE_FILE_XLSX):
+        legacy = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl", dtype=str).fillna("")
+        if "Patient ID" in legacy.columns:
+            for report in legacy.loc[legacy["Patient ID"].str.strip() == patient_id].to_dict("records"):
+                # New assessments are mirrored to Excel with their stable ID.
+                record_id = report.pop("Assessment ID", "")
+                if not record_id:
+                    encoded = json.dumps(report, sort_keys=True, ensure_ascii=False)
+                    record_id = "legacy-" + hashlib.sha256(encoded.encode()).hexdigest()
+                record_assessment(user, report, record_id=record_id)
+    with history_connection() as conn:
+        rows = conn.execute("SELECT payload FROM patient_assessments WHERE owner_email = ? ORDER BY recorded_at, rowid", (owner,)).fetchall()
+    return [json.loads(row[0]) for row in rows]
+
+
+def history_score(record):
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)%?\s*", str(record["report"].get("Probability", "")))
+    return float(match.group(1)) if match else None
+
+
+def compare_assessments(old, new, arabic=False):
+    lines = []
+    a, b = history_score(old), history_score(new)
+    comparable = old["report"].get("Model version", "legacy") == new["report"].get("Model version", "legacy")
+    if not comparable:
+        lines.append("تغيّر إصدار النموذج؛ لا يصح تفسير فرق النسب كتغيّر في حالة المريض." if arabic else "Model version changed; the score difference cannot be interpreted as a patient health change.")
+    if comparable and a is not None and b is not None:
+        delta = b - a
+        direction = ("ارتفعت" if delta > 0 else "انخفضت" if delta < 0 else "لم تتغير") if arabic else ("increased" if delta > 0 else "decreased" if delta < 0 else "was unchanged")
+        lines.append(f"نسبة النموذج {direction}: {a:.1f}% ← {b:.1f}%؛ الفرق {delta:+.1f} نقطة مئوية." if arabic else f"Model score {direction}: {a:.1f}% to {b:.1f}% ({delta:+.1f} percentage points).")
+    for field in ("Result", "Glucose level", "Reported diabetes type", "Urination frequency"):
+        before, after = str(old["report"].get(field) or ""), str(new["report"].get(field) or "")
+        if before != after:
+            lines.append(f"{field}: {before or 'Not recorded'} -> {after or 'Not recorded'}")
+    if old.get("answers") is not None and new.get("answers") is not None:
+        before, after = old["answers"], new["answers"]
+        added = [key for key in after if key in before and before[key] != "Yes" and after[key] == "Yes"]
+        removed = [key for key in before if key in after and before[key] == "Yes" and after[key] != "Yes"]
+        newly_recorded = [key for key in after if key not in before]
+        omitted = [key for key in before if key not in after]
+        lines.append(("أعراض أُبلغ عنها حديثًا: " if arabic else "Newly reported symptoms: ") + (", ".join(added) or ("لا يوجد" if arabic else "None")))
+        lines.append(("أعراض لم يعد المريض يبلغ عنها: " if arabic else "Symptoms no longer reported: ") + (", ".join(removed) or ("لا يوجد" if arabic else "None")))
+        if newly_recorded:
+            lines.append("New questions recorded (no earlier answer): " + ", ".join(newly_recorded))
+        if omitted:
+            lines.append("Questions not asked in the newer assessment: " + ", ".join(omitted))
+    else:
+        lines.append("لا توجد إجابات تفصيلية في بعض السجلات القديمة؛ راجع وصف الأعراض في التقريرين." if arabic else "Detailed answers are unavailable for some legacy records; compare the symptom narratives in both reports.")
+    lines.append("هذه مقارنة لبيانات الفحص المبلّغ عنها وليست تشخيصًا أو إثباتًا للتحسّن أو التدهور الطبي." if arabic else "This compares screening data and self-reported symptoms; it does not establish diagnosis, recovery or clinical deterioration.")
+    return lines
+
+
+def generate_patient_history_pdf(user, records):
+    pdf = _ReportPDF()
+    families = []
+    texts = json.dumps(records, ensure_ascii=False) + json.dumps(user, ensure_ascii=False)
+    scripts = ["latin"] + [key for key, pattern in SCRIPT_REGEX.items() if pattern.search(texts)]
+    for script in scripts:
+        if script not in PDF_FONTS:
+            continue
+        regular, bold = _font_file(script, False), _font_file(script, True)
+        if regular and bold:
+            family = PDF_FONTS[script][0]
+            pdf.add_font(family, "", regular)
+            pdf.add_font(family, "B", bold)
+            families.append(family)
+    pdf.base_font = families[0] if families else "helvetica"
+    if len(families) > 1:
+        pdf.set_fallback_fonts(families[1:], exact_match=True)
+    if SHAPING_OK and families:
+        pdf.set_text_shaping(True)
+    pdf.footer_notice = "Educational screening history. Not a medical diagnosis."
+    pdf.set_margins(16, 16, 16)
+    pdf.set_auto_page_break(True, margin=27)
+    pdf.alias_nb_pages()
+    def paragraph(text, bold=False, size=10):
+        text = str(text)
+        if not families:
+            text = text.encode("latin-1", "replace").decode("latin-1")
+        pdf.set_font(pdf.base_font, "B" if bold else "", size)
+        pdf.set_text_color(24, 42, 65)
+        pdf.multi_cell(0, 6, text, new_x="LMARGIN", new_y="NEXT", wrapmode="WORD")
+        pdf.ln(1)
+    pdf.add_page()
+    paragraph("PATIENT SCREENING HISTORY", True, 18)
+    paragraph("PerdiaPredict | Chronological summary and complete assessment reports")
+    paragraph("Patient: " + " ".join(str(user.get(k) or "") for k in ("first_name", "last_name")), True)
+    paragraph("Patient ID: " + str(user.get("patient_id") or "Not recorded"))
+    paragraph(f"Assessments: {len(records)} | Generated: {datetime.now():%Y-%m-%d %H:%M}")
+    paragraph(f"Period: {records[0]['report'].get('Timestamp', '')} to {records[-1]['report'].get('Timestamp', '')}")
+    paragraph("How to read this report", True, 13)
+    paragraph("Changes refer to the model screening score and the patient's recorded answers. They cannot prove that diabetes has improved, worsened or resolved. Missing answers are not treated as 'No'. Glucose readings are listed as entered; different units or measurement conditions are not directly compared.")
+    if len(records) > 1:
+        paragraph("First assessment compared with the latest", True, 13)
+        for line in compare_assessments(records[0], records[-1]):
+            paragraph(line)
+    else:
+        paragraph("This is the baseline assessment. A comparison will be available after the next assessment.")
+    paragraph("Assessment timeline", True, 13)
+    for i, record in enumerate(records, 1):
+        report = record["report"]
+        paragraph(f"{i}. {report.get('Timestamp', '')} | {report.get('Probability', 'Not recorded')} | {report.get('Result', '')}")
+    for i, record in enumerate(records, 1):
+        pdf.add_page()
+        paragraph(f"ASSESSMENT {i} OF {len(records)}", True, 16)
+        paragraph("Record reference: " + record["record_id"], size=8)
+        if i > 1:
+            paragraph("Changes since the previous assessment", True, 12)
+            for line in compare_assessments(records[i-2], record):
+                paragraph(line)
+        paragraph("Complete recorded report", True, 12)
+        for key, value in record["report"].items():
+            paragraph(f"{key}: {value or 'Not recorded'}")
+        if record.get("answers") is not None:
+            paragraph("Detailed screening answers", True, 12)
+            for key, value in record["answers"].items():
+                paragraph(f"{key}: {value}")
+        else:
+            paragraph("Legacy report: individual answers were not stored.")
+    return bytes(pdf.output())
+
+
+def render_patient_history_page():
+    user = st.session_state.get("user") or {}
+    if user.get("must_change_password", 0) == 1:
+        render_change_password_page()
+        st.stop()
+    title, back = st.columns([4, 1])
+    with title:
+        st.subheader(history_text("Patient history", "سجل المريض"))
+    with back:
+        if st.button(tr("back"), key="history_back", use_container_width=True):
+            go_to("main")
+    try:
+        records = load_patient_history(user)
+    except Exception:
+        st.error(history_text("History could not be loaded. Please try again.", "تعذّر تحميل السجل. حاول مرة أخرى."))
+        return
+    if not records:
+        st.info(history_text("No saved assessments yet. Complete your first screening to start your history.", "لا توجد فحوصات محفوظة بعد. أجرِ أول فحص لبدء سجلك."))
+        return
+    st.caption(history_text("Only assessments linked to your account and patient ID are shown.", "تظهر الفحوصات المرتبطة بحسابك ورقم المريض الخاص بك فقط."))
+    st.info(history_text("Score changes describe screening results, not a medical diagnosis or confirmed improvement/worsening.", "تغيّر النسبة يصف نتائج الفحص، وليس تشخيصًا أو تأكيدًا للتحسّن أو التدهور الطبي."))
+    a, b = history_score(records[0]), history_score(records[-1])
+    cols = st.columns(3)
+    cols[0].metric(history_text("Assessments", "عدد الفحوصات"), len(records))
+    cols[1].metric(history_text("First score", "النسبة الأولى"), f"{a:.1f}%" if a is not None else "—")
+    cols[2].metric(history_text("Latest score", "النسبة الأخيرة"), f"{b:.1f}%" if b is not None else "—", delta=f"{b-a:+.1f} pp" if a is not None and b is not None and len(records)>1 and records[0]["report"].get("Model version", "legacy") == records[-1]["report"].get("Model version", "legacy") else None, delta_color="off")
+    if len(records) > 1:
+        st.markdown("### " + history_text("From the first assessment to the latest", "من أول فحص إلى آخر فحص"))
+        for line in compare_assessments(records[0], records[-1], st.session_state.get("lang") == "ar"):
+            st.write(line)
+    else:
+        st.caption(history_text("Comparison starts after your next assessment.", "تبدأ المقارنة بعد الفحص التالي."))
+    timeline = pd.DataFrame([{"Date": r["report"].get("Timestamp", ""), "Model score (%)": history_score(r)} for r in records])
+    st.dataframe(timeline, use_container_width=True, hide_index=True)
+    for i, record in enumerate(records):
+        report = record["report"]
+        with st.expander(f"{i+1}. {report.get('Timestamp', '')} | {report.get('Probability', '')}", expanded=i==len(records)-1):
+            if i:
+                for line in compare_assessments(records[i-1], record, st.session_state.get("lang") == "ar"):
+                    st.write(line)
+            st.dataframe(pd.DataFrame([{"Field": key, "Recorded value": str(value)} for key, value in report.items()]), use_container_width=True, hide_index=True)
+            if record.get("answers") is not None:
+                st.dataframe(pd.DataFrame([{"Question": key, "Answer": value} for key, value in record["answers"].items()]), use_container_width=True, hide_index=True)
+    if st.button(history_text("Prepare complete history PDF", "تجهيز ملف PDF لجميع الفحوصات"), type="primary", use_container_width=True):
+        try:
+            with st.spinner(history_text("Preparing report…", "جاري تجهيز التقرير…")):
+                st.session_state["history_pdf"] = generate_patient_history_pdf(user, records)
+                st.session_state["history_pdf_signature"] = (normalize_email(user.get("email", "")), tuple(r["record_id"] for r in records))
+        except Exception:
+            st.error(history_text("The PDF could not be generated. Check the PDF fonts and dependencies.", "تعذّر إنشاء PDF. تحقق من خطوط التقرير ومكتباته."))
+    signature = (normalize_email(user.get("email", "")), tuple(r["record_id"] for r in records))
+    if st.session_state.get("history_pdf_signature") == signature:
+        safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", str(user.get("patient_id") or "patient"))
+        st.download_button(history_text("Download all reports in one PDF", "تنزيل جميع التقارير في ملف PDF واحد"), data=st.session_state["history_pdf"], file_name=f"Patient_History_{safe_id}.pdf", mime="application/pdf", use_container_width=True)
+        st.caption(history_text("The combined PDF uses English headings and includes every saved assessment.", "التقرير المجمّع بعناوين إنجليزية ويشمل جميع الفحوصات المحفوظة."))
+
+
+def render_profile_edit_page():
+    lang = st.session_state["lang"]
+    _user = st.session_state.get("user") or {}
+    if _user.get("must_change_password", 0) == 1:
+        render_change_password_page()
+        st.stop()
+    gender = _user.get("gender") or "Male"
+    sex_at_birth = gender
+    marital_status_key = _user.get("marital_status") or "single"
+    if marital_status_key not in MARITAL_STATUS_ORDER:
+        marital_status_key = "single"
+    country = _user.get("country") or ""
+    phone = _user.get("phone") or ""
+    type_key = _user.get("diabetes_type") or "not_sure"
+    if type_key not in DIABETES_TYPE_KEYS:
+        type_key = "not_sure"
+    st.markdown("""
+    <style>
+    .st-key-profile_edit_actions [data-testid="stHorizontalBlock"] {
+        direction: ltr !important;
+        flex-wrap: nowrap !important;
+    }
+    .st-key-profile_edit_actions button { min-height: 42px; }
+    </style>
+    """, unsafe_allow_html=True)
+    st.subheader(profile_copy("edit"))
+    with st.form("profile_edit_form", clear_on_submit=False):
+        with st.container(key="profile_edit_actions"):
+            _, save_col, cancel_col = st.columns([4, 2, 1])
+            with save_col:
+                save_edit = st.form_submit_button(profile_copy("save"), type="primary", use_container_width=True)
+            with cancel_col:
+                cancel_edit = st.form_submit_button(profile_copy("cancel"), use_container_width=True)
+        st.markdown("---")
+        edited_marital = st.selectbox(
+            tr("marital_status"), MARITAL_STATUS_ORDER,
+            index=MARITAL_STATUS_ORDER.index(marital_status_key),
+            format_func=lambda k: marital_status_label(k, sex_at_birth, lang),
+        )
+        country_options = [item[1] for item in COUNTRY_DIAL_CODES]
+        edited_country = st.selectbox(
+            registration_text(0), country_options,
+            index=country_options.index(country) if country in country_options else 0,
+        )
+        dial_index = next((i for i, item in enumerate(COUNTRY_DIAL_CODES)
+                           if item[2] == (_user.get("dial_code") or "")), 0)
+        edited_dial = st.selectbox(
+            registration_text(1), COUNTRY_DIAL_CODES, index=dial_index,
+            format_func=lambda item: f"{item[0]} {item[1]} ({item[2]})",
+        )
+        edited_phone = st.text_input(registration_text(2), value=phone, max_chars=24)
+        confirmed = None
+        if type_key == "not_sure":
+            st.caption(profile_copy("type_help"))
+            confirmed = st.selectbox(profile_copy("doctor"),
+                                     ["not_sure", "type1", "type2"],
+                                     format_func=diabetes_type_label)
+        else:
+            st.caption(profile_copy("type_locked"))
+    if cancel_edit:
+        go_to(st.session_state.pop("profile_return_page", "main"))
+    if save_edit:
+        digits = re.sub(r"[\s()\-]", "", edited_phone.strip())
+        if digits.startswith("+"):
+            full_phone = digits
+        else:
+            full_phone = edited_dial[2] + digits.lstrip("0")
+        change_type = confirmed if confirmed in ("type1", "type2") else None
+        saved = update_user_profile(_user.get("email", ""), edited_marital,
+                                    edited_country, edited_dial[2], full_phone,
+                                    confirmed_type=change_type)
+        if saved:
+            st.session_state["user"].update({key: saved[key] for key in
+                ("marital_status", "country", "dial_code", "phone", "diabetes_type")})
+            go_to(st.session_state.pop("profile_return_page", "main"))
+        else:
+            st.error(profile_copy("error"))
+
+
+
+def persist_completed_assessment(user):
+    """Persist an explicitly completed assessment or an explicit save retry."""
+    state = st.session_state
+    record_id = state.get("assessment_id")
+    report = state.get("last_report_en")
+    if (not record_id or not report
+            or state.get("assessment_owner") != normalize_email(user.get("email", ""))):
+        return
+    with _accounts_store()["lock"]:
+        if not state.get("history_saved", False):
+            try:
+                record_assessment(user, report, state.get("assessment_answers"), record_id)
+                state["history_saved"] = True
+            except Exception:
+                st.warning(history_text("History saving failed. You can retry saving this assessment.", "تعذّر حفظ السجل. يمكنك إعادة حفظ الفحص نفسه."))
+        if not state.get("report_saved", False):
+            try:
+                save_report_to_excel({**report, "Assessment ID": record_id})
+                state["report_saved"] = True
+            except Exception:
+                st.warning(history_text("Excel saving failed. You can retry saving this assessment.", "تعذّر حفظ تقرير Excel. يمكنك إعادة حفظ الفحص نفسه."))
+
 
 def render_main_app():
     lang = st.session_state["lang"]
@@ -4560,11 +4669,11 @@ def render_main_app():
     _user = st.session_state.get("user") or {}
     first_name = (_user.get("first_name") or "").strip()
     last_name = (_user.get("last_name") or "").strip()
-    age = age_from_birth_date(_user.get("birth_date")) or 40
+    age = age_from_birth_date(_user.get("birth_date"))
     gender = _user.get("gender") or "Male"
     if gender not in GENDER_OPTIONS:
         gender = "Male"
-    sex_at_birth = gender if gender in ("Male", "Female") else "Male"
+    sex_at_birth = gender
     marital_status_key = _user.get("marital_status") or "single"
     if marital_status_key not in MARITAL_STATUS_ORDER:
         marital_status_key = "single"
@@ -4685,7 +4794,10 @@ def render_main_app():
             </div>
             """, unsafe_allow_html=True)
             if st.button(profile_copy("edit"), key="profile_edit_toggle", use_container_width=True):
-                st.session_state["profile_edit_open"] = not st.session_state.get("profile_edit_open", False)
+                st.session_state["profile_return_page"] = st.session_state["page"]
+                go_to("profile_edit")
+            if st.button(history_text("Patient history", "سجل المريض"), key="patient_history_open", use_container_width=True):
+                go_to("patient_history")
         with info_col:
             st.markdown(f"""
             <div class="profile-content">
@@ -4695,52 +4807,6 @@ def render_main_app():
             </div>
 
             """, unsafe_allow_html=True)
-    if st.session_state.get("profile_edit_open"):
-        with st.form("profile_edit_form"):
-            edited_marital = st.selectbox(
-                tr("marital_status"), MARITAL_STATUS_ORDER,
-                index=MARITAL_STATUS_ORDER.index(marital_status_key),
-                format_func=lambda k: marital_status_label(k, sex_at_birth, lang),
-            )
-            country_options = [item[1] for item in COUNTRY_DIAL_CODES]
-            edited_country = st.selectbox(
-                registration_text(0), country_options,
-                index=country_options.index(country) if country in country_options else 0,
-            )
-            dial_index = next((i for i, item in enumerate(COUNTRY_DIAL_CODES)
-                               if item[2] == (_user.get("dial_code") or "")), 0)
-            edited_dial = st.selectbox(
-                registration_text(1), COUNTRY_DIAL_CODES, index=dial_index,
-                format_func=lambda item: f"{item[0]} {item[1]} ({item[2]})",
-            )
-            edited_phone = st.text_input(registration_text(2), value=phone, max_chars=24)
-            confirmed = None
-            if type_key == "not_sure":
-                st.caption(profile_copy("type_help"))
-                confirmed = st.selectbox(profile_copy("doctor"),
-                                         ["not_sure", "type1", "type2"],
-                                         format_func=diabetes_type_label)
-            else:
-                st.caption(profile_copy("type_locked"))
-            save_edit = st.form_submit_button(profile_copy("save"), type="primary")
-        if save_edit:
-            digits = re.sub(r"[\s()\-]", "", edited_phone.strip())
-            if digits.startswith("+"):
-                full_phone = digits
-            else:
-                full_phone = edited_dial[2] + digits.lstrip("0")
-            change_type = confirmed if confirmed in ("type1", "type2") else None
-            saved = update_user_profile(_user.get("email", ""), edited_marital,
-                                        edited_country, edited_dial[2], full_phone,
-                                        confirmed_type=change_type)
-            if saved:
-                st.session_state["user"].update({key: saved[key] for key in
-                    ("marital_status", "country", "dial_code", "phone", "diabetes_type")})
-                st.session_state["profile_edit_open"] = False
-                st.rerun()
-            else:
-                st.error(profile_copy("error"))
-
     st.markdown(f'<div class="status-card">{tr("privacy")}</div>', unsafe_allow_html=True)
 
     with st.container(key="patient_card"):
@@ -4875,6 +4941,11 @@ def render_main_app():
             else:
                 errors.append(tr("glucose_invalid"))
 
+        lo, hi = model_metadata["age_range"]
+        if age is None or not lo <= age <= hi:
+            errors.append(f"العمر المدعوم للنموذج: {lo}–{hi}." if lang == "ar" else f"Supported model age: {lo}–{hi}.")
+        if sex_at_birth not in ("Male", "Female"):
+            errors.append("بيانات النموذج تدعم ذكر/أنثى فقط؛ لا يمكن تقدير النسبة لهذا الإدخال." if lang == "ar" else "Model data supports Male/Female only; this input cannot be scored.")
         if errors:
             st.error(tr("required_fields"))
             for error in errors:
@@ -4883,7 +4954,7 @@ def render_main_app():
             raw_input = {"Age": age, "Gender": sex_at_birth, **symptom_values}
             result, probability = predict_new_patient(raw_input)
 
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             # Use the patient's stored ID for consistency with the profile.
             patient_id = _user.get("patient_id") or generate_patient_id()
@@ -4924,6 +4995,17 @@ def render_main_app():
             st.session_state["last_result"] = int(result)
             st.session_state["last_probability"] = float(probability)
             st.session_state["report_saved"] = False
+            st.session_state["assessment_id"] = secrets.token_hex(16)
+            st.session_state["history_saved"] = False
+            st.session_state["assessment_answers"] = {
+                **{str(tr(display_labels.get(k, k), "en")): v for k, v in symptom_values.items()},
+                **{str(tr(k, "en")): v for k, v in extra_values.items()},
+                **{str(tr(k, "en")): v for k, v in gender_values.items()},
+            }
+
+            st.session_state["assessment_owner"] = normalize_email(_user.get("email", ""))
+            # Write only after an explicit successful screening submission.
+            persist_completed_assessment(_user)
 
             log_action(
                 _user.get("id", 0),
@@ -4968,6 +5050,8 @@ def render_main_app():
             unsafe_allow_html=True,
         )
 
+        st.caption("هذه نسبة تقديرية من نموذج فحص، وليست دقة النموذج أو تشخيصًا طبيًا. لم تُثبت صلاحيتها على مرضى خارج بيانات التدريب." if lang == "ar" else "Estimated screening probability, not model accuracy or a diagnosis. External patient validation has not been established.")
+        st.caption("النموذج يستخدم العمر والجنس والأعراض الثمانية المختارة فقط؛ قراءة السكر والأسئلة الإضافية تظهر في التقرير ولا تدخل في حساب النسبة." if lang == "ar" else "The model uses age, sex and the eight selected symptoms. Glucose and additional questions appear in the report but do not affect this probability.")
         st.progress(min(max(probability, 0.0), 1.0))
 
         with st.expander(f"{tr('symptom_summary')}", expanded=True):
@@ -4984,14 +5068,14 @@ def render_main_app():
             if st.session_state.get("last_extra", False):
                 st.info(tr("extra_notice"))
 
+        # Viewing a previous result never writes a new assessment.
         render_offline_health_guide()
-
-        if not st.session_state.get("report_saved", False):
-            try:
-                save_report_to_excel(report_en)
-                st.session_state["report_saved"] = True
-            except Exception as exc:
-                st.warning(f"{tr('save_failed')} {exc}")
+        if (st.session_state.get("assessment_id")
+                and st.session_state.get("assessment_owner") == normalize_email(_user.get("email", ""))
+                and not (st.session_state.get("history_saved") and st.session_state.get("report_saved"))):
+            st.warning(history_text("The assessment was not fully saved. Use Retry saving to save this same assessment.", "لم يكتمل حفظ الفحص. اضغط إعادة الحفظ لحفظ الفحص نفسه."))
+            if st.button(history_text("Retry saving", "إعادة الحفظ"), key="retry_assessment_save"):
+                persist_completed_assessment(_user)
 
         st.markdown("---")
         st.markdown(f'<div class="section-title">{tr("download")}</div>', unsafe_allow_html=True)
@@ -5262,6 +5346,10 @@ render_header()
 
 if current_page == "admin":
     render_admin_page()
+elif current_page == "patient_history":
+    render_patient_history_page()
+elif current_page == "profile_edit":
+    render_profile_edit_page()
 else:
     render_main_app()
 
