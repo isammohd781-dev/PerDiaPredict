@@ -1,4 +1,4 @@
-# PerdiaPredict — Complete Update
+# PerdiaPredict - Complete Update
 
 ## Installation and Update
 
