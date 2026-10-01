@@ -1,8 +1,19 @@
 """Shared visual rules for all languages and application pages."""
 def inject_visual_accessibility():
     import streamlit as st
-    dark = st.session_state.get('dark_mode', True)
+    dark = st.session_state.get('dark_mode', False)
     lang = st.session_state.get('lang', 'en')
+    # Explicitly opt out of automatic browser darkening in light appearance.
+    # Keep accessibility forced-color preferences enabled (no forced-color-adjust override).
+    scheme = 'dark' if dark else 'only light'
+    page = '#080d18' if dark else '#edf4fb'
+    st.markdown(f'''<style>
+    :root, html, body, #root {{color-scheme:{scheme}!important;}}
+    html, body, #root {{background-color:{page}!important;}}
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"],
+    [data-testid="stHeader"], [data-baseweb="popover"] {{color-scheme:{scheme}!important;}}
+    .stApp :is(input,textarea,select,button) {{color-scheme:{scheme}!important;}}
+    </style>''', unsafe_allow_html=True)
     direction = 'rtl' if lang == 'ar' else 'ltr'
     align = 'right' if lang == 'ar' else 'left'
     surface, field, text, muted, border = ('#111c30','#17243b','#f1f5f9','#b5c3d7','#425571') if dark else ('#ffffff','#ffffff','#152b49','#49617d','#b8c9de')
