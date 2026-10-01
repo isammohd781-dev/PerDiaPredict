@@ -25,3 +25,7 @@ uharfbuzz>=0.37.0
 
 # ---- Only needed if you run train_model.py locally (not needed on Render) ----
 # matplotlib>=3.7.0
+
+reportlab>=4.4,<5
+arabic-reshaper>=3,<4
+python-bidi>=0.6,<1
