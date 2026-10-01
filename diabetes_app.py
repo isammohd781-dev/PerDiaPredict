@@ -1,5 +1,8 @@
 import base64
+import calendar
+import unicodedata
 import hashlib
+from io import BytesIO
 from html import escape as html_escape
 import hmac
 import json
@@ -18,7 +21,6 @@ import joblib
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-from fpdf import FPDF
 
 from translations import LANGUAGES, T
 from screening_model import load_screening_artifacts, predict_screening
@@ -96,18 +98,17 @@ FEMALE_INTIMATE_KEYS = ["female_dryness", "female_gdm"]
 
 
 def gender_question_keys(gender: str, ever_married: bool) -> list:
-    """Questions to show for this gender (all of them only if ever married)."""
-    keys = MALE_SYMPTOM_KEYS if gender == "Male" else FEMALE_SYMPTOM_KEYS
-    if ever_married:
-        return list(keys)
-    intimate = MALE_INTIMATE_KEYS if gender == "Male" else FEMALE_INTIMATE_KEYS
-    return [k for k in keys if k not in intimate]
+    """Adult questions are independent of relationship status."""
+    if gender == "Other":
+        return list(OTHER_GENERAL_SYMPTOM_KEYS)
+    return list(MALE_SYMPTOM_KEYS if gender == "Male" else FEMALE_SYMPTOM_KEYS)
+
 
 
 # -----------------------------------------------------------------------------
 # Marital status, gender-agreeing.
 # -----------------------------------------------------------------------------
-MARITAL_STATUS_ORDER = ["single", "married", "divorced", "child"]
+MARITAL_STATUS_ORDER = ["single", "married", "divorced", "widowed", "separated", "prefer_not", "child"]
 
 MARITAL_STATUS_TEXT = {
     "en": {
@@ -131,9 +132,21 @@ MARITAL_STATUS_TEXT = {
 }
 
 
+for _code, _labels in {
+    "en": ("Widowed", "Separated", "Prefer not to say"),
+    "ar": ("أرمل / أرملة", "منفصل / منفصلة", "أفضل عدم الإجابة"),
+    "es": ("Viudo/a", "Separado/a", "Prefiero no decirlo"),
+}.items():
+    for _key, _label in zip(("widowed", "separated", "prefer_not"), _labels):
+        MARITAL_STATUS_TEXT[_code][_key] = dict.fromkeys(GENDER_OPTIONS if "GENDER_OPTIONS" in globals() else ["Male", "Female", "Other"], _label)
+MARITAL_STATUS_TEXT["en"]["divorced"] = dict.fromkeys(["Male", "Female"], "Divorced (or widowed in an existing account)")
+MARITAL_STATUS_TEXT["ar"]["divorced"] = {"Male": "مطلّق (أو أرمل في الحسابات السابقة)", "Female": "مطلّقة (أو أرملة في الحسابات السابقة)"}
+
 def marital_status_label(status: str, gender: str, lang: str = None) -> str:
     """Gender-agreeing label for a marital-status option."""
     lang = lang or st.session_state.get("lang", "en")
+    if gender == "Other" and lang == "ar":
+        return {"single":"غير متزوج", "married":"متزوج", "divorced":"مطلّق / مطلّقة (أو أرمل سابقًا)", "widowed":"أرمل / أرملة", "separated":"منفصل / منفصلة", "prefer_not":"أفضل عدم الإجابة", "child":"طفل / طفلة"}.get(status, status)
     gender = gender if gender in ("Male", "Female") else "Male"
     table = MARITAL_STATUS_TEXT.get(lang) or MARITAL_STATUS_TEXT["en"]
     entry = table.get(status) or MARITAL_STATUS_TEXT["en"][status]
@@ -595,6 +608,103 @@ PROFILE_COPY = {
     "zh": {"edit":"编辑资料", "save":"保存更改", "cancel":"取消", "doctor":"医生已确认类型", "type_help":"1型（身体产生很少或不产生胰岛素）· 2型（身体不能有效利用胰岛素）", "type_locked":"医生确认后，只能从“不确定”设置一次。", "question_title":"针对已登记类型的问题", "question_note":"答案会加入报告，不改变模型的预测百分比。", "general_title":"一般问题", "error":"请输入有效的国家和电话号码。"},
 }
 
+EDIT_TEXT = {
+    "en": {"photo":"Profile photo", "upload":"Choose a photo from your device", "remove":"Remove current photo", "photo_help":"JPG, PNG or WebP, up to 5 MB.", "bad_photo":"Choose a valid image up to 5 MB.", "confirm":"Confirm changes", "confirm_save":"Save these profile changes?", "lock_warning":"You are recording a doctor-confirmed diabetes type. After saving, you cannot change it or return to ‘Not sure’. Are you sure?", "yes_save":"Yes, save changes", "no_save":"No, keep editing", "personal":"Personal details", "contact":"Contact details", "health":"Health information", "security":"Account security", "required":"Fields marked * are required.", "optional":"Answer the questions that apply to you. Relationship status does not determine your symptoms."},
+    "ar": {"photo":"الصورة الشخصية", "upload":"اختر صورة من جهازك", "remove":"حذف الصورة الحالية", "photo_help":"JPG أو PNG أو WebP، حتى 5 ميجابايت.", "bad_photo":"اختر صورة صحيحة لا تتجاوز 5 ميجابايت.", "confirm":"تأكيد التغييرات", "confirm_save":"هل تريد حفظ تعديلات الملف الشخصي؟", "lock_warning":"ستسجّل نوع السكري الذي أكّده الطبيب. بعد الحفظ لا يمكنك تغيير النوع أو الرجوع إلى «لا أعرف». هل أنت متأكد؟", "yes_save":"نعم، احفظ التغييرات", "no_save":"لا، متابعة التعديل", "personal":"البيانات الشخصية", "contact":"بيانات التواصل", "health":"المعلومات الصحية", "security":"أمان الحساب", "required":"الحقول التي تحمل * مطلوبة.", "optional":"أجب عن الأسئلة التي تنطبق عليك. الحالة الاجتماعية لا تحدد الأعراض."},
+}
+
+def edit_text(key):
+    return EDIT_TEXT.get(st.session_state.get("lang"), EDIT_TEXT["en"])[key]
+
+
+def profile_photo_bytes(user):
+    name = user.get("profile_photo", "")
+    if not name or os.path.basename(name) != name:
+        return None
+    path = os.path.join("profile_photos", name)
+    try:
+        with open(path, "rb") as photo:
+            return photo.read()
+    except OSError:
+        return None
+
+
+def commit_profile_changes(changes):
+    user = st.session_state.get("user") or {}
+    changes.pop("warn_unknown", None)
+    photo_data = changes.pop("photo_data", None)
+    photo_name = changes.pop("photo_name", None)
+    if photo_data is not None:
+        os.makedirs("profile_photos", exist_ok=True)
+        photo_name = hashlib.sha256(photo_data).hexdigest() + ".png"
+        target = os.path.join("profile_photos", photo_name)
+        with open(target + ".tmp", "wb") as out:
+            out.write(photo_data)
+        os.replace(target + ".tmp", target)
+    saved = update_user_profile(user.get("email", ""), **changes, profile_photo=photo_name)
+    if not saved:
+        st.error(profile_copy("error"))
+        return
+    user.update({key: saved.get(key, "") for key in
+                 ("marital_status", "country", "dial_code", "phone", "diabetes_type", "profile_photo")})
+    st.session_state.pop("pending_profile_changes", None)
+    go_to(st.session_state.pop("profile_return_page", "main"))
+
+
+
+def inject_profile_layout_css():
+    dark = st.session_state.get("dark_mode", True)
+    bg, ink, border, muted = ("#111c2e", "#eef4ff", "#34465e", "#aabbd2") if dark else ("#ffffff", "#172b45", "#d8e2ee", "#586b82")
+    st.markdown(f"""<style>
+    [data-testid="stDialog"] [role="dialog"] {{
+        position:fixed !important; top:50% !important; left:50% !important;
+        transform:translate(-50%, -50%) !important; margin:0 !important;
+        width:min(520px, calc(100vw - 32px)) !important; max-width:520px !important;
+        max-height:calc(100dvh - 48px) !important; overflow:auto !important;
+        background:{bg} !important; color:{ink} !important;
+        border:1px solid {border} !important; border-radius:22px !important;
+        box-shadow:0 24px 80px rgba(0,0,0,.38) !important; padding:24px !important;
+    }}
+    [data-testid="stDialog"] [role="dialog"] [data-testid="stMarkdownContainer"],
+    [data-testid="stDialog"] [role="dialog"] h2 {{color:{ink} !important;}}
+    [data-testid="stDialog"] [role="dialog"] h2 {{font-size:1.3rem !important;padding:0 0 16px !important;}}
+    [data-testid="stDialog"] [role="dialog"] [data-testid="stVerticalBlock"] {{gap:16px !important;}}
+    [data-testid="stDialog"] [role="dialog"] button {{min-height:46px !important;border-radius:12px !important;}}
+    [data-testid="stDialog"] [role="dialog"] button[kind="primary"] {{background:#2563eb !important;border:1px solid #2563eb !important;color:white !important;}}
+    [data-testid="stDialog"] [role="dialog"] button[kind="secondary"] {{background:{bg} !important;border:1px solid {border} !important;color:{ink} !important;}}
+    [data-testid="stDialog"] [role="dialog"] [data-testid="stAlert"] {{border-radius:12px !important;}}
+    .st-key-profile_editor [data-testid="stForm"] {{border:1px solid {border} !important;border-radius:22px !important;padding:24px !important;background:{bg} !important;}}
+    .st-key-profile_editor [data-testid="stForm"] [data-testid="stVerticalBlock"] {{gap:16px !important;}}
+    .st-key-profile_editor h3 {{font-size:1.05rem !important;margin:0 !important;padding:8px 0 !important;color:{ink} !important;}}
+    .st-key-profile_edit_actions button {{width:100%;min-height:46px;border-radius:12px;}}
+    .st-key-profile_editor .profile-edit-avatar {{width:112px;height:112px;border-radius:50%;object-fit:cover;border:3px solid {border};display:block;margin:12px auto;}}
+    .profile-edit-description {{color:{muted};margin:0 0 20px;font-size:.95rem;}}
+    @media(max-width:640px) {{
+        .st-key-profile_editor [data-testid="stForm"] {{padding:16px !important;}}
+        [data-testid="stDialog"] [role="dialog"] {{padding:20px !important;}}
+    }}
+    </style>""", unsafe_allow_html=True)
+
+
+@st.dialog("تأكيد التغييرات" if st.session_state.get("lang") == "ar" else "Confirm changes")
+def confirm_profile_changes():
+    inject_profile_layout_css()
+    changes = st.session_state.get("pending_profile_changes")
+    if not changes:
+        return
+    st.write(edit_text("confirm_save"))
+    if changes.get("warn_unknown"):
+        if changes.get("confirmed_type"):
+            st.warning(edit_text("lock_warning"))
+        else:
+            st.warning("Your diabetes type is still recorded as ‘Not sure’. Choose a type only after a doctor confirms it. Once confirmed and saved, it cannot be changed back." if st.session_state.get("lang") != "ar" else "نوع السكري ما زال مسجّلًا «لا أعرف». لا تحدّد النوع إلا بعد تأكيد الطبيب. بعد تأكيد النوع وحفظه، لا يمكن تغييره أو الرجوع إلى «لا أعرف».")
+    yes, no = st.columns(2)
+    if yes.button(edit_text("yes_save"), type="primary", use_container_width=True):
+        commit_profile_changes(dict(changes))
+    if no.button(edit_text("no_save"), use_container_width=True):
+        st.session_state.pop("pending_profile_changes", None)
+        st.rerun()
+
 TYPE_QUESTIONS = {
     "type1": ["t1_insulin", "t1_low_glucose", "t1_ketones"],
     "type2": ["t2_family", "t2_activity", "t2_high_glucose"],
@@ -610,7 +720,7 @@ for _lang, _questions in TYPE_QUESTION_TEXT.items():
     EXTRA_TEXT.setdefault(_lang, {}).update(_questions)
 
 def profile_copy(key, lang=None):
-    return PROFILE_COPY.get(lang or st.session_state.get("lang"), PROFILE_COPY["en"])[key]
+    return PROFILE_COPY.get(lang or st.session_state.get("lang"), PROFILE_COPY["en"]).get(key, PROFILE_COPY["en"].get(key, key))
 
 TYPE_EXPLANATIONS = {
     "en": {"type1": "the body makes little or no insulin", "type2": "the body does not use insulin well"},
@@ -678,6 +788,19 @@ extra_symptom_keys = {
     "hyperglycemia": "hyperglycemia",
     "sweet_craving": "sweet_craving",
 }
+
+GENERAL_QUESTION_KEYS = ["family_diabetes", "previous_high_sugar", "blood_pressure", "sleep_difficulty", "regular_medicine"]
+GENERAL_QUESTION_TEXT = {
+    "en": ["Does a parent or sibling have diabetes?", "Has a previous blood test shown high blood sugar?", "Has a doctor told you that you have high blood pressure?", "Do you often have trouble sleeping?", "Do you take any medicines regularly?"],
+    "ar": ["هل لدى أحد والديك أو إخوتك مرض السكري؟", "هل أظهر فحص دم سابق ارتفاع سكر الدم؟", "هل أخبرك الطبيب بأن لديك ارتفاعًا في ضغط الدم؟", "هل تواجه صعوبة في النوم بصورة متكررة؟", "هل تتناول أي أدوية بانتظام؟"],
+    "es": ["¿Un padre o hermano tiene diabetes?", "¿Un análisis previo mostró azúcar alta?", "¿Un médico te ha diagnosticado presión alta?", "¿Sueles tener problemas para dormir?", "¿Tomas medicamentos regularmente?"],
+    "hi": ["क्या माता-पिता या भाई-बहन को मधुमेह है?", "क्या पहले की जाँच में शुगर अधिक थी?", "क्या डॉक्टर ने उच्च रक्तचाप बताया है?", "क्या अक्सर नींद में परेशानी होती है?", "क्या आप नियमित दवाएँ लेते हैं?"],
+    "zh": ["父母或兄弟姐妹患有糖尿病吗？", "之前的血液检查显示血糖偏高吗？", "医生告诉您患有高血压吗？", "您经常难以入睡吗？", "您定期服用药物吗？"],
+}
+for _code, _values in GENERAL_QUESTION_TEXT.items():
+    EXTRA_TEXT.setdefault(_code, {}).update(dict(zip(GENERAL_QUESTION_KEYS, _values)))
+extra_symptom_keys.update({key: key for key in GENERAL_QUESTION_KEYS})
+REPORT_EXTRA_KEYS = list(extra_symptom_keys) + [key for keys in TYPE_QUESTIONS.values() for key in keys]
 
 DIABETES_TYPE_KEYS = ["not_sure", "type1", "type2"]
 
@@ -756,13 +879,13 @@ ACCOUNT_FIELDS = [
     "id", "patient_id", "first_name", "last_name", "email", "birth_date",
     "gender", "marital_status", "diabetes_type", "country", "dial_code", "phone",
     "password_hash", "created_at", "last_login", "failed_attempts", "locked_until",
-    "must_change_password",
+    "must_change_password", "profile_photo",
 ]
 ACCOUNT_HEADERS = [
     "ID", "Patient ID", "First name", "Last name", "Email", "Birth date",
     "Gender", "Marital status", "Diabetes type", "Country", "Dial code", "Phone",
     "Password hash", "Created at", "Last login", "Failed attempts", "Locked until",
-    "Must change password",
+    "Must change password", "Profile photo",
 ]
 _FIELD_BY_HEADER = dict(zip(ACCOUNT_HEADERS, ACCOUNT_FIELDS))
 
@@ -775,6 +898,37 @@ def _accounts_store():
 
 def normalize_email(email: str) -> str:
     return (email or "").strip().lower()
+
+
+def normalize_person_name(value: str) -> str:
+    return " ".join((value or "").split())
+
+
+def valid_person_name(value: str) -> bool:
+    return (1 <= len(value) <= 60 and any(c.isalpha() for c in value)
+            and all(c.isalpha() or unicodedata.category(c).startswith("M")
+                    or c in " '-’" for c in value))
+
+
+def normalize_registration_phone(value: str, dial_code: str) -> str:
+    """Accept a local number or an international number for the selected country."""
+    number = "".join(str(unicodedata.decimal(c)) if c.isdecimal() else c
+                     for c in (value or "").strip())
+    number = re.sub(r"[\s()\-]", "", number)
+    if not re.fullmatch(r"\+[1-9][0-9]{0,3}", dial_code or ""):
+        raise ValueError("Invalid country code")
+    if number.startswith("00"):
+        number = "+" + number[2:]
+    if number.startswith("+"):
+        if not number.startswith(dial_code):
+            raise ValueError("Country code does not match")
+        local = number[len(dial_code):].lstrip("0")
+    else:
+        local = number.lstrip("0")
+    full = dial_code + local
+    if not re.fullmatch(r"[0-9]{4,14}", local) or not 6 <= len(full[1:]) <= 15:
+        raise ValueError("Invalid phone number")
+    return full
 
 
 def hash_password(password: str) -> str:
@@ -847,6 +1001,7 @@ def _rows_from_sheet(ws) -> list:
             "country": get(raw, "country"),
             "dial_code": get(raw, "dial_code"),
             "phone": get(raw, "phone"),
+            "profile_photo": get(raw, "profile_photo"),
             "password_hash": pw_hash,
             "must_change_password": 1 if get(raw, "must_change_password") == "1" else 0,
             "created_at": get(raw, "created_at"),
@@ -890,9 +1045,16 @@ def _save_rows(rows: list):
         ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = w
     ws.freeze_panes = "A2"
 
-    tmp = ACCOUNTS_FILE + ".tmp"
-    wb.save(tmp)
-    os.replace(tmp, ACCOUNTS_FILE)
+    directory = os.path.dirname(os.path.abspath(ACCOUNTS_FILE))
+    fd, tmp = tempfile.mkstemp(prefix="accounts_", suffix=".xlsx", dir=directory)
+    os.close(fd)
+    try:
+        wb.save(tmp)
+        os.replace(tmp, ACCOUNTS_FILE)
+    finally:
+        wb.close()
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
     store = _accounts_store()
     store["rows"] = [dict(r) for r in rows]
@@ -963,6 +1125,21 @@ def create_user(first_name: str, last_name: str, email: str, birth_date: date,
                 password: str, gender: str, marital_status: str = "single",
                 diabetes_type: str = "", country: str = "", dial_code: str = "", phone: str = ""):
     email = normalize_email(email)
+    first_name, last_name = normalize_person_name(first_name), normalize_person_name(last_name)
+    if not (valid_person_name(first_name) and valid_person_name(last_name)
+            and gender in GENDER_OPTIONS and marital_status in MARITAL_STATUS_ORDER
+            and diabetes_type in DIABETES_TYPE_KEYS and country.strip()):
+        return False, "reg_fill_all"
+    if len(email) > 254 or not EMAIL_REGEX.fullmatch(email):
+        return False, "reg_email_invalid"
+    if not isinstance(birth_date, date) or not date(1900, 1, 1) <= birth_date < date.today():
+        return False, "reg_dob_invalid"
+    if len(password) < MIN_PASSWORD_LEN or not password.strip() or len(password) > 128:
+        return False, "reg_pw_short"
+    try:
+        phone = normalize_registration_phone(phone, dial_code)
+    except ValueError:
+        return False, "reg_phone_invalid"
     try:
         password_hash = hash_password(password)
         store = _accounts_store()
@@ -997,7 +1174,7 @@ def create_user(first_name: str, last_name: str, email: str, birth_date: date,
         return False, "auth_db_error"
 
 
-def update_user_profile(email, marital_status, country, dial_code, phone, confirmed_type=None):
+def update_user_profile(email, marital_status, country, dial_code, phone, confirmed_type=None, profile_photo=None):
     """Persist allowed profile changes; type can only move from unknown to known."""
     if marital_status not in MARITAL_STATUS_ORDER or not country.strip():
         return None
@@ -1017,11 +1194,19 @@ def update_user_profile(email, marital_status, country, dial_code, phone, confir
             row["diabetes_type"] = confirmed_type
         row.update(marital_status=marital_status, country=country.strip(),
                    dial_code=dial_code, phone=phone)
+        if profile_photo is not None:
+            row["profile_photo"] = profile_photo
         _save_rows(rows)
         return dict(row)
 
 
 def authenticate(email: str, password: str):
+    # Serialize the read/modify/write sequence across Streamlit sessions.
+    with _accounts_store()["lock"]:
+        return _authenticate_locked(email, password)
+
+
+def _authenticate_locked(email: str, password: str):
     email = normalize_email(email)
     now = datetime.now()
 
@@ -1041,6 +1226,9 @@ def authenticate(email: str, password: str):
             email, failed_attempts=0, locked_until="",
             last_login=now.isoformat(timespec="seconds"),
         )
+        if not row.get("patient_id"):
+            row["patient_id"] = generate_patient_id()
+            _update_account(email, patient_id=row["patient_id"])
         log_action(row["id"], "login", f"email={email}")
         return {
             "id": row["id"],
@@ -1055,6 +1243,7 @@ def authenticate(email: str, password: str):
             "country": row.get("country", ""),
             "dial_code": row.get("dial_code", ""),
             "phone": row.get("phone", ""),
+            "profile_photo": row.get("profile_photo", ""),
             "must_change_password": int(row.get("must_change_password", 0)),
         }, "ok"
 
@@ -3212,8 +3401,14 @@ def inject_auth_css():
 
 
 @contextmanager
-def auth_card(title: str, subtitle: str):
+def auth_card(title: str, subtitle: str, compact: bool = False):
     inject_auth_css()
+    if compact:
+        with st.container(key="registration_card"):
+            with st.container(key="auth_right"):
+                st.caption(subtitle)
+                yield
+        return
     with st.container(key="auth_card"):
         left, right = st.columns(2, gap="small")
         with left:
@@ -3325,45 +3520,20 @@ def age_from_birth_date(value):
 
 
 def generate_patient_id() -> str:
-    """Return a unique patient ID in the format YYMMDDNN.
-
-    Counts today's patients in BOTH accounts.xlsx and saved_reports.xlsx,
-    so the same number is never reused in either file.
-    """
-    today = date.today()
-    prefix = f"{today.year % 100:02d}{today.month:02d}{today.day:02d}"
-
-    used = set()
-
-    # Count in accounts.xlsx
-    if os.path.exists(ACCOUNTS_FILE):
-        try:
-            existing = pd.read_excel(ACCOUNTS_FILE, engine="openpyxl")
-            if "Patient ID" in existing.columns:
-                for value in existing["Patient ID"].dropna().astype(str):
-                    value = value.strip()
-                    if value.startswith(prefix) and len(value) >= 10:
-                        used.add(value)
-        except Exception:
-            pass
-
-    # Count in saved_reports.xlsx
+    """Allocate the next YYMMDD sequence, including IDs already used in reports."""
+    prefix = date.today().strftime("%y%m%d")
+    used = {str(r.get("patient_id", "")).strip() for r in _load_rows()}
     if os.path.exists(SAVE_FILE_XLSX):
-        try:
-            existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl")
-            if "Patient ID" in existing.columns:
-                for value in existing["Patient ID"].dropna().astype(str):
-                    value = value.strip()
-                    if value.startswith(prefix) and len(value) >= 10:
-                        used.add(value)
-        except Exception:
-            pass
-
-    count_today = len(used)
-    next_num = count_today + 1
-    if next_num > 99:
-        return f"{prefix}{next_num:03d}"
-    return f"{prefix}{next_num:02d}"
+        # A read failure must stop creation instead of silently reusing an ID.
+        existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl", dtype=str)
+        if "Patient ID" in existing.columns:
+            used.update(existing["Patient ID"].dropna().str.strip())
+    sequences = []
+    for value in used:
+        value = re.sub(r"\.0$", "", value)
+        if value.startswith(prefix) and value[len(prefix):].isdigit():
+            sequences.append(int(value[len(prefix):]))
+    return f"{prefix}{max(sequences, default=0) + 1:02d}"
 
 
 def _build_birth_date(day, month, year):
@@ -3376,78 +3546,136 @@ def _build_birth_date(day, month, year):
     return born if date(1900, 1, 1) <= born < date.today() else None
 
 
+T.setdefault("en", {}).update({"reg_phone_invalid": "Enter a valid phone number matching the selected country."})
+T.setdefault("ar", {}).update({"reg_phone_invalid": "أدخل رقم هاتف صحيحًا يطابق البلد المختار."})
+T.setdefault("en", {}).update({"welcome_new":"Create your account", "welcome_new_sub":"Enter your details to start your screening.", "reg_title":"Patient registration", "reg_button":"Create account", "auth_registered":"Sign in", "auth_new":"Create account", "auth_confirm_password":"Confirm password", "reg_accept":"I have read and agree to the notice above.", "reg_warn_title":"Password and account access", "reg_warn_text":"Use a password of at least 8 characters and keep it safe. If you forget it, contact support to request a reset. This app provides educational screening and does not diagnose diabetes."})
+T.setdefault("ar", {}).update({"welcome_new":"إنشاء حساب جديد", "welcome_new_sub":"أدخل بياناتك لبدء التقييم.", "reg_title":"تسجيل بيانات المريض", "reg_button":"إنشاء الحساب", "auth_registered":"تسجيل الدخول", "auth_new":"إنشاء حساب", "auth_confirm_password":"تأكيد كلمة المرور", "reg_accept":"قرأت التنبيه أعلاه وأوافق عليه.", "reg_warn_title":"كلمة المرور والوصول إلى الحساب", "reg_warn_text":"استخدم كلمة مرور من 8 أحرف على الأقل واحتفظ بها في مكان آمن. إذا نسيتها، تواصل مع الدعم لطلب إعادة تعيينها. التطبيق للتقييم التوعوي ولا يشخّص مرض السكري."})
+
 def render_register_page():
-    with auth_card(tr("welcome_new"), tr("welcome_new_sub")):
+    if st.session_state.pop("clear_registration_fields", False):
+        for key in ("reg_first", "reg_last", "reg_email", "reg_gender", "reg_marital",
+                    "reg_year", "reg_month", "reg_day", "reg_diabetes_type", "reg_country",
+                    "reg_phone", "reg_pw", "reg_pw2", "reg_accept"):
+            st.session_state.pop(key, None)
+    with auth_card(tr("welcome_new"), tr("welcome_new_sub"), compact=True):
         _form_title(tr("reg_title"))
 
+        st.markdown("""<style>
+        .stApp .st-key-registration_card {max-width:760px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:22px;overflow:hidden;}
+        .stApp .st-key-registration_card .st-key-auth_right {min-height:0 !important;}
+        .stApp .st-key-register_form {padding:0 !important;}
+        .stApp .st-key-register_form [data-testid="stElementContainer"]:has([data-testid="stMarkdownContainer"]:empty) {display:none;}
+        .stApp .st-key-register_form [data-testid="stMarkdownContainer"] p {margin:0 !important;}
+        .stApp .st-key-register_form div[data-baseweb="select"] {min-height:46px !important;}
+        .stApp .st-key-register_form [data-testid="stCheckbox"] label {align-items:flex-start;}
+        .stApp .st-key-register_form [data-testid="stCheckbox"] p {line-height:1.5 !important;}
+        .stApp .st-key-registration_card .support-card {margin-top:0 !important;}
+        .stApp .st-key-register_form .reg-section {text-align:start;}
+        .stApp .st-key-register_form input {height:46px;box-sizing:border-box;}
+        .stApp .st-key-register_form [data-testid="stVerticalBlock"] {gap:14px !important;}
+        .stApp .st-key-register_form [data-testid="stHorizontalBlock"] {gap:16px !important;}
+        .stApp .st-key-register_form [data-testid="stWidgetLabel"] {min-height:unset !important;margin:0 0 6px !important;}
+        .stApp .st-key-register_form [data-testid="stWidgetLabel"] p {font-size:.9rem !important;line-height:1.4 !important;font-weight:600 !important;}
+        .stApp .st-key-register_form div[data-baseweb="input"],
+        .stApp .st-key-register_form [data-testid="stTextInputRootElement"],
+        .stApp .st-key-register_form div[data-baseweb="select"] > div {min-height:46px !important;border-radius:12px !important;}
+        .stApp .st-key-register_form input {font-size:.95rem !important;line-height:1.4 !important;padding:10px 12px !important;}
+        .stApp .st-key-register_form button {min-height:46px !important;border-radius:12px !important;}
+        .stApp .st-key-register_form .reg-section {display:flex;align-items:center;gap:10px;border-top:1px solid var(--border);padding-top:18px;margin:8px 0 0;}
+        .stApp .st-key-register_form .reg-section-first {border:0;padding-top:2px;margin-top:0;}
+        .stApp .st-key-register_form .reg-step {display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;flex:0 0 26px;border-radius:8px;background:rgba(59,130,246,.13);color:var(--text);font-size:.75rem;font-weight:700;}
+        .stApp .st-key-register_form .reg-section-title {font-size:1rem;font-weight:700;line-height:1.4;color:var(--text);}
+        .stApp .st-key-register_form .reg-field-title {font-size:.9rem;font-weight:600;margin:0;line-height:1.4;color:var(--text);}
+        .stApp .st-key-register_form .notice {padding:14px 16px !important;margin:4px 0 0 !important;border-radius:12px !important;line-height:1.6 !important;font-size:.85rem !important;}
+        .stApp .st-key-auth_right:has(.st-key-register_form) {gap:14px !important;padding:32px !important;justify-content:flex-start !important;}
+        .stApp .st-key-auth_right:has(.st-key-register_form) .auth-form-title {font-size:1.5rem;margin-bottom:0 !important;line-height:1.3;}
+        @media(max-width:640px) {
+          .stApp .st-key-auth_right:has(.st-key-register_form) {padding:22px 16px !important;}
+          .stApp .st-key-register_form [data-testid="stHorizontalBlock"] {gap:12px !important;}
+          .stApp .st-key-register_form .reg-section {padding-top:16px;}
+        }
+        </style>""", unsafe_allow_html=True)
+        def registration_section(number, key):
+            first_class = " reg-section-first" if number == 1 else ""
+            st.markdown(f'<div class="reg-section{first_class}"><span class="reg-step">{number:02}</span><span class="reg-section-title">{html_escape(edit_text(key))}</span></div>', unsafe_allow_html=True)
         this_year = date.today().year
-        with st.form("register_form", clear_on_submit=False):
+        with st.container(key="register_form"):
+            st.caption(edit_text("required"))
+            is_ar = st.session_state.get("lang") == "ar"
+            registration_section(1, "personal")
             c1, c2 = st.columns(2)
             with c1:
                 first_name = st.text_input(f"{tr('first_name')} *", key="reg_first", max_chars=60)
             with c2:
                 last_name = st.text_input(f"{tr('last_name')} *", key="reg_last", max_chars=60)
 
-            email = st.text_input(f"{tr('auth_email')} *", key="reg_email", max_chars=254)
+            email = st.text_input(f"{tr('auth_email')} *", key="reg_email", max_chars=254, placeholder="name@example.com")
 
-            gender_reg = st.selectbox(
-                f"{tr('gender')} *",
-                GENDER_OPTIONS,
-                format_func=gender_label,
-                key="reg_gender",
-            )
-            marital_status_reg = st.selectbox(
-                f"{tr('marital_status')} *",
-                MARITAL_STATUS_ORDER,
-                format_func=lambda k: marital_status_label(k, gender_reg),
-                key="reg_marital",
-            )
-
+            gender_col, marital_col = st.columns(2)
+            with gender_col:
+                gender_reg = st.selectbox(
+                    f"{tr('gender')} *",
+                    GENDER_OPTIONS, index=None, placeholder=tr("gender"),
+                    format_func=gender_label,
+                    key="reg_gender",
+                )
+            with marital_col:
+                marital_status_reg = st.selectbox(
+                    f"{tr('marital_status')} *",
+                    MARITAL_STATUS_ORDER, index=None, placeholder=tr("marital_status"),
+                    format_func=lambda k: marital_status_label(k, gender_reg or "Male"),
+                    key="reg_marital",
+                )
             st.markdown(
-                f'<div class="section-title" style="font-size:.95rem">{tr("dob")} *</div>',
+                f'<div class="reg-field-title">{tr("dob")} *</div>',
                 unsafe_allow_html=True,
             )
             d1, d2, d3 = st.columns(3)
-            with d1:
-                day = st.selectbox(
-                    tr("dob_day"), list(range(1, 32)), index=None,
-                    placeholder=tr("dob_choose"), key="reg_day",
+            with d3:
+                year = st.selectbox(
+                    tr("dob_year"), list(range(this_year, 1899, -1)), index=None,
+                    placeholder=tr("dob_year"), key="reg_year",
                 )
             with d2:
                 month = st.selectbox(
                     tr("dob_month"), list(range(1, 13)), index=None, format_func=month_label,
-                    placeholder=tr("dob_choose"), key="reg_month",
+                    placeholder=tr("dob_month"), key="reg_month",
                 )
-            with d3:
-                year = st.selectbox(
-                    tr("dob_year"), list(range(this_year, 1899, -1)), index=None,
-                    placeholder=tr("dob_choose"), key="reg_year",
+            max_day = calendar.monthrange(year or 2000, month or 1)[1]
+            if st.session_state.get("reg_day") is not None and st.session_state["reg_day"] > max_day:
+                st.session_state["reg_day"] = None
+            with d1:
+                day = st.selectbox(
+                    tr("dob_day"), list(range(1, max_day + 1)), index=None,
+                    placeholder=tr("dob_day"), key="reg_day",
                 )
 
+            registration_section(2, "health")
             diabetes_type_reg = st.selectbox(
-                f"{tr('diabetes_type')} *", DIABETES_TYPE_KEYS,
-                format_func=diabetes_type_label, key="reg_diabetes_type",
+                ("Doctor-confirmed diabetes type *" if st.session_state["lang"] != "ar" else "نوع السكري المؤكّد من الطبيب *"), DIABETES_TYPE_KEYS,
+                format_func=diabetes_type_label, index=None,
+                placeholder="Select an option" if not is_ar else "اختر الخيار المناسب",
+                key="reg_diabetes_type",
             )
 
+            registration_section(3, "contact")
             country_choice = st.selectbox(
                 f"{registration_text(0)} *", COUNTRY_DIAL_CODES,
                 index=COUNTRY_DIAL_CODES.index(("🇺🇬", "Uganda", "+256")),
                 format_func=lambda item: f"{item[0]} {item[1]}",
                 key="reg_country",
             )
-            dial_choice = st.selectbox(
-                f"{registration_text(1)} *", COUNTRY_DIAL_CODES,
-                index=COUNTRY_DIAL_CODES.index(("🇺🇬", "Uganda", "+256")),
-                format_func=lambda item: f"{item[0]} {item[1]} ({item[2]})",
-                key="reg_dial_code",
-            )
+            dial_choice = country_choice
             phone_reg = st.text_input(
-                f"{registration_text(2)} *", key="reg_phone", max_chars=24,
+                f"{registration_text(2)} ({dial_choice[2]}) *", key="reg_phone", max_chars=24,
                 placeholder="771234567",
+                help="Enter your local number. The country code is added automatically." if st.session_state["lang"] != "ar" else "أدخل الرقم المحلي. يُضاف مفتاح البلد تلقائيًا.",
             )
 
+            registration_section(4, "security")
             password = st.text_input(
-                f"{tr('auth_password')} *", type="password", key="reg_pw", max_chars=128
+                f"{tr('auth_password')} *", type="password", key="reg_pw", max_chars=128,
+                help="Use at least 8 characters." if st.session_state["lang"] != "ar" else "استخدم 8 أحرف على الأقل."
             )
             password2 = st.text_input(
                 f"{tr('auth_confirm_password')} *", type="password", key="reg_pw2", max_chars=128
@@ -3456,7 +3684,7 @@ def render_register_page():
             st.markdown(
                 f"""
                 <div class="notice">
-                    <strong>⚠️ {tr('reg_warn_title')}</strong><br>
+                    <strong>{tr('reg_warn_title')}</strong><br>
                     {tr('reg_warn_text')}
                 </div>
                 """,
@@ -3464,35 +3692,37 @@ def render_register_page():
             )
             accepted = st.checkbox(tr("reg_accept"), key="reg_accept")
 
-            submitted = st.form_submit_button(
+            submitted = st.button(
                 f"{tr('reg_button')}", type="primary", use_container_width=True
             )
 
         if submitted:
-            clean_first = first_name.strip()
-            clean_last = last_name.strip()
+            clean_first = normalize_person_name(first_name)
+            clean_last = normalize_person_name(last_name)
             clean_email = normalize_email(email)
             birth = _build_birth_date(day, month, year)
             dob_chosen = day is not None and month is not None and year is not None
             clean_country = country_choice[1]
-            local_phone = re.sub(r"[\s()\-]", "", phone_reg.strip())
-            if local_phone.startswith("0"):
-                local_phone = local_phone.lstrip("0")
-            full_phone = dial_choice[2] + local_phone
-
             errors = []
+            full_phone = ""
             if not (clean_first and clean_last and clean_email and dob_chosen
                     and password and password2 and gender_reg and marital_status_reg
                     and clean_country and phone_reg.strip() and diabetes_type_reg):
                 errors.append(tr("reg_fill_all"))
-            if phone_reg.strip() and (not local_phone.isascii() or not local_phone.isdigit()
-                                      or not 6 <= len(full_phone.lstrip("+")) <= 15):
-                errors.append(registration_text(3))
+            for value, label in ((clean_first, tr("first_name")), (clean_last, tr("last_name"))):
+                if value and not valid_person_name(value):
+                    errors.append(f"{label}: " + ("Enter a name using letters, spaces, apostrophes or hyphens."
+                                                if not is_ar else "أدخل اسمًا صحيحًا باستخدام الحروف."))
+            if phone_reg.strip():
+                try:
+                    full_phone = normalize_registration_phone(phone_reg, dial_choice[2])
+                except ValueError:
+                    errors.append(registration_text(3))
             if clean_email and not EMAIL_REGEX.match(clean_email):
                 errors.append(tr("reg_email_invalid"))
             if dob_chosen and birth is None:
                 errors.append(tr("reg_dob_invalid"))
-            if password and len(password) < MIN_PASSWORD_LEN:
+            if password and (len(password) < MIN_PASSWORD_LEN or not password.strip()):
                 errors.append(tr("reg_pw_short"))
             if password and password2 and password != password2:
                 errors.append(tr("reg_pw_mismatch"))
@@ -3509,9 +3739,18 @@ def render_register_page():
                     clean_country, dial_choice[2], full_phone
                 )
                 if ok:
-                    user, _status = authenticate(clean_email, password)
-                    st.session_state["user"] = user
-                    go_to("main")
+                    try:
+                        user, status = authenticate(clean_email, password)
+                    except Exception:
+                        user, status = None, "error"
+                    if user is not None and status == "ok":
+                        st.session_state["user"] = user
+                        st.session_state["clear_registration_fields"] = True
+                        go_to("main")
+                    else:
+                        st.success("Account created. Please sign in."
+                                   if not is_ar else "تم إنشاء الحساب. يرجى تسجيل الدخول.")
+                        st.session_state["clear_registration_fields"] = True
                 else:
                     st.error(tr(error_key))
 
@@ -3688,7 +3927,7 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str 
             if col == "Polyuria" and freq_key:
                 label = f"{label} ({tr(freq_key, lang)})"
             core_yes.append(label)
-    extra_yes = [tr(key, lang) for key in extra_symptom_keys if extra_values.get(key) == "Yes"]
+    extra_yes = [tr(key, lang) for key in REPORT_EXTRA_KEYS if extra_values.get(key) == "Yes"]
     extra_yes += [tr(key, lang) for key, value in (gender_values or {}).items() if value == "Yes"]
 
     if not core_yes and not extra_yes:
@@ -3712,7 +3951,7 @@ def build_symptom_narrative(symptom_values: dict, extra_values: dict, lang: str 
 def build_report(lang, timestamp, first, last, phone, address, type_key,
                  age, gender, result, probability, symptom_values, extra_values,
                  gender_values=None, freq_key=None, marital_status_key=None,
-                 birth_sex=None, glucose=None, patient_id="") -> dict:
+                 birth_sex=None, glucose=None, patient_id="", patient_notes="") -> dict:
     """Build the report dictionary in the requested language."""
     gender_values = gender_values or {}
     any_extra = any(v == "Yes" for v in extra_values.values()) or any(
@@ -3750,6 +3989,7 @@ def build_report(lang, timestamp, first, last, phone, address, type_key,
             f"{tr(key, lang)}: {tr(value.lower(), lang)}"
             for key, value in extra_values.items() if key in TYPE_QUESTION_TEXT["en"]
         ),
+        "Patient notes": str(patient_notes or "").strip(),
         "Symptom narrative": build_symptom_narrative(
             symptom_values, extra_values, lang, gender_values=gender_values, freq_key=freq_key
         ),
@@ -3964,353 +4204,180 @@ def _font_file(script: str, bold: bool):
 
 
 def pick_pdf_language(lang: str) -> str:
-    if lang == "en":
-        return "en"
-
-    script = LANG_SCRIPT.get(lang, "latin")
-    if script in ("arabic", "devanagari") and not SHAPING_OK:
-        return "en"
-
-    for needed in {"latin", script}:
-        for bold in (False, True):
-            if not _font_file(needed, bold):
-                return "en"
+    # Reports use the language of the saved assessment, with English field labels.
     return lang
 
 
-def _rgb(color):
-    return color[0], color[1], color[2]
-
-
-def generate_pdf_report(report_data: dict, lang: str = "en", is_high: bool = False,
-                        symptoms: dict = None) -> bytes:
-    best = None
-    for level in (0, 1, 2):
-        data, pages = _render_pdf_report(report_data, lang, is_high, symptoms, level)
-        if pages <= 1:
-            return data
-        if best is None or pages < best[1]:
-            best = (data, pages)
-    return best[0]
-
-
-def _render_pdf_report(report_data: dict, lang: str, is_high: bool,
-                       symptoms, level: int = 0):
-    rtl = is_rtl(lang)
-
-    def t(key):
-        return tr(key, lang)
-
-    core_texts, extra_texts, gender_texts = [], [], []
-    gender_head = ""
-    if symptoms:
-        for c in symptoms.get("core", []):
-            if c not in display_labels:
-                continue
-            label = t(display_labels[c])
-            if c == "Polyuria" and symptoms.get("freq"):
-                label = f"{label}\n{t(symptoms['freq'])}"
-            core_texts.append(label)
-        extra_texts = [t(k) for k in symptoms.get("extra", []) if k in extra_symptom_keys]
-        kind = symptoms.get("gender_kind")
-        if symptoms.get("is_child"):
-            g_keys = child_question_keys(kind)
-            gender_head = t("child_section")
-        elif kind == "Transgender":
-            g_keys = TRANS_SYMPTOM_KEYS
-            gender_head = t("trans_section")
-        else:
-            g_keys = MALE_SYMPTOM_KEYS if kind == "Male" else FEMALE_SYMPTOM_KEYS
-            gender_head = t("male_section" if kind == "Male" else "female_section")
-        gender_texts = [t(k) for k in symptoms.get("gender", []) if k in g_keys]
-
-    values = [str(v) for v in report_data.values()]
-    texts = values + core_texts + extra_texts + gender_texts + [gender_head] + [
-        t(k)
-        for k in (
-            "pdf_title", "pdf_generated", "pdf_patient", "pdf_name", "pdf_age_gender",
-            "phone", "marital_status", "glucose_level", "pdf_address", "pdf_type", "pdf_clinical",
-            "pdf_assessment", "pdf_risk", "probability", "pdf_extra",
-            "pdf_disclaimer_label", "pdf_disclaimer", "medical_notice", "brand",
-            "no_core",
-        )
+def _report_font():
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.fonts import addMapping
+    if "ReportRegular" in pdfmetrics.getRegisteredFontNames():
+        return "ReportRegular"
+    paths = [
+        (os.path.join("fonts", "DejaVuSans.ttf"), os.path.join("fonts", "DejaVuSans-Bold.ttf")),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        (os.path.join("fonts", "NotoSans-Regular.ttf"), os.path.join("fonts", "NotoSans-Bold.ttf")),
+        (os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts", "arial.ttf"),
+         os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts", "arialbd.ttf")),
     ]
-    blob = " ".join(texts)
-
-    main_script = LANG_SCRIPT.get(lang, "latin")
-    scripts = {"latin", main_script}
-    for name, rx in SCRIPT_REGEX.items():
-        if rx.search(blob):
-            scripts.add(name)
-
-    pdf = _ReportPDF(rtl=rtl)
-    families = {}
-    for script in sorted(scripts):
-        regular = _font_file(script, False)
-        bold = _font_file(script, True)
-        if not (regular and bold):
-            continue
-        family = PDF_FONTS[script][0]
-        pdf.add_font(family, "", regular)
-        pdf.add_font(family, "B", bold)
-        families[script] = family
-
-    unicode_ok = "latin" in families
-    if not unicode_ok:
-        base_font = "helvetica"
-    else:
-        base_font = families.get(main_script, families["latin"])
-        fallbacks = [f for s, f in families.items() if f != base_font]
-        if fallbacks:
-            pdf.set_fallback_fonts(fallbacks, exact_match=True)
-
-    if SHAPING_OK and unicode_ok:
-        pdf.set_text_shaping(True)
-
-    def safe(text):
-        text = str(text)
-        return text if unicode_ok else text.encode("latin-1", "replace").decode("latin-1")
-
-    wrap = "CHAR" if lang == "zh" else "WORD"
-    align = "R" if rtl else "L"
-
-    pdf.base_font = base_font
-    pdf.footer_notice = safe(t("medical_notice"))
-    pdf.footer_brand = safe(t("brand"))
-    pdf.set_auto_page_break(True, margin=26)
-    pdf.set_margins(14, 14, 14)
-    pdf.alias_nb_pages()
-    pdf.add_page()
-
-    page_w = pdf.w
-    left = pdf.l_margin
-    width = page_w - pdf.l_margin - pdf.r_margin
-    right = left + width
-
-    if level >= 2:
-        band_h, after_band, card_h = 27, 4, 34
-        sec_top, sec_after = 2.5, 7
-        row_extra, card_pad = 2.8, 3.2
-        pill_min, pill_gap_y, pill_pad_v, pill_size, pill_lh = 6.4, 1.4, 2.2, 8.2, 3.9
-        head_h, head_size, sep = 4.6, 8.2, 4.2
-        dis_gap, dis_size, dis_lh = 3, 7.8, 4.0
-    elif level == 1:
-        band_h, after_band, card_h = 30, 5, 35
-        sec_top, sec_after = 3.2, 7.5
-        row_extra, card_pad = 3.2, 3.8
-        pill_min, pill_gap_y, pill_pad_v, pill_size, pill_lh = 6.8, 1.6, 2.4, 8.5, 4.1
-        head_h, head_size, sep = 4.8, 8.5, 4.6
-        dis_gap, dis_size, dis_lh = 3.5, 8.0, 4.2
-    else:
-        band_h, after_band, card_h = 34, 8, 37
-        sec_top, sec_after = 5.5, 9
-        row_extra, card_pad = 4.3, 5
-        pill_min, pill_gap_y, pill_pad_v, pill_size, pill_lh = 8.0, 2.4, 2.8, 8.8, 4.4
-        head_h, head_size, sep = 5.5, 8.8, 6.5
-        dis_gap, dis_size, dis_lh = 6, 8.6, 4.7
-
-    def font(style="", size=10, color=C_TEXT):
-        pdf.set_font(base_font, style, size)
-        pdf.set_text_color(*_rgb(color))
-
-    def measure(text, w, size, style="", lh=5.4):
-        font(style, size)
-        lines = pdf.multi_cell(
-            w, lh, safe(text), align=align, wrapmode=wrap, dry_run=True, output="LINES"
-        )
-        return max(1, len(lines)) * lh
-
-    def put(text, x, y, w, size=10, style="", color=C_TEXT, lh=5.4, text_align=None):
-        font(style, size, color)
-        pdf.set_xy(x, y)
-        pdf.multi_cell(
-            w, lh, safe(text), align=text_align or align, wrapmode=wrap,
-            new_x="LEFT", new_y="NEXT",
-        )
-        return pdf.get_y() - y
-
-    def box(x, y, w, h, fill, border=None, radius=3.0, line=0.3):
-        pdf.set_fill_color(*_rgb(fill))
-        if border:
-            pdf.set_draw_color(*_rgb(border))
-            pdf.set_line_width(line)
-            style = "DF"
-        else:
-            style = "F"
-        pdf.rect(x, y, w, h, style=style, round_corners=True, corner_radius=radius)
-
-    def ensure(height):
-        if pdf.get_y() + height > pdf.h - 26:
-            pdf.add_page()
-            pdf.set_y(16)
-
-    def section(title, need=0):
-        ensure(sec_top + sec_after + 4 + need)
-        y = pdf.get_y() + sec_top
-        bar_x = right - 1.6 if rtl else left
-        pdf.set_fill_color(*_rgb(C_BLUE))
-        pdf.rect(bar_x, y, 1.6, 6, style="F")
-        text_x = left if rtl else left + 4.5
-        put(title, text_x, y + 0.2, width - 4.5, size=12.5, style="B", color=C_NAVY, lh=6)
-        pdf.set_y(y + sec_after)
-
-    # Print-friendly clinical layout. Repeated header on continuation pages.
-    ar = lang == "ar"
-    def copy(en, arabic):
-        return arabic if ar else en
-
-    timestamp = str(report_data.get("Timestamp") or "")
-    date_part, _, time_part = timestamp.partition(" ")
-    def report_header():
-        pdf.set_fill_color(255, 255, 255)
-        pdf.rect(0, 0, page_w, 47, style="F")
-        logo_size = 21
-        logo_x = right - logo_size if rtl else left
-        text_x = right - logo_size - 5 - 104 if rtl else left + logo_size + 5
-        has_logo = os.path.exists(LOGO_PATH)
-        if has_logo:
-            try:
-                pdf.image(LOGO_PATH, x=logo_x, y=12, w=logo_size, h=logo_size)
-            except Exception:
-                has_logo = False
-        if not has_logo:
-            # A clear brand monogram when a logo file has not been provided.
-            box(logo_x, 12, logo_size, logo_size, C_NAVY, radius=2)
-            put("PP", logo_x, 18, logo_size, size=17, style="B", color=(255,255,255), text_align="C")
-        put("PERDIAPREDICT", text_x, 12, 104, size=18, style="B", color=C_NAVY, lh=8)
-        put(t("pdf_title"), text_x, 22, 104, size=9, color=C_MUTED, lh=4.5)
-        put(copy("Educational screening report", "تقرير فحص تعليمي"), text_x, 33, 104, size=8, color=C_MUTED, lh=4)
-        stamp_x = left if rtl else right - 47
-        stamp_align = "L" if rtl else "R"
-        put(copy("Assessment date", "تاريخ الفحص"), stamp_x, 12, 47, size=7.5, color=C_MUTED, lh=4, text_align=stamp_align)
-        put(date_part or "-", stamp_x, 16.5, 47, size=10, style="B", lh=5, text_align=stamp_align)
-        put(copy("Assessment time", "وقت الفحص"), stamp_x, 25, 47, size=7.5, color=C_MUTED, lh=4, text_align=stamp_align)
-        put(time_part or "-", stamp_x, 29.5, 47, size=10, style="B", lh=5, text_align=stamp_align)
-        pdf.set_draw_color(18, 115, 130)
-        pdf.set_line_width(.8)
-        pdf.line(left, 43, right, 43)
-        pdf.set_y(49)
-
-    pdf.header = report_header
-    pdf.set_margins(14, 49, 14)
-    report_header()
-
-    def ensure(height):
-        if pdf.get_y() + height > pdf.h - 26:
-            pdf.add_page()
-            pdf.set_y(49)
-
-    def section(title, need=0):
-        ensure(12 + need)
-        y = pdf.get_y() + 3
-        box(left, y, width, 8, (237,243,246), radius=.5)
-        put(title, left + 3, y + 1.2, width - 6, size=10, style="B", color=C_NAVY, lh=5.5)
-        pdf.set_y(y + 11)
-
-    def table(rows):
-        for row in rows:
-            cell_w = width / len(row)
-            heights = [5 + measure(value or "-", cell_w - 6, 10, "B", 5) + 5 for label,value in row]
-            h = max(heights)
-            ensure(h)
-            y = pdf.get_y()
-            pdf.set_draw_color(*_rgb(C_BORDER))
-            pdf.set_line_width(.2)
-            pdf.rect(left, y, width, h)
-            for index,(label,value) in enumerate(row):
-                slot = len(row)-1-index if rtl else index
-                x = left + slot * cell_w
-                if slot:
-                    pdf.line(x, y, x, y+h)
-                put(label, x+3, y+2, cell_w-6, size=7.8, color=C_MUTED, lh=4)
-                put(value or "-", x+3, y+7, cell_w-6, size=10, style="B", lh=5)
-            pdf.set_y(y+h)
-
-    def paragraph(text, size=9.5, color=C_TEXT):
-        text = str(text or "-")
-        font("", size, color)
-        pdf.set_x(left+2)
-        pdf.multi_cell(width-4, 5.2, safe(text), align=align, wrapmode=wrap, new_x="LEFT", new_y="NEXT")
-        pdf.ln(2)
-
-    name = f"{report_data.get('First name', '')} {report_data.get('Last name', '')}".strip()
-    section(t("pdf_patient"), 45)
-    rows = [
-        [(copy("Patient ID", "رقم المريض"), str(report_data.get("Patient ID", ""))), (t("pdf_name"),name)],
-        [(t("pdf_age_gender"), f"{report_data.get('Age', '')} / {report_data.get('Gender', '')}"), (t("marital_status"),str(report_data.get("Marital status", "")))],
-        [(t("phone"),str(report_data.get("Phone", ""))), (t("pdf_address"),str(report_data.get("Country", "")))],
-    ]
-    table(rows)
-
-    section(t("pdf_assessment"), 35)
-    accent = C_RED if is_high else (18,115,90)
-    y=pdf.get_y()
-    box(left, y, width, 18, (247,250,251), C_BORDER, radius=.5)
-    result_x = left + width/2 if rtl else left+3
-    score_x = left+3 if rtl else left+width/2
-    put(t("pdf_risk"), result_x, y+2, width/2-6, size=7.8, color=C_MUTED, lh=4)
-    put(report_data.get("Result", "-"),result_x,y+7,width/2-6,size=11,style="B",color=accent,lh=6)
-    put(t("probability"),score_x,y+2,width/2-6,size=7.8,color=C_MUTED,lh=4)
-    put(report_data.get("Probability", "-"),score_x,y+7,width/2-6,size=14,style="B",color=accent,lh=6)
-    pdf.set_y(y+18)
-    table([[(t("pdf_type"),str(report_data.get("Reported diabetes type", ""))), (t("glucose_level"),str(report_data.get("Glucose level") or copy("Not recorded", "غير مسجل")))]])
-
-    section(t("pdf_clinical"), 16)
-    # Keep the narrative even when symptom pills were formerly displayed.
-    paragraph(report_data.get("Symptom narrative", ""))
-    selected = core_texts + extra_texts + gender_texts
-    if selected:
-        paragraph(copy("Reported symptoms: ", "الأعراض المبلغ عنها: ") + "; ".join(selected))
-    if report_data.get("Type-specific answers"):
-        paragraph(report_data["Type-specific answers"], size=8.8)
-
-    section(copy("Model information", "معلومات النموذج"), 16)
-    table([[ (copy("Model version", "إصدار النموذج"),str(report_data.get("Model version") or copy("Not recorded", "غير مسجل"))),
-             (copy("Decision threshold", "عتبة القرار"),str(report_data.get("Decision threshold") or copy("Not recorded", "غير مسجل"))) ]])
-    if report_data.get("Probability method"):
-        pdf.ln(2)
-        paragraph(copy("Probability method: ", "طريقة حساب النسبة: ") + str(report_data["Probability method"]), size=8)
-
-    section(t("pdf_disclaimer_label"), 18)
-    paragraph(t("pdf_disclaimer"),size=8.5,color=C_MUTED)
-
-    return bytes(pdf.output()), pdf.page_no()
+    for regular, bold in paths:
+        if os.path.isfile(regular) and os.path.isfile(bold):
+            pdfmetrics.registerFont(TTFont("ReportRegular", regular))
+            pdfmetrics.registerFont(TTFont("ReportBold", bold))
+            addMapping("ReportRegular", 1, 0, "ReportBold")
+            return "ReportRegular"
+    # English reports can still be generated without external font downloads.
+    return "Helvetica"
 
 
-class _ReportPDF(FPDF):
-    def __init__(self, rtl: bool = False):
-        super().__init__(orientation="P", unit="mm", format="A4")
-        self.rtl = rtl
-        self.base_font = "helvetica"
-        self.footer_notice = ""
-        self.footer_brand = "PerdiaPredict"
+def _report_paragraph(value, style):
+    from reportlab.platypus import Paragraph
+    value = str(value or "Not recorded")
+    value = "".join(c for c in value if c in "\n\t" or ord(c) >= 32)
+    if re.search(r"[\u0600-\u06ff]", value):
+        try:
+            import arabic_reshaper
+            from bidi.algorithm import get_display
+            value = "\n".join(get_display(arabic_reshaper.reshape(line)) for line in value.split("\n"))
+        except ImportError as exc:
+            raise RuntimeError("Arabic PDF text requires arabic-reshaper and python-bidi.") from exc
+    if style.fontName == "Helvetica" and any(ord(c) > 255 for c in value):
+        raise RuntimeError("Install a Unicode font in fonts/ to include all patient text.")
+    return Paragraph(html_escape(value).replace("\n", "<br/>"), style)
 
-    def footer(self):
-        left = self.l_margin
-        right = self.w - self.r_margin
-        width = right - left
 
-        self.set_y(-21)
-        self.set_draw_color(*_rgb(C_BORDER))
-        self.set_line_width(0.3)
-        self.line(left, self.get_y(), right, self.get_y())
+def _medical_report_story(report, answers=None):
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Table, TableStyle, Spacer, KeepTogether
+    font = _report_font()
+    body = ParagraphStyle("ReportBody", fontName=font, fontSize=9, leading=13, spaceAfter=4,
+                          textColor=colors.HexColor("#243449"), splitLongWords=True)
+    label = ParagraphStyle("ReportLabel", parent=body, fontSize=8, leading=11, textColor=colors.HexColor("#64748b"))
+    heading = ParagraphStyle("ReportHeading", parent=body, fontSize=11, leading=16,
+                             textColor=colors.HexColor("#127382"), spaceBefore=10, spaceAfter=6, keepWithNext=True)
+    story=[]
+    def para(value, style=body): return _report_paragraph(value, style)
+    def section(title, content):
+        story.extend([para(title, heading), content])
+    def table(rows, widths):
+        obj=Table(rows, colWidths=widths, hAlign="LEFT")
+        obj.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"TOP"),
+                                ("BOX",(0,0),(-1,-1),.5,colors.HexColor("#dbe4eb")),
+                                ("INNERGRID",(0,0),(-1,-1),.3,colors.HexColor("#dbe4eb")),
+                                ("LEFTPADDING",(0,0),(-1,-1),10),("RIGHTPADDING",(0,0),(-1,-1),10),
+                                ("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6)]))
+        return obj
+    name=" ".join(str(report.get(k) or "") for k in ("First name","Last name"))
+    info=[[("Patient ID",report.get("Patient ID")),("Patient name",name)],
+          [("Age / Gender",f"{report.get('Age','')} / {report.get('Gender','')}"),("Marital status",report.get("Marital status"))],
+          [("Phone",report.get("Phone")),("Country",report.get("Country"))],
+          [("Assessment date",report.get("Timestamp")),("Recorded diabetes type",report.get("Reported diabetes type"))]]
+    section("PATIENT INFORMATION",table([[[para(k,label),para(v)] for k,v in row] for row in info],[255,255]))
+    score=history_score({"report":report})
+    threshold=float(report.get("Decision threshold") or .5)*100
+    accent="#b42318" if score is not None and score>=threshold else "#12735a"
+    score_style=ParagraphStyle("Score",parent=body,fontSize=22,leading=28,textColor=colors.HexColor(accent))
+    result=table([[[para("SCREENING RESULT",label),para(report.get("Result"))],
+                   [para("ESTIMATED RISK",label),para(report.get("Probability"),score_style)]]],[255,255])
+    result.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#f1f7f7"))]))
+    section("RISK ASSESSMENT",result)
+    story.append(para("Educational screening estimate. This result is not a medical diagnosis.",label))
+    if report.get("Glucose level"): story.append(para("Glucose reading: "+str(report["Glucose level"])))
+    section("REPORTED SYMPTOMS",para(report.get("Symptom narrative")))
+    if report.get("Type-specific answers"): story.append(para(report["Type-specific answers"]))
+    import textwrap
+    notes=str(report.get("Patient notes") or "No additional notes provided.")
+    note_chunks=[]
+    for line in notes.splitlines():
+        note_chunks.extend(textwrap.wrap(line,width=550,replace_whitespace=False,drop_whitespace=False) or [" "])
+    section("PATIENT NOTES / ADDITIONAL SYMPTOMS",para(note_chunks[0]))
+    story.extend(para(chunk) for chunk in note_chunks[1:])
+    if answers:
+        rows=[[para("Question",label),para("Answer",label)]]
+        rows += [[para(k),para(v)] for k,v in answers.items()]
+        detail=table(rows,[410,100]);detail.repeatRows=1
+        story.append(para("SCREENING ANSWERS",heading));story.append(detail)
+    section("RECOMMENDATION",para(tr("high_recommendation" if score is not None and score>=threshold else "low_recommendation","en")))
+    story.append(Spacer(1,8))
+    story.append(para("Model version: "+str(report.get("Model version") or "Not recorded"),label))
+    story.append(para("Patient notes and additional questions are included for reference and do not change the model score.",label))
+    return story
 
-        align = "R" if self.rtl else "L"
-        self.set_font(self.base_font, "", 7.2)
-        self.set_text_color(*_rgb(C_MUTED))
-        self.set_xy(left, self.get_y() + 1.8)
-        self.multi_cell(width, 3.5, self.footer_notice, align=align, new_x="LEFT", new_y="NEXT")
 
-        y = self.get_y() + 0.8
-        self.set_font(self.base_font, "B", 7.8)
-        self.set_text_color(*_rgb(C_BLUE))
-        self.set_xy(left + width / 2 if self.rtl else left, y)
-        self.cell(width / 2, 4, self.footer_brand, align="R" if self.rtl else "L")
+def _build_medical_pdf(reports):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, PageBreak
+    buffer=BytesIO()
+    doc=SimpleDocTemplate(buffer,pagesize=A4,leftMargin=42,rightMargin=42,topMargin=94,bottomMargin=60,
+                          title="PerdiaPredict - Patient Screening Report",author="PerdiaPredict")
+    def frame(canvas, document):
+        canvas.saveState()
+        canvas.setFillColor(colors.HexColor("#127382"))
+        canvas.setFont("Helvetica-Bold",20);canvas.drawString(42,A4[1]-43,"PerdiaPredict")
+        canvas.setFillColor(colors.HexColor("#64748b"))
+        canvas.setFont("Helvetica",10);canvas.drawString(42,A4[1]-61,"PATIENT SCREENING REPORT")
+        canvas.setStrokeColor(colors.HexColor("#127382"));canvas.line(42,A4[1]-76,A4[0]-42,A4[1]-76)
+        canvas.setStrokeColor(colors.HexColor("#dbe4eb"));canvas.line(42,43,A4[0]-42,43)
+        canvas.setFont("Helvetica",8);canvas.drawString(42,29,"Educational screening | Not a medical diagnosis")
+        canvas.drawRightString(A4[0]-42,29,f"Page {document.page}")
+        canvas.restoreState()
+    story=[]
+    for index,(report,answers) in enumerate(reports):
+        if index: story.append(PageBreak())
+        story.extend(_medical_report_story(report,answers))
+    if not story: raise ValueError("No completed assessments to export.")
+    doc.build(story,onFirstPage=frame,onLaterPages=frame)
+    data=buffer.getvalue()
+    if not data.startswith(b"%PDF-"): raise ValueError("Invalid PDF output")
+    return data
 
-        self.set_font(self.base_font, "", 7.8)
-        self.set_text_color(*_rgb(C_MUTED))
-        self.set_xy(left if self.rtl else left + width / 2, y)
-        self.cell(width / 2, 4, f"{self.page_no()} / {{nb}}", align="L" if self.rtl else "R")
+
+def generate_pdf_report(report_data, lang="en", is_high=False, symptoms=None, answers=None):
+    return _build_medical_pdf([(report_data,answers)])
+
+
+def generate_patient_history_pdf(user, records):
+    return _build_medical_pdf([(r["report"],r.get("answers")) for r in records])
+
+
+def cached_report_pdf(report, answers=None):
+    owner=normalize_email((st.session_state.get("user") or {}).get("email", ""))
+    signature=hashlib.sha256(json.dumps([owner,report,answers],sort_keys=True,ensure_ascii=False,default=str).encode()).hexdigest()
+    cache=st.session_state.setdefault("medical_pdf_cache",{})
+    if signature not in cache:
+        data=generate_pdf_report(report,answers=answers)
+        if len(cache)>=24: cache.clear()
+        cache[signature]=data
+    return cache[signature]
+
+
+def render_medical_report(report, answers=None):
+    def field(label,value):
+        return f'<div class="medical-field"><span>{html_escape(label)}</span><strong>{html_escape(str(value or "Not recorded"))}</strong></div>'
+    st.markdown("""<style>
+      .medical-report{padding:24px;border:1px solid var(--border);border-radius:18px;background:var(--surface);margin:16px 0;}
+      .medical-report h2{color:#127382;margin:0 0 6px}.medical-report h3{font-size:1rem;margin:20px 0 10px;color:var(--text)}
+      .medical-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.medical-field span{display:block;font-size:.8rem;color:var(--muted)}
+      .medical-field strong{display:block;color:var(--text);overflow-wrap:anywhere}.medical-report p{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+      .medical-result{padding:16px;background:var(--surface-soft);border-radius:12px;font-size:1.15rem;color:var(--text)}
+      @media(max-width:640px){.medical-grid{grid-template-columns:1fr}.medical-report{padding:18px}}
+    </style>""",unsafe_allow_html=True)
+    name=" ".join(str(report.get(k) or "") for k in ("First name","Last name"))
+    fields=[("Patient ID",report.get("Patient ID")),("Patient name",name),("Assessment date",report.get("Timestamp")),
+            ("Age / Gender",f"{report.get('Age','')} / {report.get('Gender','')}"),("Phone",report.get("Phone")),
+            ("Country",report.get("Country")),("Marital status",report.get("Marital status")),("Diabetes type",report.get("Reported diabetes type"))]
+    st.markdown(f'<div class="medical-report"><h2>PerdiaPredict</h2><p>PATIENT SCREENING REPORT</p><h3>PATIENT INFORMATION</h3><div class="medical-grid">'+
+                "".join(field(k,v) for k,v in fields)+
+                f'</div><h3>RISK ASSESSMENT</h3><div class="medical-result">{html_escape(str(report.get("Result","")))} · {html_escape(str(report.get("Probability","")))}</div>'+
+                f'<p>Glucose reading: {html_escape(str(report.get("Glucose level") or "Not recorded"))}</p><h3>REPORTED SYMPTOMS</h3><p>{html_escape(str(report.get("Symptom narrative") or "Not recorded"))}</p>'+
+                f'<p>{html_escape(str(report.get("Type-specific answers") or ""))}</p><h3>PATIENT NOTES / ADDITIONAL SYMPTOMS</h3><p>{html_escape(str(report.get("Patient notes") or "No additional notes provided."))}</p>'+
+                f'<h3>RECOMMENDATION</h3><p>{html_escape(str(tr("high_recommendation" if (history_score({"report":report}) or 0)>=float(report.get("Decision threshold") or .5)*100 else "low_recommendation","en")))}</p><p>Model version: {html_escape(str(report.get("Model version") or "Not recorded"))}</p><p>Educational screening. This report is not a medical diagnosis.</p></div>',unsafe_allow_html=True)
+    if answers:
+        with st.expander(history_text("Screening answers","إجابات الفحص")):
+            for question,answer in answers.items(): st.write(f"{question}: {answer}")
 
 
 # =============================================================================
@@ -4360,9 +4427,14 @@ def record_assessment(user, report, answers=None, record_id=None):
     owner = normalize_email(user.get("email", ""))
     if not owner:
         raise ValueError("A signed-in account is required to save history.")
+    score=history_score({"report":report})
+    if (score is None or not 0 <= score <= 100 or not report.get("Timestamp")
+            or str(report.get("Patient ID") or "") != str(user.get("patient_id") or "")
+            or not report.get("Patient ID") or not answers):
+        raise ValueError("Only a completed prediction can be saved.")
     record_id = record_id or secrets.token_hex(16)
     payload = {"report": report, "answers": answers,
-               "record_id": record_id}
+               "completed_prediction": True, "record_id": record_id}
     with history_connection() as conn:
         conn.execute("INSERT OR IGNORE INTO patient_assessments VALUES (?, ?, ?, ?, ?)",
                      (record_id, owner, str(report.get("Patient ID", "")),
@@ -4371,24 +4443,20 @@ def record_assessment(user, report, answers=None, record_id=None):
 
 
 def load_patient_history(user):
-    owner = normalize_email(user.get("email", ""))
-    if not owner:
-        return []
-    # Import legacy reports only by an exact, non-empty patient ID; never by name.
-    patient_id = str(user.get("patient_id") or "").strip()
-    if patient_id and os.path.exists(SAVE_FILE_XLSX):
-        legacy = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl", dtype=str).fillna("")
-        if "Patient ID" in legacy.columns:
-            for report in legacy.loc[legacy["Patient ID"].str.strip() == patient_id].to_dict("records"):
-                # New assessments are mirrored to Excel with their stable ID.
-                record_id = report.pop("Assessment ID", "")
-                if not record_id:
-                    encoded = json.dumps(report, sort_keys=True, ensure_ascii=False)
-                    record_id = "legacy-" + hashlib.sha256(encoded.encode()).hexdigest()
-                record_assessment(user, report, record_id=record_id)
+    owner=normalize_email(user.get("email", ""))
+    patient_id=str(user.get("patient_id") or "").strip()
+    if not owner or not patient_id: return []
     with history_connection() as conn:
-        rows = conn.execute("SELECT payload FROM patient_assessments WHERE owner_email = ? ORDER BY recorded_at, rowid", (owner,)).fetchall()
-    return [json.loads(row[0]) for row in rows]
+        rows=conn.execute("SELECT payload FROM patient_assessments WHERE owner_email=? AND patient_id=? ORDER BY recorded_at, rowid",(owner,patient_id)).fetchall()
+    records=[]
+    for row in rows:
+        try:
+            record=json.loads(row[0])
+            if record.get("completed_prediction") is True and history_score(record) is not None:
+                records.append(record)
+        except (ValueError,TypeError,KeyError,AttributeError):
+            continue
+    return records
 
 
 def history_score(record):
@@ -4428,131 +4496,48 @@ def compare_assessments(old, new, arabic=False):
     return lines
 
 
-def generate_patient_history_pdf(user, records):
-    pdf = _ReportPDF()
-    families = []
-    texts = json.dumps(records, ensure_ascii=False) + json.dumps(user, ensure_ascii=False)
-    scripts = ["latin"] + [key for key, pattern in SCRIPT_REGEX.items() if pattern.search(texts)]
-    for script in scripts:
-        if script not in PDF_FONTS:
-            continue
-        regular, bold = _font_file(script, False), _font_file(script, True)
-        if regular and bold:
-            family = PDF_FONTS[script][0]
-            pdf.add_font(family, "", regular)
-            pdf.add_font(family, "B", bold)
-            families.append(family)
-    pdf.base_font = families[0] if families else "helvetica"
-    if len(families) > 1:
-        pdf.set_fallback_fonts(families[1:], exact_match=True)
-    if SHAPING_OK and families:
-        pdf.set_text_shaping(True)
-    pdf.footer_notice = "Educational screening history. Not a medical diagnosis."
-    pdf.set_margins(16, 16, 16)
-    pdf.set_auto_page_break(True, margin=27)
-    pdf.alias_nb_pages()
-    def paragraph(text, bold=False, size=10):
-        text = str(text)
-        if not families:
-            text = text.encode("latin-1", "replace").decode("latin-1")
-        pdf.set_font(pdf.base_font, "B" if bold else "", size)
-        pdf.set_text_color(24, 42, 65)
-        pdf.multi_cell(0, 6, text, new_x="LMARGIN", new_y="NEXT", wrapmode="WORD")
-        pdf.ln(1)
-    pdf.add_page()
-    paragraph("PATIENT SCREENING HISTORY", True, 18)
-    paragraph("PerdiaPredict | Chronological summary and complete assessment reports")
-    paragraph("Patient: " + " ".join(str(user.get(k) or "") for k in ("first_name", "last_name")), True)
-    paragraph("Patient ID: " + str(user.get("patient_id") or "Not recorded"))
-    paragraph(f"Assessments: {len(records)} | Generated: {datetime.now():%Y-%m-%d %H:%M}")
-    paragraph(f"Period: {records[0]['report'].get('Timestamp', '')} to {records[-1]['report'].get('Timestamp', '')}")
-    paragraph("How to read this report", True, 13)
-    paragraph("Changes refer to the model screening score and the patient's recorded answers. They cannot prove that diabetes has improved, worsened or resolved. Missing answers are not treated as 'No'. Glucose readings are listed as entered; different units or measurement conditions are not directly compared.")
-    if len(records) > 1:
-        paragraph("First assessment compared with the latest", True, 13)
-        for line in compare_assessments(records[0], records[-1]):
-            paragraph(line)
-    else:
-        paragraph("This is the baseline assessment. A comparison will be available after the next assessment.")
-    paragraph("Assessment timeline", True, 13)
-    for i, record in enumerate(records, 1):
-        report = record["report"]
-        paragraph(f"{i}. {report.get('Timestamp', '')} | {report.get('Probability', 'Not recorded')} | {report.get('Result', '')}")
-    for i, record in enumerate(records, 1):
-        pdf.add_page()
-        paragraph(f"ASSESSMENT {i} OF {len(records)}", True, 16)
-        paragraph("Record reference: " + record["record_id"], size=8)
-        if i > 1:
-            paragraph("Changes since the previous assessment", True, 12)
-            for line in compare_assessments(records[i-2], record):
-                paragraph(line)
-        paragraph("Complete recorded report", True, 12)
-        for key, value in record["report"].items():
-            paragraph(f"{key}: {value or 'Not recorded'}")
-        if record.get("answers") is not None:
-            paragraph("Detailed screening answers", True, 12)
-            for key, value in record["answers"].items():
-                paragraph(f"{key}: {value}")
-        else:
-            paragraph("Legacy report: individual answers were not stored.")
-    return bytes(pdf.output())
-
-
 def render_patient_history_page():
-    user = st.session_state.get("user") or {}
-    if user.get("must_change_password", 0) == 1:
-        render_change_password_page()
-        st.stop()
-    title, back = st.columns([4, 1])
-    with title:
-        st.subheader(history_text("Patient history", "سجل المريض"))
-    with back:
-        if st.button(tr("back"), key="history_back", use_container_width=True):
-            go_to("main")
-    try:
-        records = load_patient_history(user)
+    user=st.session_state.get("user") or {}
+    if user.get("must_change_password",0)==1:
+        render_change_password_page(); st.stop()
+    st.subheader(history_text("Patient history","سجل المريض"))
+    if st.button(tr("back"),key="history_back"): go_to("main")
+    try: records=load_patient_history(user)
     except Exception:
-        st.error(history_text("History could not be loaded. Please try again.", "تعذّر تحميل السجل. حاول مرة أخرى."))
-        return
+        st.error(history_text("History could not be loaded. Please try again.","تعذّر تحميل السجل. حاول مرة أخرى.")); return
     if not records:
-        st.info(history_text("No saved assessments yet. Complete your first screening to start your history.", "لا توجد فحوصات محفوظة بعد. أجرِ أول فحص لبدء سجلك."))
-        return
-    st.caption(history_text("Only assessments linked to your account and patient ID are shown.", "تظهر الفحوصات المرتبطة بحسابك ورقم المريض الخاص بك فقط."))
-    st.info(history_text("Score changes describe screening results, not a medical diagnosis or confirmed improvement/worsening.", "تغيّر النسبة يصف نتائج الفحص، وليس تشخيصًا أو تأكيدًا للتحسّن أو التدهور الطبي."))
-    a, b = history_score(records[0]), history_score(records[-1])
-    cols = st.columns(3)
-    cols[0].metric(history_text("Assessments", "عدد الفحوصات"), len(records))
-    cols[1].metric(history_text("First score", "النسبة الأولى"), f"{a:.1f}%" if a is not None else "—")
-    cols[2].metric(history_text("Latest score", "النسبة الأخيرة"), f"{b:.1f}%" if b is not None else "—", delta=f"{b-a:+.1f} pp" if a is not None and b is not None and len(records)>1 and records[0]["report"].get("Model version", "legacy") == records[-1]["report"].get("Model version", "legacy") else None, delta_color="off")
-    if len(records) > 1:
-        st.markdown("### " + history_text("From the first assessment to the latest", "من أول فحص إلى آخر فحص"))
-        for line in compare_assessments(records[0], records[-1], st.session_state.get("lang") == "ar"):
-            st.write(line)
-    else:
-        st.caption(history_text("Comparison starts after your next assessment.", "تبدأ المقارنة بعد الفحص التالي."))
-    timeline = pd.DataFrame([{"Date": r["report"].get("Timestamp", ""), "Model score (%)": history_score(r)} for r in records])
-    st.dataframe(timeline, use_container_width=True, hide_index=True)
-    for i, record in enumerate(records):
-        report = record["report"]
-        with st.expander(f"{i+1}. {report.get('Timestamp', '')} | {report.get('Probability', '')}", expanded=i==len(records)-1):
-            if i:
-                for line in compare_assessments(records[i-1], record, st.session_state.get("lang") == "ar"):
-                    st.write(line)
-            st.dataframe(pd.DataFrame([{"Field": key, "Recorded value": str(value)} for key, value in report.items()]), use_container_width=True, hide_index=True)
-            if record.get("answers") is not None:
-                st.dataframe(pd.DataFrame([{"Question": key, "Answer": value} for key, value in record["answers"].items()]), use_container_width=True, hide_index=True)
-    if st.button(history_text("Prepare complete history PDF", "تجهيز ملف PDF لجميع الفحوصات"), type="primary", use_container_width=True):
-        try:
-            with st.spinner(history_text("Preparing report…", "جاري تجهيز التقرير…")):
-                st.session_state["history_pdf"] = generate_patient_history_pdf(user, records)
-                st.session_state["history_pdf_signature"] = (normalize_email(user.get("email", "")), tuple(r["record_id"] for r in records))
-        except Exception:
-            st.error(history_text("The PDF could not be generated. Check the PDF fonts and dependencies.", "تعذّر إنشاء PDF. تحقق من خطوط التقرير ومكتباته."))
-    signature = (normalize_email(user.get("email", "")), tuple(r["record_id"] for r in records))
-    if st.session_state.get("history_pdf_signature") == signature:
-        safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", str(user.get("patient_id") or "patient"))
-        st.download_button(history_text("Download all reports in one PDF", "تنزيل جميع التقارير في ملف PDF واحد"), data=st.session_state["history_pdf"], file_name=f"Patient_History_{safe_id}.pdf", mime="application/pdf", use_container_width=True)
-        st.caption(history_text("The combined PDF uses English headings and includes every saved assessment.", "التقرير المجمّع بعناوين إنجليزية ويشمل جميع الفحوصات المحفوظة."))
+        st.info(history_text("No completed predictions yet. Use Predict risk to save an assessment.","لا توجد توقعات مكتملة بعد. اضغط توقع الخطر لحفظ تقييم.")); return
+    st.caption(history_text("Reports are saved only after a completed risk prediction.","تُحفظ التقارير بعد إكمال توقع الخطر فقط."))
+    for record in reversed(records):
+        report=record["report"];key=record["record_id"]
+        with st.container(border=True):
+            st.write(f"{report.get('Timestamp','')} · {report.get('Probability','')}")
+            open_col,download_col=st.columns(2)
+            with open_col:
+                if st.button(history_text("Open report","فتح التقرير"),key=f"open_{key}",use_container_width=True):
+                    st.session_state["open_history_record"]=key
+            with download_col:
+                try:
+                    data=cached_report_pdf(report,record.get("answers"))
+                    st.download_button(history_text("Download PDF","تنزيل PDF"),data=data,
+                                       file_name=f"Report_{re.sub(r'[^A-Za-z0-9_-]','_',key)}.pdf",mime="application/pdf",key=f"download_{key}",use_container_width=True)
+                except Exception as exc:
+                    st.error(history_text("PDF unavailable: ","تعذّر تجهيز PDF: ")+str(exc))
+            if st.session_state.get("open_history_record")==key:
+                render_medical_report(report,record.get("answers"))
+                if st.button(history_text("Close report","إغلاق التقرير"),key=f"close_{key}"):
+                    st.session_state.pop("open_history_record",None);st.rerun()
+    try:
+        signature=hashlib.sha256(json.dumps([normalize_email(user.get("email","")),records],sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+        if st.session_state.get("history_pdf_signature")!=signature:
+            st.session_state["history_pdf"]=generate_patient_history_pdf(user,records)
+            st.session_state["history_pdf_signature"]=signature
+        safe_id=re.sub(r"[^A-Za-z0-9_-]","_",str(user.get("patient_id") or "patient"))
+        st.download_button(history_text("Download all reports (PDF)","تنزيل جميع التقارير PDF"),
+                           data=st.session_state["history_pdf"],file_name=f"Patient_Reports_{safe_id}.pdf",mime="application/pdf",
+                           key="download_all_reports_pdf",type="primary",use_container_width=True)
+    except Exception as exc:
+        st.error(history_text("Combined PDF unavailable: ","تعذّر تجهيز PDF المجمّع: ")+str(exc))
 
 
 def render_profile_edit_page():
@@ -4571,50 +4556,86 @@ def render_profile_edit_page():
     type_key = _user.get("diabetes_type") or "not_sure"
     if type_key not in DIABETES_TYPE_KEYS:
         type_key = "not_sure"
-    st.markdown("""
-    <style>
-    .st-key-profile_edit_actions [data-testid="stHorizontalBlock"] {
-        direction: ltr !important;
-        flex-wrap: nowrap !important;
-    }
-    .st-key-profile_edit_actions button { min-height: 42px; }
-    </style>
-    """, unsafe_allow_html=True)
+    inject_profile_layout_css()
     st.subheader(profile_copy("edit"))
-    with st.form("profile_edit_form", clear_on_submit=False):
-        with st.container(key="profile_edit_actions"):
-            _, save_col, cancel_col = st.columns([4, 2, 1])
-            with save_col:
-                save_edit = st.form_submit_button(profile_copy("save"), type="primary", use_container_width=True)
-            with cancel_col:
-                cancel_edit = st.form_submit_button(profile_copy("cancel"), use_container_width=True)
-        st.markdown("---")
-        edited_marital = st.selectbox(
-            tr("marital_status"), MARITAL_STATUS_ORDER,
-            index=MARITAL_STATUS_ORDER.index(marital_status_key),
-            format_func=lambda k: marital_status_label(k, sex_at_birth, lang),
-        )
-        country_options = [item[1] for item in COUNTRY_DIAL_CODES]
-        edited_country = st.selectbox(
-            registration_text(0), country_options,
-            index=country_options.index(country) if country in country_options else 0,
-        )
-        dial_index = next((i for i, item in enumerate(COUNTRY_DIAL_CODES)
-                           if item[2] == (_user.get("dial_code") or "")), 0)
-        edited_dial = st.selectbox(
-            registration_text(1), COUNTRY_DIAL_CODES, index=dial_index,
-            format_func=lambda item: f"{item[0]} {item[1]} ({item[2]})",
-        )
-        edited_phone = st.text_input(registration_text(2), value=phone, max_chars=24)
-        confirmed = None
-        if type_key == "not_sure":
-            st.caption(profile_copy("type_help"))
-            confirmed = st.selectbox(profile_copy("doctor"),
-                                     ["not_sure", "type1", "type2"],
-                                     format_func=diabetes_type_label)
-        else:
-            st.caption(profile_copy("type_locked"))
+    st.markdown(f'<p class="profile-edit-description">{html_escape("Update your photo, contact details and health information." if lang != "ar" else "عدّل صورتك وبيانات التواصل والمعلومات الصحية.")}</p>', unsafe_allow_html=True)
+    with st.container(key="profile_editor"):
+        with st.form("profile_edit_form", clear_on_submit=False):
+            st.markdown(f"### {edit_text('photo')}")
+            current_photo = profile_photo_bytes(_user)
+            preview_col, upload_col = st.columns([1, 3], vertical_alignment="center")
+            with preview_col:
+                if current_photo:
+                    photo_uri = base64.b64encode(current_photo).decode("ascii")
+                    st.markdown(f'<img class="profile-edit-avatar" src="data:image/png;base64,{photo_uri}" alt="Profile photo">', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="profile-edit-avatar" style="background:#253b57;display:flex;align-items:center;justify-content:center"><svg width="72" height="72" viewBox="0 0 80 80" fill="#c6dcf5"><circle cx="40" cy="25" r="13"/><path d="M12 67c0-15 12.5-24 28-24s28 9 28 24v2H12z"/></svg></div>', unsafe_allow_html=True)
+            with upload_col:
+                uploaded_photo = st.file_uploader(edit_text("upload"), type=["jpg", "jpeg", "png", "webp"], key="edit_profile_photo")
+                st.caption(edit_text("photo_help"))
+            photo_data = None
+            invalid_photo = False
+            if uploaded_photo is not None:
+                try:
+                    from PIL import Image, ImageOps
+                    if uploaded_photo.size > 5 * 1024 * 1024:
+                        raise ValueError("Image too large")
+                    image = Image.open(uploaded_photo)
+                    if image.width * image.height > 20_000_000:
+                        raise ValueError("Image dimensions too large")
+                    image = ImageOps.exif_transpose(image).convert("RGB")
+                    image.thumbnail((512, 512))
+                    photo_buffer = BytesIO()
+                    image.save(photo_buffer, format="PNG")
+                    photo_data = photo_buffer.getvalue()
+                    st.image(photo_data, width=140)
+                except Exception:
+                    invalid_photo = True
+                    st.error(edit_text("bad_photo"))
+            remove_photo = st.checkbox(edit_text("remove"), key="remove_profile_photo") if current_photo else False
+            st.divider()
+            st.markdown(f"### {edit_text('personal')}")
+            edited_marital = st.selectbox(
+                tr("marital_status"), MARITAL_STATUS_ORDER,
+                index=MARITAL_STATUS_ORDER.index(marital_status_key),
+                format_func=lambda k: marital_status_label(k, sex_at_birth, lang),
+            )
+            st.divider()
+            st.markdown(f"### {edit_text('contact')}")
+            country_options = [item[1] for item in COUNTRY_DIAL_CODES]
+            edited_country = st.selectbox(
+                registration_text(0), country_options,
+                index=country_options.index(country) if country in country_options else 0,
+            )
+            dial_index = next((i for i, item in enumerate(COUNTRY_DIAL_CODES)
+                               if item[2] == (_user.get("dial_code") or "")), 0)
+            dial_col, phone_col = st.columns([1, 2])
+            with dial_col:
+                edited_dial = st.selectbox(
+                    registration_text(1), COUNTRY_DIAL_CODES, index=dial_index,
+                    format_func=lambda item: f"{item[0]} {item[1]} ({item[2]})",
+                )
+            with phone_col:
+                edited_phone = st.text_input(registration_text(2), value=phone, max_chars=24)
+            st.divider()
+            st.markdown(f"### {edit_text('health')}")
+            confirmed = None
+            if type_key == "not_sure":
+                st.caption(profile_copy("type_help"))
+                confirmed = st.selectbox(profile_copy("doctor"),
+                                         ["not_sure", "type1", "type2"],
+                                         format_func=diabetes_type_label)
+            else:
+                st.caption(profile_copy("type_locked"))
+            st.divider()
+            with st.container(key="profile_edit_actions"):
+                save_col, cancel_col = st.columns(2)
+                with save_col:
+                    save_edit = st.form_submit_button(profile_copy("save"), type="primary", use_container_width=True)
+                with cancel_col:
+                    cancel_edit = st.form_submit_button(profile_copy("cancel"), use_container_width=True)
     if cancel_edit:
+        st.session_state.pop("pending_profile_changes", None)
         go_to(st.session_state.pop("profile_return_page", "main"))
     if save_edit:
         digits = re.sub(r"[\s()\-]", "", edited_phone.strip())
@@ -4623,15 +4644,18 @@ def render_profile_edit_page():
         else:
             full_phone = edited_dial[2] + digits.lstrip("0")
         change_type = confirmed if confirmed in ("type1", "type2") else None
-        saved = update_user_profile(_user.get("email", ""), edited_marital,
-                                    edited_country, edited_dial[2], full_phone,
-                                    confirmed_type=change_type)
-        if saved:
-            st.session_state["user"].update({key: saved[key] for key in
-                ("marital_status", "country", "dial_code", "phone", "diabetes_type")})
-            go_to(st.session_state.pop("profile_return_page", "main"))
-        else:
+        if invalid_photo:
+            return
+        if not edited_country.strip() or not full_phone.removeprefix("+").isascii() or not full_phone.removeprefix("+").isdigit() or not 6 <= len(full_phone.removeprefix("+")) <= 15:
             st.error(profile_copy("error"))
+            return
+        changes = dict(marital_status=edited_marital, country=edited_country,
+                       dial_code=edited_dial[2], phone=full_phone, confirmed_type=change_type,
+                       photo_data=None if remove_photo else photo_data,
+                       photo_name="" if remove_photo else None)
+        changes["warn_unknown"] = type_key == "not_sure"
+        st.session_state["pending_profile_changes"] = changes
+        confirm_profile_changes()
 
 
 
@@ -4785,14 +4809,19 @@ def render_main_app():
     with st.container(key="profile_summary"):
         avatar_col, info_col = st.columns([1, 5], vertical_alignment="center")
         with avatar_col:
-            st.markdown("""
-            <div class="profile-avatar" aria-hidden="true">
-                <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="40" cy="25" r="13" fill="currentColor"/>
-                    <path d="M12 67c0-15 12.5-24 28-24s28 9 28 24v2H12v-2z" fill="currentColor"/>
-                </svg>
-            </div>
-            """, unsafe_allow_html=True)
+            photo = profile_photo_bytes(_user)
+            if photo:
+                photo_uri = base64.b64encode(photo).decode("ascii")
+                st.markdown(f'<div class="profile-avatar"><img src="data:image/png;base64,{photo_uri}" alt="{html_escape(edit_text("photo"))}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>', unsafe_allow_html=True)
+            else:
+                st.markdown("""
+                <div class="profile-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="40" cy="25" r="13" fill="currentColor"/>
+                        <path d="M12 67c0-15 12.5-24 28-24s28 9 28 24v2H12v-2z" fill="currentColor"/>
+                    </svg>
+                </div>
+                """, unsafe_allow_html=True)
             if st.button(profile_copy("edit"), key="profile_edit_toggle", use_container_width=True):
                 st.session_state["profile_return_page"] = st.session_state["page"]
                 go_to("profile_edit")
@@ -4825,8 +4854,10 @@ def render_main_app():
             with target_col:
                 if col == "Polyuria":
                     freq_options = [tr("no")] + [f"{tr('yes')} - {tr(k)}" for k in POLYURIA_FREQ_KEYS]
-                    selected = st.selectbox(label, freq_options, key="core_polyuria_freq")
-                    if selected == freq_options[0]:
+                    selected = st.selectbox(label, freq_options, index=None, placeholder=tr("dob_choose"), key="core_polyuria_freq")
+                    if selected is None:
+                        symptom_values[col] = None
+                    elif selected == freq_options[0]:
                         symptom_values[col] = "No"
                     else:
                         symptom_values[col] = "Yes"
@@ -4835,13 +4866,13 @@ def render_main_app():
                     selected = st.selectbox(
                         label,
                         [tr("no"), tr("yes")],
-                        key=f"core_{col}",
+                        index=None, placeholder=tr("dob_choose"), key=f"core_{col}",
                     )
-                    symptom_values[col] = "Yes" if selected == tr("yes") else "No"
+                    symptom_values[col] = "Yes" if selected == tr("yes") else "No" if selected == tr("no") else None
 
         st.markdown("---")
         st.markdown(f'<div class="section-title">{tr("additional")}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="section-subtitle">{tr("optional")}</div>', unsafe_allow_html=True)
+        st.caption("Answer every question with Yes or No. These answers are included in your report." if lang != "ar" else "أجب عن جميع الأسئلة بنعم أو لا. تُضاف الإجابات إلى تقريرك.")
 
         extra_values = {}
         e_col1, e_col2 = st.columns(2)
@@ -4852,9 +4883,9 @@ def render_main_app():
                 selected = st.selectbox(
                     tr(key),
                     [tr("no"), tr("yes")],
-                    key=f"extra_{key}",
+                    index=None, placeholder=tr("dob_choose"), key=f"extra_{key}",
                 )
-                extra_values[key] = "Yes" if selected == tr("yes") else "No"
+                extra_values[key] = "Yes" if selected == tr("yes") else "No" if selected == tr("no") else None
 
         if type_key in TYPE_QUESTIONS:
             st.markdown("---")
@@ -4864,8 +4895,8 @@ def render_main_app():
             for i, question_key in enumerate(TYPE_QUESTIONS[type_key]):
                 with (tq1 if i % 2 == 0 else tq2):
                     answer = st.selectbox(tr(question_key), [tr("no"), tr("yes")],
-                                          key=f"type_{type_key}_{question_key}")
-                    extra_values[question_key] = "Yes" if answer == tr("yes") else "No"
+                                          index=None, placeholder=tr("dob_choose"), key=f"type_{type_key}_{question_key}")
+                    extra_values[question_key] = "Yes" if answer == tr("yes") else "No" if answer == tr("no") else None
 
         glu_col1, glu_col2 = st.columns([2, 1])
         with glu_col1:
@@ -4901,6 +4932,7 @@ def render_main_app():
         help_key = "other_section_help" if gender == "Other" and not is_child else "gender_section_help"
         st.markdown(f'<div class="section-subtitle">{tr(help_key)}</div>', unsafe_allow_html=True)
 
+        st.caption("Please answer every question." if lang != "ar" else "يرجى الإجابة عن جميع الأسئلة.")
         g_col1, g_col2 = st.columns(2)
         for i, key in enumerate(gender_keys):
             target_col = g_col1 if i % 2 == 0 else g_col2
@@ -4908,10 +4940,15 @@ def render_main_app():
                 selected = st.selectbox(
                     tr(key),
                     [tr("no"), tr("yes")],
-                    key=f"gender_{key_kind}_{key}",
+                    index=None, placeholder=tr("dob_choose"), key=f"gender_{key_kind}_{key}",
                 )
-                gender_values[key] = "Yes" if selected == tr("yes") else "No"
+                gender_values[key] = "Yes" if selected == tr("yes") else "No" if selected == tr("no") else None
 
+        patient_notes = st.text_area(
+            history_text("Additional symptoms or patient notes (optional)","أعراض إضافية أو ملاحظات المريض (اختياري)"),
+            placeholder=history_text("Describe any symptom that was not included in the questions.","اكتب أي عرض لم تتضمنه الأسئلة."),
+            help=history_text("Saved in every report. These notes do not change the model score.","تُحفظ في جميع التقارير ولا تغيّر نسبة النموذج."),
+            key="patient_notes",max_chars=3000,height=120)
         submitted = st.button(
             f"{tr('predict')}",
             use_container_width=True,
@@ -4925,6 +4962,8 @@ def render_main_app():
         clean_phone = phone.strip()
 
         errors = []
+        if any(value is None for answers in (symptom_values, extra_values, gender_values) for value in answers.values()):
+            errors.append("Please answer every question before continuing." if lang != "ar" else "يرجى الإجابة عن جميع الأسئلة قبل المتابعة.")
         for value, label in [
             (clean_first_name, tr("first_name")),
             (clean_last_name, tr("last_name")),
@@ -4978,6 +5017,7 @@ def render_main_app():
                 birth_sex=sex_at_birth,
                 glucose=glucose,
                 patient_id=patient_id,
+                patient_notes=patient_notes,
             )
 
             st.session_state["last_report"] = build_report(lang, **report_args)
@@ -4986,7 +5026,7 @@ def render_main_app():
             st.session_state["last_extra"] = any(v == "Yes" for v in extra_values.values())
             st.session_state["last_symptoms"] = {
                 "core": [c for c in display_labels if symptom_values.get(c) == "Yes"],
-                "extra": [k for k in extra_symptom_keys if extra_values.get(k) == "Yes"],
+                "extra": [k for k in REPORT_EXTRA_KEYS if extra_values.get(k) == "Yes"],
                 "gender": [k for k, v in gender_values.items() if v == "Yes"],
                 "gender_kind": sex_at_birth if is_child else sex_at_birth,
                 "is_child": is_child,
@@ -5058,6 +5098,9 @@ def render_main_app():
             st.write(report.get("Symptom narrative", ""))
             if report.get("Type-specific answers"):
                 st.write(report["Type-specific answers"])
+            if report.get("Patient notes"):
+                st.markdown("**"+history_text("Patient notes","ملاحظات المريض")+"**")
+                st.write(report["Patient notes"])
 
         with st.expander(f"{tr('recommendation')}", expanded=True):
             if result == 1:
@@ -5080,50 +5123,18 @@ def render_main_app():
         st.markdown("---")
         st.markdown(f'<div class="section-title">{tr("download")}</div>', unsafe_allow_html=True)
 
-        pdf_lang = pick_pdf_language(lang)
-        pdf_report = report if pdf_lang == lang else report_en
-        pdf_symptoms = st.session_state.get("last_symptoms")
-        cache_key = (
-            pdf_lang,
-            int(result),
-            tuple(sorted((k, str(v)) for k, v in pdf_report.items())),
-            repr(pdf_symptoms) if pdf_symptoms else None,
-        )
-
-        if st.session_state.get("pdf_cache_key") != cache_key:
-            try:
-                pdf_bytes = generate_pdf_report(
-                    pdf_report, pdf_lang, is_high=(result == 1), symptoms=pdf_symptoms
-                )
-            except Exception:
-                if pdf_lang == "en":
-                    raise
-                pdf_lang = "en"
-                pdf_report = report_en
-                pdf_bytes = generate_pdf_report(
-                    pdf_report, "en", is_high=(result == 1), symptoms=pdf_symptoms
-                )
-            st.session_state["pdf_cache_key"] = cache_key
-            st.session_state["pdf_cache_data"] = pdf_bytes
-            st.session_state["pdf_cache_lang"] = pdf_lang
-
-        pdf_data = st.session_state["pdf_cache_data"]
-        pdf_lang = st.session_state["pdf_cache_lang"]
-
-        if pdf_lang != lang:
-            st.caption(tr("pdf_fallback"))
-
-        safe_name = re.sub(r'[\\/:*?"<>|\s]+', "_", f"{report['First name']}_{report['Last name']}")
-        file_name_pdf = f"Diabetes_Report_{safe_name}.pdf"
-
-        st.download_button(
-            label=f"{tr('download_pdf')}",
-            data=pdf_data,
-            file_name=file_name_pdf,
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True,
-        )
+        if st.button(history_text("Open report","فتح التقرير"),key="main_open_report",use_container_width=True):
+            st.session_state["main_report_open"]=not st.session_state.get("main_report_open",False)
+        if st.session_state.get("main_report_open"):
+            render_medical_report(report_en,st.session_state.get("assessment_answers"))
+        try:
+            pdf_data=cached_report_pdf(report_en,st.session_state.get("assessment_answers"))
+            safe_id=re.sub(r"[^A-Za-z0-9_-]","_",str(report_en.get("Patient ID") or "patient"))
+            st.download_button(history_text("Download report PDF","تنزيل التقرير PDF"),data=pdf_data,
+                               file_name=f"Diabetes_Report_{safe_id}_{st.session_state.get('assessment_id','result')}.pdf",
+                               mime="application/pdf",key="main_download_pdf",type="primary",use_container_width=True)
+        except Exception as exc:
+            st.error(history_text("The PDF could not be prepared: ","تعذّر تجهيز PDF: ")+str(exc))
 
         st.markdown(
             f'<div class="notice">⚠️ {tr("medical_notice_long")}</div>',
