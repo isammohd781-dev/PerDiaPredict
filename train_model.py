@@ -62,7 +62,6 @@ def main():
     joblib.dump(model,ROOT/'diabetes_model.pkl')
     joblib.dump(FEATURES,ROOT/'feature_columns.pkl')
     # Compatibility artifact only: actual scaling occurs within the saved pipeline.
-    joblib.dump(MinMaxScaler().fit(xd[['Age']]),ROOT/'age_scaler.pkl')
     meta={'model_version':'PP-grouped-2026-09-30-v1','sklearn_version':sklearn.__version__,'preprocessing_in_model':True,'selected_model':selected,'features':FEATURES,'threshold':.5,'age_range':[int(xd.Age.min()),int(xd.Age.max())],'clinically_validated':False,'model_sha256':hashlib.sha256((ROOT/'diabetes_model.pkl').read_bytes()).hexdigest(),'dataset_sha256':hashlib.sha256((ROOT/'diabetes_data_upload.csv').read_bytes()).hexdigest(),'original_rows':len(raw),'unique_full_rows':len(df),'unique_feature_groups':len(set(groups)),'development_rows':len(dev),'test_rows':len(test),'selection':'minimum development group-CV Brier score; tie-break log loss','development_cv':scores,'heldout':heldout}
     (ROOT/'model_metadata.json').write_text(json.dumps(meta,indent=2),encoding='utf-8')
     pd.DataFrame({'unique_row_index':test,'group':groups[test],'actual':y[test],'probability':p,'predicted':(p>=.5).astype(int)}).to_csv(ROOT/'heldout_predictions.csv',index=False)

@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.streamlit/secrets.toml
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+accounts.xlsx
+saved_reports.xlsx
+audit_log.xlsx
+profile_photos/
+tmp/
+*.part

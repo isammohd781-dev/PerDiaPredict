@@ -1,57 +1,39 @@
-# PerdiaPredict - Complete Update
+# PerdiaPredict
+Development Streamlit application for educational diabetes risk screening.
 
-## Installation and Update
+## Local setup
+Use Python 3.12 or 3.13. Extract this release into a NEW folder to begin with empty data. Do not merge the old folder or copy its databases, XLSX files, profile photos or secrets into this release.
 
-1. Back up your current application folder.
-2. Extract the update package and copy its files into the application folder. Keep your existing patient and account files: `accounts.xlsx`, `audit_log.xlsx`, `saved_reports.xlsx`, and `patient_history.db`. Also keep any existing images and fonts. The package does not include account or patient data.
-3. Copy all three model files, `model_metadata.json`, and `screening_model.py` together with the application. Do not mix files from the old and new model versions.
-4. Install the required dependencies and start the application:
-
-```bash
+Windows PowerShell:
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-streamlit run diabetes_app.py
+python -m streamlit run diabetes_app.py
 ```
+If activation is unavailable, use `.\.venv\Scripts\python.exe` directly for the pip and Streamlit commands.
 
-## Inference Verification
+All runtime records are created automatically as needed. No patient accounts, doctor accounts, reports, consent links, notes, audit events or active disclosure permits are bundled.
 
-Run the following command to verify model inference:
+## Admin configuration
+Copy `.streamlit/secrets.example.toml` to `.streamlit/secrets.toml`. Set ADMIN_PASSWORD to a new private password. Admin access is disabled until a password is configured; there is no built-in admin password. Set DISCLOSURE_PASSWORD independently (at least 16 characters) only when configuring restricted reports/activity access. Keep root settings above permit tables. Read SECURITY_SETUP.md and GROUP_ACCESS_SETUP.md before configuring any permit.
+Environment alternatives include PERDIA_ADMIN_PASSWORD and PERDIA_DISCLOSURE_PASSWORD.
+Private secrets and runtime data are excluded by the supplied git/Docker ignore rules.
 
-```bash
-python test_inference.py
+## Starting again
+Register a new patient through the application. Register a new doctor, approve the doctor in Admin / Doctors after reviewing the submitted details, then sign in as the doctor. Obtain the doctor's generated follow-up code from their dashboard. A patient enters that code, presses Enter and uses Connect to view the doctor, then gives consent and confirms the follow-up request. The doctor accepts the request to obtain access.
+No pre-created demo doctor is included.
+
+## Tests
+```powershell
+python -m pip install -r requirements-dev.txt
+python run_checks.py
 ```
+Tests use temporary synthetic accounts, records and adapters. test_inference.py additionally verifies the actual bundled model against the supplied held-out predictions. Generated test PDFs are placed in tmp/.
 
-## Training and Evaluation
-
-To reproduce model training and evaluation, run:
-
-```bash
-python train_model.py
-```
-
-**Note:** This command overwrites the model and evaluation files in the current folder.
-
-The following files document the evaluation:
-
-- `MODEL_EVALUATION.md`: Results, limitations, and sources.
-- `heldout_predictions.csv`: Detailed predictions for the held-out evaluation data.
-- `model_metadata.json`: Evaluation metrics, model version, and file fingerprints.
-
-The requirements pin scikit-learn to version **1.8.0**, which was used to produce the model.
-
-`age_scaler.pkl` is retained for compatibility only. Age preprocessing is handled inside the model, so do not apply the scaler a second time.
-
-## Educational Use
-
-This application is an educational screening system. A diabetes diagnosis requires medical testing; the model's predicted percentage is not a diagnosis.
-
-A change in the predicted percentage between different model versions does not establish that a patient's condition has improved or worsened.
-
-## Report Design Update
-
-The report header has a white background and displays the application logo, with the screening date and time shown separately. The header repeats on longer reports.
-
-Patient details appear in a table, followed by the screening result, clinical presentation, and model information.
-
-To apply this design update, copy the updated `diabetes_app.py` file and keep your existing `logo.png`.
-
-UTF-8 encoding in `test_inference.py` has also been corrected for Windows compatibility. This report design update does not require model retraining.
+## Assets and limitations
+Keep the trained model, feature columns, model_metadata.json, logo, fonts and font license files together. Scaling is already inside the model pipeline, so a separate age_scaler.pkl is unnecessary.
+Training data, train_model.py, held-out evaluation and MODEL_EVALUATION.md are retained for reproducibility; they are not patient account records entered in this application.
+The model supports ages 16 to 85. It is not clinically validated and does not diagnose diabetes. Model probabilities are preserved; an all-No screening is not artificially forced to zero.
+Read TEN_LANGUAGE_STATUS.md for actual translation coverage. Some newer workflows and five additional policy-body translations remain incomplete.
+App access restrictions do not encrypt files at rest or prevent the code/machine owner from bypassing them. Deployment approvals and production controls remain outside this prototype review.
