@@ -1,0 +1,16 @@
+.git
+.streamlit/secrets.toml
+__pycache__
+.venv
+venv
+*.db
+*.db-*
+*.xlsx
+profile_photos
+tmp
+*secrets*.toml
+!*.example.toml
+policy_settings.toml
+.env
+.env.*
+deploy

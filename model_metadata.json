@@ -1,0 +1,134 @@
+{
+  "model_version": "PP-grouped-2026-09-30-v1",
+  "sklearn_version": "1.8.0",
+  "preprocessing_in_model": true,
+  "selected_model": "forest",
+  "features": [
+    "Polyuria",
+    "Polydipsia",
+    "Age",
+    "Gender",
+    "partial paresis",
+    "sudden weight loss",
+    "Irritability",
+    "delayed healing",
+    "Alopecia",
+    "Itching"
+  ],
+  "threshold": 0.5,
+  "age_range": [
+    16,
+    85
+  ],
+  "clinically_validated": false,
+  "model_sha256": "f56d8194c528d7a1deb276a97587526002dfc0e1f3f8f8bdb46000a543247018",
+  "dataset_sha256": "7889d9d0beb7dd1ccc58da99f72763f16afb259b5dbbaa086f8195366ff66137",
+  "original_rows": 520,
+  "unique_full_rows": 251,
+  "unique_feature_groups": 242,
+  "development_rows": 201,
+  "test_rows": 50,
+  "selection": "minimum development group-CV Brier score; tie-break log loss",
+  "development_cv": {
+    "forest": {
+      "n": 201,
+      "accuracy": 0.9054726368159204,
+      "accuracy_95CI": [
+        0.8570883096072076,
+        0.9386484938545893
+      ],
+      "precision": 0.9407407407407408,
+      "recall": 0.9202898550724637,
+      "specificity": 0.873015873015873,
+      "f1": 0.9304029304029304,
+      "roc_auc": 0.9674488152749022,
+      "brier": 0.0674073631997483,
+      "log_loss": 0.22673218026386038,
+      "confusion_matrix": [
+        [
+          55,
+          8
+        ],
+        [
+          11,
+          127
+        ]
+      ]
+    },
+    "forest_sigmoid": {
+      "n": 201,
+      "accuracy": 0.9104477611940298,
+      "accuracy_95CI": [
+        0.862896547806554,
+        0.9426038974155102
+      ],
+      "precision": 0.9285714285714286,
+      "recall": 0.9420289855072463,
+      "specificity": 0.8412698412698413,
+      "f1": 0.935251798561151,
+      "roc_auc": 0.965780998389694,
+      "brier": 0.06992562285794872,
+      "log_loss": 0.23924491684402965,
+      "confusion_matrix": [
+        [
+          53,
+          10
+        ],
+        [
+          8,
+          130
+        ]
+      ]
+    },
+    "logistic": {
+      "n": 201,
+      "accuracy": 0.8805970149253731,
+      "accuracy_95CI": [
+        0.8284831505893563,
+        0.9184354440711032
+      ],
+      "precision": 0.9191176470588235,
+      "recall": 0.9057971014492754,
+      "specificity": 0.8253968253968254,
+      "f1": 0.9124087591240876,
+      "roc_auc": 0.9458822176213479,
+      "brier": 0.09058016332975777,
+      "log_loss": 0.28471738763714155,
+      "confusion_matrix": [
+        [
+          52,
+          11
+        ],
+        [
+          13,
+          125
+        ]
+      ]
+    }
+  },
+  "heldout": {
+    "n": 50,
+    "accuracy": 0.92,
+    "accuracy_95CI": [
+      0.8116149745493629,
+      0.9684509967442093
+    ],
+    "precision": 0.918918918918919,
+    "recall": 0.9714285714285714,
+    "specificity": 0.8,
+    "f1": 0.9444444444444444,
+    "roc_auc": 0.9638095238095238,
+    "brier": 0.07324840320987655,
+    "log_loss": 0.2319849738803244,
+    "confusion_matrix": [
+      [
+        12,
+        3
+      ],
+      [
+        1,
+        34
+      ]
+    ]
+  }
+}

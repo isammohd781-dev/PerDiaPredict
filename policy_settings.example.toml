@@ -1,0 +1,9 @@
+# Public deployment descriptions only. Complete truthfully before public use.
+# Place root keys before any TOML tables in your existing secrets file.
+POLICY_OPERATOR_NAME = ""
+POLICY_CONTACT_EMAIL = ""
+POLICY_POSTAL_ADDRESS = ""
+POLICY_HOSTING_DETAILS = ""
+POLICY_RETENTION_RULES = ""
+POLICY_PROCESSING_BASIS = ""
+POLICY_REQUEST_PROCESS = ""

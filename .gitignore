@@ -1,0 +1,43 @@
+# ---- Private settings (passwords). Only *.example.toml templates are committed ----
+.streamlit/secrets.toml
+*secrets*.toml
+policy_settings.toml
+!*.example.toml
+.env
+.env.*
+
+# ---- Patient, doctor and admin data created while the app runs ----
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+*.xlsx
+*.xlsx#
+~$*
+profile_photos/
+private_data/
+documents/
+*.pdf
+*.log
+
+# ---- Python environment and caches ----
+.venv/
+.venv*/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# ---- Temporary and editor files ----
+tmp/
+*.part
+*.bak
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
