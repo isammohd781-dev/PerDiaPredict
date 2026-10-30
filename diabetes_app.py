@@ -19,6 +19,7 @@ import joblib
 import doctor_portal as care
 import app_experience as ux
 import admin_dashboard
+import account_deletion
 import portal_runtime
 
 APP_ROLE = globals().get("APP_ROLE", "patient")
@@ -45,6 +46,7 @@ st.set_page_config(
 )
 
 portal_runtime.initialise(APP_ROLE)
+portal_runtime.start_with_splash(APP_ROLE)
 portal_runtime.expire_idle(APP_ROLE)
 
 # ---------------------------------------------------------------------------
@@ -726,7 +728,8 @@ def _init_theme():
         code = st.query_params.get("theme")
     except Exception:
         pass
-    st.session_state["dark_mode"] = code == "dark"
+    # Dark is the default; light only when the person chose it (the toggle sets ?theme=light).
+    st.session_state["dark_mode"] = code != "light"
 
 
 _init_theme()
@@ -1259,7 +1262,9 @@ def authenticate(email: str, password: str):
 _DUMMY_HASH = "pbkdf2_sha256$260000$" + "00" * 16 + "$" + "00" * 32
 
 
-def _authenticate_locked(email: str, password: str):
+def _authenticate_locked(email: str, password: str, record_login: bool = True):
+    """Check a password with the usual lockout. record_login=False is used to re-confirm
+    the password before a sensitive action (account deletion) without counting a sign-in."""
     email = normalize_email(email)
     now = datetime.now()
 
@@ -1276,6 +1281,9 @@ def _authenticate_locked(email: str, password: str):
             pass
 
     if verify_password(password, row["password_hash"]):
+        if not record_login:
+            _update_account(email, failed_attempts=0, locked_until="")
+            return dict(row), "ok"
         _update_account(
             email, failed_attempts=0, locked_until="",
             last_login=now.isoformat(timespec="seconds"),
@@ -1373,6 +1381,196 @@ def reset_user_password(email: str) -> str:
     return temp_password
 
 
+# =============================================================================
+# Account deletion and data export (App Store 5.1.1(v), Google Play account deletion)
+# =============================================================================
+
+def delete_patient_account(email: str, password: str):
+    """Permanently delete a patient account and its data after re-confirming the password.
+
+    Returns (True, None) or (False, reason) where reason is invalid / locked / error.
+    Dependent records are removed first and the account row last, so an interrupted
+    deletion can simply be repeated by the patient.
+    """
+    email = normalize_email(email)
+    store = _accounts_store()
+    with store["lock"]:
+        row, status = _authenticate_locked(email, password, record_login=False)
+        if status != "ok":
+            return False, status
+        patient_id = str(row.get("patient_id") or "")
+        try:
+            account_deletion.purge_history(HISTORY_DB, email)
+            account_deletion.purge_care(care.CARE_DB, email, patient_id)
+            account_deletion.purge_reports_sheet(SAVE_FILE_XLSX, patient_id, write_excel_safely)
+            account_deletion.pseudonymise_audit_sheet(AUDIT_LOG_FILE, email, write_excel_safely)
+            account_deletion.purge_legacy_sqlite(DB_FILE, email)
+            rows = _load_rows()
+            remaining = [r for r in rows if r["email"] != email]
+            account_deletion.remove_photo(os.path.join(BASE_DIR, "profile_photos"), row.get("profile_photo", ""),
+                                          {r.get("profile_photo") for r in remaining})
+            _save_rows(remaining)
+        except Exception:
+            return False, "error"
+    # The deletion is logged without the email address.
+    log_action(0, "account_deleted", "patient_id=" + patient_id)
+    return True, None
+
+
+def export_patient_data(user) -> bytes:
+    """A copy of everything held about the signed-in patient (no password data)."""
+    email = normalize_email(user.get("email", ""))
+    account = next((r for r in _load_rows() if r["email"] == email), {})
+    history = load_patient_history(user)
+    try:
+        location = care.patient_location(user)
+        links = care.patient_links(user)
+        notes = care.patient_notes(user)
+    except Exception:
+        location, links, notes = {}, [], []
+    return account_deletion.export_bundle(account, history, location, links, notes)
+
+
+ACCOUNT_TEXT = {
+    "en": {
+        "section": "Your data and account",
+        "section_help": "Download a copy of your information, or delete your account permanently.",
+        "export": "Download my data",
+        "export_help": "A JSON file with your profile, screening history, doctor connections and notes.",
+        "delete": "Delete account",
+        "title": "Delete your account",
+        "intro": "Deleting your account is permanent and cannot be undone.",
+        "removed_title": "What will be deleted",
+        "removed": ["Your account, sign-in details and profile photo",
+                    "All saved screening results and reports",
+                    "Your care location, doctor connections and doctors' notes"],
+        "kept_title": "What is kept",
+        "kept": ["Security log entries, with your email replaced by an anonymous reference",
+                 "Records of disclosures already made to an authority, without your email",
+                 "Copies you downloaded or shared outside the app, which you control"],
+        "before": "Doctors you connected with lose access immediately. If you want a copy of your reports, download your data first.",
+        "email": "Account email",
+        "password": "Password",
+        "password_help": "Enter your password to confirm it is you.",
+        "confirm": "I understand that my account and data will be permanently deleted.",
+        "button": "Permanently delete my account",
+        "cancel": "Cancel",
+        "fill": "Enter your email and password, and tick the confirmation box.",
+        "invalid": "The email or password is incorrect.",
+        "locked": "Too many attempts. Try again in a few minutes.",
+        "error": "The account could not be deleted. Nothing was lost; please try again, or contact support.",
+        "done": "Your account and data have been deleted.",
+        "public_note": "You can also delete your account here without opening the app.",
+    },
+    "ar": {
+        "section": "بياناتك وحسابك",
+        "section_help": "نزّل نسخة من معلوماتك، أو احذف حسابك نهائيًا.",
+        "export": "تنزيل بياناتي",
+        "export_help": "ملف JSON فيه ملفك الشخصي وسجل الفحوصات والأطباء المرتبطين والملاحظات.",
+        "delete": "حذف الحساب",
+        "title": "حذف حسابك",
+        "intro": "حذف الحساب نهائي ولا يمكن التراجع عنه.",
+        "removed_title": "ما الذي سيُحذف",
+        "removed": ["حسابك وبيانات الدخول والصورة الشخصية",
+                    "جميع نتائج الفحوصات والتقارير المحفوظة",
+                    "مكان المتابعة والأطباء المرتبطون بك وملاحظات الأطباء"],
+        "kept_title": "ما الذي يبقى",
+        "kept": ["سجلات الأمان، بعد استبدال بريدك بمرجع مجهول الهوية",
+                 "سجلات الإفصاح التي تمت مسبقًا لجهة رسمية، بدون بريدك",
+                 "النسخ التي نزّلتها أو شاركتها خارج التطبيق، وهي تحت تصرفك"],
+        "before": "يفقد الأطباء المرتبطون بك صلاحية الوصول فورًا. إن أردت نسخة من تقاريرك فنزّل بياناتك أولًا.",
+        "email": "البريد الإلكتروني للحساب",
+        "password": "كلمة المرور",
+        "password_help": "أدخل كلمة المرور لتأكيد هويتك.",
+        "confirm": "أفهم أن حسابي وبياناتي ستُحذف نهائيًا.",
+        "button": "حذف حسابي نهائيًا",
+        "cancel": "إلغاء",
+        "fill": "أدخل البريد وكلمة المرور، وضع علامة على مربع التأكيد.",
+        "invalid": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+        "locked": "محاولات كثيرة. حاول مرة أخرى بعد بضع دقائق.",
+        "error": "تعذّر حذف الحساب. لم يُفقد شيء؛ حاول مرة أخرى أو تواصل مع الدعم.",
+        "done": "تم حذف حسابك وبياناتك.",
+        "public_note": "يمكنك أيضًا حذف حسابك من هنا دون فتح التطبيق.",
+    },
+}
+
+
+def account_text(key):
+    return ACCOUNT_TEXT.get(st.session_state.get("lang"), ACCOUNT_TEXT["en"])[key]
+
+
+def render_account_data_section(user):
+    """Profile page section: data export and the entry point to account deletion."""
+    with st.container(key="account_data_panel", border=True):
+        st.markdown(f"### {html_escape(account_text('section'))}")
+        st.caption(account_text("section_help"))
+        export_col, delete_col = st.columns(2, vertical_alignment="top")
+        with export_col:
+            try:
+                safe_id = re.sub(r"[^A-Za-z0-9_-]", "_", str(user.get("patient_id") or "patient"))
+                st.download_button(account_text("export"), data=export_patient_data(user),
+                                   file_name=f"PerdiaPredict_my_data_{safe_id}.json", mime="application/json",
+                                   key="export_my_data", use_container_width=True, help=account_text("export_help"),
+                                   on_click=log_action, args=(user.get("id", 0), "data_export_requested", "patient_id=" + str(user.get("patient_id", ""))))
+            except Exception:
+                st.error(account_text("error"))
+        with delete_col:
+            if st.button(account_text("delete"), key="open_delete_account", use_container_width=True):
+                st.session_state["delete_return_page"] = "profile_edit"
+                go_to("delete_account")
+
+
+def render_delete_account_page():
+    """In-app deletion for a signed-in patient; also the public web deletion page."""
+    user = st.session_state.get("user") or {}
+    signed_in = bool(user.get("email"))
+    st.subheader(account_text("title"))
+    if not signed_in:
+        st.caption(account_text("public_note"))
+    st.warning(account_text("intro"))
+    removed = "".join(f"<li>{html_escape(item)}</li>" for item in account_text("removed"))
+    kept = "".join(f"<li>{html_escape(item)}</li>" for item in account_text("kept"))
+    st.markdown(f"**{html_escape(account_text('removed_title'))}**<ul>{removed}</ul>"
+                f"**{html_escape(account_text('kept_title'))}**<ul>{kept}</ul>", unsafe_allow_html=True)
+    st.caption(account_text("before"))
+    with st.form("delete_account_form", clear_on_submit=True):
+        if signed_in:
+            email = user["email"]
+            st.text_input(account_text("email"), value=email, disabled=True, key="delete_email_shown")
+        else:
+            email = st.text_input(account_text("email"), key="delete_email", max_chars=254,
+                                  placeholder="name@example.com", autocomplete="off")
+        password = st.text_input(account_text("password"), type="password", key="delete_pw", max_chars=128,
+                                 autocomplete="new-password", help=account_text("password_help"))
+        understood = st.checkbox(account_text("confirm"), key="delete_understood")
+        with st.container(key="delete_account_actions"):
+            delete_col, cancel_col = st.columns(2)
+            with delete_col:
+                submitted = st.form_submit_button(account_text("button"), type="primary", use_container_width=True)
+            with cancel_col:
+                cancelled = st.form_submit_button(account_text("cancel"), use_container_width=True)
+    if cancelled:
+        go_to(st.session_state.pop("delete_return_page", "profile_edit" if signed_in else "auth"))
+    if submitted:
+        if not (str(email).strip() and password and understood):
+            st.error(account_text("fill"))
+            return
+        try:
+            ok, reason = delete_patient_account(email, password)
+        except Exception:
+            ok, reason = False, "error"
+        if not ok:
+            st.error(account_text({"locked": "locked", "error": "error"}.get(reason, "invalid")))
+            return
+        done = account_text("done")
+        lang = st.session_state.get("lang", "en")
+        keep_dark = st.session_state.get("dark_mode", True)
+        st.session_state.clear()
+        st.session_state.update(lang=lang, dark_mode=keep_dark, page="auth", _splash_seen=True,
+                                _fixed_role=APP_ROLE, _ux_notice=done)
+        st.rerun()
+
+
 def render_accounts_admin():
     if st.session_state.get("admin_ok") is not True:
         st.error("Administrator sign-in required.")
@@ -1457,6 +1655,7 @@ def go_to(page_name: str):
 
 def restart_app(new_lang: str, page: str = "splash"):
     keep_dark = st.session_state.get("dark_mode", True)
+    splash_seen = st.session_state.get("_splash_seen")
 
     for key in list(st.session_state.keys()):
         del st.session_state[key]
@@ -1464,6 +1663,9 @@ def restart_app(new_lang: str, page: str = "splash"):
     st.session_state["lang"] = new_lang if new_lang in LANGUAGES else "en"
     st.session_state["dark_mode"] = keep_dark
     st.session_state["page"] = page
+    # A language change (page="splash") shows the logo again; sign-out does not.
+    if page != "splash" and splash_seen:
+        st.session_state["_splash_seen"] = True
     st.session_state.pop("current_patient_id", None)
     st.session_state.pop("basic_gender", None)
 
@@ -1479,6 +1681,34 @@ def restart_app(new_lang: str, page: str = "splash"):
 # Animated splash screen
 # =============================================================================
 
+SPLASH_SECONDS = 2.0
+# Optional photo for the start screen. Put one of these files in the project folder.
+SPLASH_PHOTO_NAMES = ("splash_background.jpg", "splash_background.jpeg", "splash_background.png", "splash_background.webp")
+
+
+@st.cache_data(show_spinner=False)
+def _splash_photo_uri(path: str, mtime: float) -> str:
+    """Resize and compress the photo once (max 1600px, JPEG) so the start screen stays fast."""
+    from PIL import Image, ImageOps
+    with Image.open(path) as image:
+        image = ImageOps.exif_transpose(image).convert("RGB")
+        image.thumbnail((1600, 1600))
+        buffer = BytesIO()
+        image.save(buffer, format="JPEG", quality=78, optimize=True, progressive=True)
+    return "data:image/jpeg;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
+def splash_photo():
+    for name in SPLASH_PHOTO_NAMES:
+        path = os.path.join(BASE_DIR, name)
+        if os.path.exists(path):
+            try:
+                return _splash_photo_uri(path, os.path.getmtime(path))
+            except Exception:
+                return None
+    return None
+
+
 def render_splash():
     if os.path.exists(LOGO_PATH):
         with open(LOGO_PATH, "rb") as _f:
@@ -1490,31 +1720,116 @@ def render_splash():
     else:
         logo_html = "PP"
 
-    # A short, quiet start screen: logo and name, no particles or shimmer.
+    # Start screen: logo, name and loading bar over soft moving colour, a dot grid, a glucose
+    # curve and floating glass tiles with diabetes care icons (original vector art).
+    import theme
+    from splash_art import icon_uri, wave_uri
+    seconds = SPLASH_SECONDS
+    dark = st.session_state.get("dark_mode", True)
+    pal = theme.PALETTES["dark" if dark else "light"]
+    accent = "#5B8DEF" if dark else "#2F6BD8"
+    glow = (".38", ".30", ".20") if dark else (".22", ".18", ".12")
+    tile_bg, tile_line = ("rgba(255,255,255,.045)", "rgba(255,255,255,.10)") if dark else ("rgba(255,255,255,.60)", "rgba(15,107,92,.14)")
+    dot = "rgba(255,255,255,.07)" if dark else "rgba(28,42,51,.08)"
+    icon_color = pal["primary"]
+    photo = splash_photo()
+    tiles = "" if photo else "".join(
+        f'<div class="sp-tile sp-t{i}"><img src="{icon_uri(name, icon_color)}" alt=""></div>'
+        for i, name in enumerate(("drop", "meter", "pen", "tablet", "strip", "capsule"), 1)
+    )
+    # With a photo: the photo fills the screen, slightly blurred and darkened (or lightened) so the
+    # logo and text stay readable; the curve and tiles are not drawn.
+    shade = "17,24,28" if dark else "243,245,244"
+    photo_css = (f"""<style>
+        .splash .sp-photo {{ position:absolute; inset:-24px; z-index:-4; background:url("{photo}") center / cover no-repeat;
+                             filter:blur(3px) saturate(1.05); transform:scale(1.04); animation:spZoom {seconds + 1}s ease-out both; }}
+        .splash.sp-has-photo::before {{ content:""; position:absolute; inset:0; z-index:-3;
+            background:radial-gradient(ellipse at center, rgba({shade},.78) 0, rgba({shade},.62) 45%, rgba({shade},.82) 100%); }}
+        .splash.sp-has-photo .sp-blob, .splash.sp-has-photo .sp-grid, .splash.sp-has-photo .sp-wave {{ display:none; }}
+        @keyframes spZoom {{ from {{ transform:scale(1.12); }} to {{ transform:scale(1.04); }} }}
+        </style>""" if photo else "")
     st.markdown(
         f"""
         <style>
         header[data-testid="stHeader"] {{ display:none !important; }}
-        .splash {{ position:fixed; inset:0; z-index:999999; display:flex; flex-direction:column;
-                   align-items:center; justify-content:center; gap:14px; background:var(--pp-page); }}
-        .splash .logo-box {{ width:88px; height:88px; border-radius:20px; overflow:hidden; background:var(--pp-avatar);
-                             display:grid; place-items:center; font-weight:700; color:var(--pp-avatar-ink); }}
-        .splash .welcome-name {{ font-size:1.5rem; font-weight:650; color:var(--pp-ink); }}
+        .splash {{ position:fixed; inset:0; z-index:999999; display:flex; align-items:center; justify-content:center;
+                   background:var(--pp-page); overflow:hidden; isolation:isolate; }}
+        .splash .sp-blob {{ position:absolute; width:52vmax; height:52vmax; border-radius:50%; filter:blur(70px); z-index:-3; }}
+        .splash .sp-b1 {{ background:radial-gradient(circle, rgba(79,184,163,{glow[0]}) 0, transparent 65%); top:-22vmax; left:-14vmax; animation:spDrift1 9s ease-in-out infinite alternate; }}
+        .splash .sp-b2 {{ background:radial-gradient(circle, {accent}{'61' if dark else '3D'} 0, transparent 65%); bottom:-26vmax; right:-16vmax; animation:spDrift2 11s ease-in-out infinite alternate; }}
+        .splash .sp-b3 {{ background:radial-gradient(circle, rgba(124,92,255,{glow[2]}) 0, transparent 60%); width:34vmax; height:34vmax; top:40%; left:58%; animation:spDrift1 13s ease-in-out infinite alternate-reverse; }}
+        .splash .sp-grid {{ position:absolute; inset:0; z-index:-2; background-image:radial-gradient({dot} 1.2px, transparent 1.2px);
+                            background-size:26px 26px; -webkit-mask-image:radial-gradient(ellipse at center, #000 20%, transparent 75%);
+                            mask-image:radial-gradient(ellipse at center, #000 20%, transparent 75%); }}
+        .splash .sp-wave {{ position:absolute; left:0; right:0; bottom:6%; height:30vh; z-index:-1; background:url("{wave_uri(pal['primary'], accent)}") center / 100% 100% no-repeat;
+                            -webkit-mask-image:linear-gradient(90deg,#000,#000); mask-image:linear-gradient(90deg,#000,#000);
+                            -webkit-mask-size:0% 100%; mask-size:0% 100%; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+                            animation:spReveal {seconds}s cubic-bezier(.4,0,.2,1) forwards; }}
+        .splash .sp-tile {{ position:absolute; width:76px; height:76px; border-radius:22px; display:grid; place-items:center;
+                            background:{tile_bg}; border:1px solid {tile_line}; backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+                            box-shadow:0 10px 30px rgba(0,0,0,{'.28' if dark else '.06'}); animation:spFloat 6s ease-in-out infinite; }}
+        .splash .sp-tile img {{ width:40px; height:40px; object-fit:contain; opacity:.95; }}
+        .splash .sp-t1 {{ top:16%; left:14%; animation-delay:-1s; }}
+        .splash .sp-t2 {{ top:12%; right:16%; width:88px; height:88px; animation-delay:-3s; }}
+        .splash .sp-t3 {{ bottom:18%; left:10%; width:96px; animation-delay:-2s; }}
+        .splash .sp-t3 img {{ width:72px; }}
+        .splash .sp-t4 {{ bottom:22%; right:12%; animation-delay:-4s; }}
+        .splash .sp-t5 {{ top:44%; left:5%; width:60px; height:60px; border-radius:18px; animation-delay:-5s; }}
+        .splash .sp-t6 {{ top:40%; right:6%; width:64px; height:64px; border-radius:18px; animation-delay:-2.5s; }}
+        .splash .sp-t5 img, .splash .sp-t6 img {{ width:30px; height:30px; }}
+        .splash .splash-center {{ position:relative; display:flex; flex-direction:column; align-items:center; gap:12px; padding:32px 40px; }}
+        .splash .logo-box {{ position:relative; width:104px; height:104px; border-radius:28px; overflow:hidden; background:var(--pp-avatar);
+                             display:grid; place-items:center; font-weight:700; color:var(--pp-avatar-ink);
+                             box-shadow:0 0 0 1px {tile_line}, 0 18px 50px rgba(79,184,163,{'.30' if dark else '.22'}); }}
+        .splash .welcome-name {{ font-size:1.75rem; font-weight:700; letter-spacing:-.01em; color:var(--pp-ink); margin-top:6px; }}
         .splash .welcome-tag {{ font-size:.9375rem; color:var(--pp-muted); }}
-        @media (prefers-reduced-motion: no-preference) {{ .splash {{ animation: ppFade .4s ease-out both; }} }}
-        @keyframes ppFade {{ from {{ opacity:0; }} to {{ opacity:1; }} }}
+        .splash .loading-track {{ position:relative; width:220px; height:4px; border-radius:999px; background:{tile_line}; overflow:hidden; margin-top:14px; }}
+        .splash .loading-fill {{ position:absolute; inset:0; border-radius:999px; background:linear-gradient(90deg, {pal['primary']}, {accent});
+                                 transform-origin:left center; animation:ppLoad {seconds}s cubic-bezier(.4,0,.2,1) both; }}
+        .splash .loading-fill::after {{ content:""; position:absolute; inset:0; background:linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+                                        transform:translateX(-100%); animation:spShine 1.1s linear infinite; }}
+        @keyframes ppLoad {{ from {{ transform:scaleX(0); }} to {{ transform:scaleX(1); }} }}
+        @keyframes spShine {{ to {{ transform:translateX(100%); }} }}
+        @keyframes spReveal {{ to {{ -webkit-mask-size:100% 100%; mask-size:100% 100%; }} }}
+        @keyframes spFloat {{ 0%,100% {{ transform:translateY(0); }} 50% {{ transform:translateY(-10px); }} }}
+        @keyframes spDrift1 {{ to {{ transform:translate(6vmax, 4vmax) scale(1.08); }} }}
+        @keyframes spDrift2 {{ to {{ transform:translate(-5vmax, -3vmax) scale(1.06); }} }}
+        .splash .splash-center {{ animation: ppFade .5s ease-out both; }}
+        @keyframes ppFade {{ from {{ opacity:0; transform:translateY(8px); }} to {{ opacity:1; transform:none; }} }}
+        @media (max-width: 640px) {{
+          .splash .sp-tile {{ width:60px; height:60px; border-radius:18px; }}
+          .splash .sp-tile img {{ width:30px; height:30px; }}
+          .splash .sp-t3 {{ width:76px; }} .splash .sp-t3 img {{ width:56px; }}
+          .splash .sp-t1 {{ top:9%; left:8%; }} .splash .sp-t2 {{ top:13%; right:8%; }}
+          .splash .sp-t3 {{ bottom:12%; left:8%; }} .splash .sp-t4 {{ bottom:16%; right:8%; }}
+          .splash .sp-t5, .splash .sp-t6 {{ display:none; }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+          .splash *, .splash *::after {{ animation:none !important; }}
+          .splash .sp-wave {{ -webkit-mask-size:100% 100%; mask-size:100% 100%; }}
+        }}
         </style>
-        <div class="splash">
-            <div class="logo-box">{logo_html}</div>
-            <div class="welcome-name">PerdiaPredict</div>
-            <div class="welcome-tag">{html_escape(str(tr('tagline')))}</div>
+        {photo_css}
+        <div class="splash{' sp-has-photo' if photo else ''}">
+            <div class="sp-photo"></div>
+            <div class="sp-blob sp-b1"></div><div class="sp-blob sp-b2"></div><div class="sp-blob sp-b3"></div>
+            <div class="sp-grid"></div>
+            <div class="sp-wave"></div>
+            {tiles}
+            <div class="splash-center">
+                <div class="logo-box">{logo_html}</div>
+                <div class="welcome-name">PerdiaPredict</div>
+                <div class="welcome-tag">{html_escape(str(tr('tagline')))}</div>
+                <div class="loading-track" role="progressbar" aria-label="Loading"><div class="loading-fill"></div></div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    time.sleep(1.2)
-    go_to("language")
+    time.sleep(seconds)
+    # Straight to this app's sign-in page: patient sign-in, doctor sign-in or admin password.
+    go_to(portal_runtime.ENTRY[APP_ROLE])
 
 
 # =============================================================================
@@ -1748,14 +2063,15 @@ def render_login_page():
     with auth_card(tr("welcome_back"), tr("welcome_back_sub")):
         _form_title(tr("login_title"))
 
-        with st.form("login_form", clear_on_submit=False):
+        # Sign-in fields start empty: no browser autofill, and cleared after each attempt.
+        with st.form("login_form", clear_on_submit=True):
             email = st.text_input(
                 tr("auth_email"), key="login_email", max_chars=254,
-                placeholder="name@example.com", autocomplete="email",
+                placeholder="name@example.com", autocomplete="off",
             )
             password = st.text_input(
                 tr("auth_password"), type="password", key="login_pw", max_chars=128,
-                placeholder="••••••••", autocomplete="current-password",
+                placeholder="••••••••", autocomplete="new-password",
             )
             submitted = st.form_submit_button(
                 f"{tr('login_button')}", type="primary", use_container_width=True
@@ -1824,6 +2140,8 @@ def generate_patient_id() -> str:
         existing = pd.read_excel(SAVE_FILE_XLSX, engine="openpyxl", dtype=str)
         if "Patient ID" in existing.columns:
             used.update(existing["Patient ID"].dropna().str.strip())
+    # IDs of deleted accounts are never handed to a new patient.
+    used.update(account_deletion.retired_patient_ids(care.CARE_DB))
     sequences = []
     for value in used:
         value = re.sub(r"\.0$", "", value)
@@ -2070,6 +2388,17 @@ def _admin_password_ok(candidate: str) -> bool:
 
 def render_admin_page():
     if not ADMIN_PASSWORD:
+        secrets_dir = os.path.join(BASE_DIR, ".streamlit")
+        target = os.path.join(secrets_dir, "secrets.toml")
+        misnamed = [name for name in ("secrets.toml.toml", "secrets.toml.txt", "secrets.txt")
+                    if os.path.exists(os.path.join(secrets_dir, name))]
+        if misnamed:
+            # Windows hides extensions, so "secrets.toml" is often saved as secrets.toml.toml.
+            st.error(f"The settings file is named {misnamed[0]} instead of secrets.toml. "
+                     "Rename it to exactly secrets.toml (turn on File name extensions in File Explorer's View menu), then restart the app.")
+        elif os.path.exists(target):
+            st.error("secrets.toml was found but ADMIN_PASSWORD is empty or unreadable. "
+                     'Write it as ADMIN_PASSWORD = "your-password" on its own line near the top of the file, save, then restart the app.')
         st.warning("Configure ADMIN_PASSWORD in .streamlit/secrets.toml before using the admin panel."
                    if st.session_state.get("lang") != "ar" else
                    "اضبط ADMIN_PASSWORD في ملف .streamlit/secrets.toml قبل استخدام لوحة الإدارة.")
@@ -2080,10 +2409,10 @@ def render_admin_page():
         with auth_card(tr("admin_title"), tr("admin_help"), show_toggle=False):
             _form_title(tr("admin_title"))
 
-            with st.form("admin_form", clear_on_submit=False):
+            with st.form("admin_form", clear_on_submit=True):
                 admin_pw = st.text_input(
                     tr("password"), type="password", key="admin_pw", max_chars=128,
-                    placeholder="••••••••", autocomplete="current-password",
+                    placeholder="••••••••", autocomplete="new-password",
                 )
                 unlock = st.form_submit_button(
                     f"{tr('login_button')}", type="primary", use_container_width=True
@@ -2775,6 +3104,7 @@ def render_profile_edit_page():
                     save_edit = st.form_submit_button(profile_copy("save"), type="primary", use_container_width=True)
                 with cancel_col:
                     cancel_edit = st.form_submit_button(profile_copy("cancel"), use_container_width=True)
+    render_account_data_section(_user)
     if cancel_edit:
         st.session_state.pop("pending_profile_changes", None)
         go_to(st.session_state.pop("profile_return_page", "main"))
@@ -3410,6 +3740,7 @@ def inject_enter_navigation():
 
 def render_footer():
     ux.render_confirmation()
+    portal_runtime.render_session_timer()
     inject_enter_navigation()
     from visual_accessibility import inject_visual_accessibility
     inject_visual_accessibility()
@@ -3432,12 +3763,18 @@ ux.inject_experience()
 
 from app_policies import route_from_query
 route_from_query()
+if APP_ROLE == "patient" and st.query_params.get("account") == "delete":
+    # Public deletion link for the Google Play listing: <patient-app-url>/?account=delete
+    st.query_params.pop("account", None)
+    st.session_state["page"] = "delete_account"
 portal_runtime.enforce(APP_ROLE)
 current_page = st.session_state["page"]
 if current_page in ("program_policy", "privacy_policy"):
     from app_policies import render_page as render_policy_page
     render_policy_page()
     render_footer()
+elif current_page == "splash":
+    render_splash()
 elif current_page == "language":
     render_language_gate()
     render_footer()

@@ -1,0 +1,37 @@
+[theme]
+# Native widget colours (checkboxes, radios, tabs, progress) follow theme.py.
+base = "light"
+primaryColor = "#0F6B5C"
+backgroundColor = "#F3F5F4"
+secondaryBackgroundColor = "#E9EEEC"
+textColor = "#1C2A33"
+borderColor = "#B4BFC5"
+baseRadius = "8px"
+showWidgetBorder = true
+
+[client]
+# Never show tracebacks, file paths or exception text in the browser.
+showErrorDetails = "none"
+# Hide the Deploy button and developer menu entries from users.
+toolbarMode = "viewer"
+showSidebarNavigation = false
+
+[runner]
+# Bare expressions in code are never written to the page by accident.
+magicEnabled = false
+
+[browser]
+# No usage statistics are sent to Streamlit.
+gatherUsageStats = false
+
+[server]
+enableXsrfProtection = true
+enableCORS = true
+# Matches the 5 MB profile-photo limit enforced in code.
+maxUploadSize = 5
+maxMessageSize = 50
+headless = true
+
+[logger]
+# Terminal shows errors only; the app does not log patient data.
+level = "error"

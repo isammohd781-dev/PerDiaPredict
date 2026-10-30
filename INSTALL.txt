@@ -1,0 +1,4 @@
+Replace visual_accessibility.py in your project, then restart the app or redeploy the update on Render.
+Then open the site with ?theme=light and reload the page.
+If the browser still forces dark colours, turn off the option that darkens web pages in the browser settings.
+This is a styling update only; it does not delete accounts or reports.

@@ -1,0 +1,43 @@
+# Reverse-proxy template for publishing PerdiaPredict over HTTPS (nginx).
+# Streamlit cannot send security headers itself, so they are set here.
+# Replace [YOUR_DOMAIN] and the certificate paths, then test with: nginx -t
+# Run Streamlit bound to 127.0.0.1 only (launch.py already does this).
+
+server {
+    listen 80;
+    server_name [YOUR_DOMAIN];
+    return 301 https://$host$request_uri;          # HTTP -> HTTPS
+}
+
+server {
+    listen 443 ssl http2;
+    server_name [YOUR_DOMAIN];
+
+    ssl_certificate     /etc/letsencrypt/live/[YOUR_DOMAIN]/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/[YOUR_DOMAIN]/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 6m;                         # profile photos are limited to 5 MB
+    server_tokens off;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+    # Streamlit needs inline styles/scripts and its websocket; everything else stays same-origin.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' wss://[YOUR_DOMAIN]; frame-src 'self' blob: data:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+
+    # Patient portal. Doctor (8502) and admin (8503) should get their own server_name
+    # and, ideally, be reachable only from the clinic network or a VPN.
+    location / {
+        proxy_pass http://127.0.0.1:8501;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}

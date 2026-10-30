@@ -1,6 +1,6 @@
 # Independent portal applications
 
-Run `python launch.py all` (Python 3.11–3.13), or double-click START_ALL.bat on Windows. Patient: port 8501; Doctor: 8502; Administration: 8503. Each portal has its own entry file and Streamlit session. All three share the same project data directory. See SEPARATE_PAGES_AR.md for startup, migration and permissions.
+Run `python launch.py all` (Python 3.11–3.13), or double-click START_ALL.bat on Windows. Patient: port 8501; Doctor: 8502; Administration: 8503. Each portal has its own entry file and Streamlit session. All three share the same project data directory. See SEPARATE_PAGES.md for startup, migration and permissions.
 
 # PerdiaPredict
 Development Streamlit application for educational diabetes risk screening.

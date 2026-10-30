@@ -1,43 +1,22 @@
-# ---- Private settings (passwords). Only *.example.toml templates are committed ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
 .streamlit/secrets.toml
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+accounts.xlsx
+saved_reports.xlsx
+audit_log.xlsx
+profile_photos/
+tmp/
+*.part
+# Private settings: only the *.example.toml templates belong in version control
 *secrets*.toml
 policy_settings.toml
 !*.example.toml
 .env
 .env.*
-
-# ---- Patient, doctor and admin data created while the app runs ----
-*.db
-*.db-wal
-*.db-shm
-*.db-journal
-*.sqlite
-*.sqlite3
-*.xlsx
-*.xlsx#
-~$*
-profile_photos/
-private_data/
-documents/
-*.pdf
-*.log
-
-# ---- Python environment and caches ----
-.venv/
-.venv*/
-venv/
-env/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.ruff_cache/
-
-# ---- Temporary and editor files ----
-tmp/
-*.part
-*.bak
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-desktop.ini
+perdiapredict.db

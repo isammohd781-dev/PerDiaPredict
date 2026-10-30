@@ -35,9 +35,24 @@ def main():
     check = subprocess.run([str(python), '-c', 'import sys; print(str(sys.version_info.major)+"."+str(sys.version_info.minor))'], capture_output=True, text=True, check=True)
     if check.stdout.strip() not in ('3.11','3.12','3.13'):
         raise SystemExit('The existing .venv uses an unsupported Python. Rename .venv to .venv_backup and start again. Keep your data files unchanged.')
+    # A .venv created by an interrupted first run can be missing pip. Repair it in place;
+    # if that is not possible, rebuild the environment (data files are never touched).
+    def has_pip():
+        return subprocess.run([str(python), '-m', 'pip', '--version'], capture_output=True).returncode == 0
+    if not has_pip():
+        print('Repairing the Python environment (pip is missing)...')
+        subprocess.run([str(python), '-m', 'ensurepip', '--upgrade'], capture_output=True)
+        if not has_pip():
+            import shutil
+            shutil.rmtree(env_dir, ignore_errors=True)
+            subprocess.run([sys.executable, '-m', 'venv', '--clear', str(env_dir)], check=True)
+            if not has_pip():
+                raise SystemExit('Python could not set up pip. Reinstall Python 3.12 from python.org with the "pip" option ticked, then start again.')
+        (env_dir / 'requirements.sha256').unlink(missing_ok=True)
     fingerprint = hashlib.sha256((ROOT / 'requirements.txt').read_bytes()).hexdigest()
     marker = env_dir / 'requirements.sha256'
     if not marker.exists() or marker.read_text() != fingerprint:
+        subprocess.run([str(python), '-m', 'pip', 'install', '--upgrade', 'pip'])
         subprocess.run([str(python), '-m', 'pip', 'install', '-r', str(ROOT / 'requirements.txt')], check=True)
         marker.write_text(fingerprint)
     processes = []

@@ -39,13 +39,15 @@ def css(dark: bool = False, rtl: bool = False) -> str:
     tokens = "\n".join(f"  --pp-{k.replace('_', '-')}: {v};" for k, v in p.items())
     start, end = ("right", "left") if rtl else ("left", "right")
     direction = "rtl" if rtl else "ltr"
-    return f"""
+    sheet = f"""
 :root {{
 {tokens}
   --pp-font: {FONT};
   --pp-r-control: 8px;
   --pp-r-panel: 12px;
   --pp-field-h: 48px;
+  /* Streamlit's fixed top bar. Page content starts below it so the first button is never cut off. */
+  --pp-top-bar: 3.75rem;
   color-scheme: {"dark" if dark else "light"};
 }}
 
@@ -59,10 +61,10 @@ html, body, .stApp, [data-testid="stAppViewContainer"] {{
 .stApp :is(p, li, label, span) {{ color: var(--pp-ink); }}
 .stApp {{ font-size: 16px; line-height: 1.6; }}
 [data-testid="stMain"], [data-testid="stMainBlockContainer"] {{ background: transparent !important; }}
-header[data-testid="stHeader"] {{ background: var(--pp-page) !important; box-shadow: none; }}
+header[data-testid="stHeader"] {{ background: var(--pp-page) !important; box-shadow: none; height: var(--pp-top-bar) !important; min-height: var(--pp-top-bar) !important; }}
 [data-testid="stDecoration"] {{ display: none !important; }}
 .block-container, [data-testid="stMainBlockContainer"] {{
-  max-width: 920px !important; padding: 2.5rem 1.25rem 3rem !important;
+  max-width: 920px !important; padding: calc(var(--pp-top-bar) + 24px) 1.25rem 3rem !important;
 }}
 [data-testid="stMain"] [data-testid="stMarkdownContainer"] {{ direction: {direction}; text-align: {start}; }}
 [data-testid="stVerticalBlock"] {{ gap: 16px; }}
@@ -87,6 +89,9 @@ header[data-testid="stHeader"] {{ background: var(--pp-page) !important; box-sha
 .stApp [data-testid="stMarkdownContainer"] hr, .stApp hr {{
   border: 0 !important; border-top: 1px solid var(--pp-line) !important; margin: 8px 0 !important; opacity: 1 !important;
 }}
+
+/* Invisible helper frames (Enter navigation, session timer) take no space in the layout */
+.stApp [data-testid="stElementContainer"]:has(iframe[height="0"]) {{ position: absolute !important; width: 0 !important; height: 0 !important; margin: 0 !important; overflow: hidden !important; }}
 
 /* ---------- Header bar ---------- */
 [data-testid="stHorizontalBlock"]:has(.brand) {{
@@ -166,6 +171,60 @@ div[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVert
 .stApp [data-testid="stSelectbox"] [role="group"] input {{ flex: 1 1 0; min-width: 0; caret-color: transparent; }}
 .stApp :is(svg) {{ color: inherit; }}
 
+/* ---------- Buttons inside fields (password eye, number steppers, select arrow) ---------- */
+/* Streamlit's "Press Enter to apply" hint sits on top of the text and the eye button */
+.stApp [data-testid="InputInstructions"] {{ display: none !important; }}
+.stApp :is([data-testid="stTextInputRootElement"], [data-testid="stNumberInputContainer"]) {{
+  display: flex !important; align-items: stretch !important; overflow: hidden;
+}}
+.stApp :is([data-testid="stTextInputRootElement"], [data-testid="stNumberInputContainer"]) > div:first-child {{
+  flex: 1 1 auto !important; min-width: 0 !important; height: auto !important;
+}}
+.stApp [data-testid="stTextInputRootElement"] [data-baseweb="base-input"] {{ display: flex !important; align-items: center !important; height: 100%; }}
+.stApp :is([data-testid="stTextInputRootElement"], [data-testid="stNumberInputContainer"]) input {{ height: auto !important; min-height: calc(var(--pp-field-h) - 2px); }}
+/* Password show / hide: a centred 36px square at the end of the field, on both sides in Arabic */
+.stApp [data-testid="stTextInputRootElement"] button {{
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  flex: 0 0 36px !important; width: 36px !important; height: 36px !important; min-width: 36px !important;
+  padding: 0 !important; margin: 0 6px !important; border-radius: 6px !important; align-self: center !important;
+  color: var(--pp-muted) !important;
+}}
+.stApp [data-testid="stTextInputRootElement"] button:hover {{ background: var(--pp-sunken) !important; color: var(--pp-ink) !important; }}
+.stApp [data-testid="stTextInputRootElement"] button svg {{ width: 20px !important; height: 20px !important; }}
+.stApp [data-testid="stTextInputRootElement"] button:focus-visible {{ outline-offset: -2px !important; }}
+/* Number field − / +: two equal full-height buttons with a hairline divider */
+.stApp [data-testid="stNumberInputContainer"] > div:not(:first-child) {{
+  display: flex !important; align-items: stretch !important; flex: 0 0 auto !important; height: auto !important;
+}}
+.stApp [data-testid="stNumberInputContainer"] button:is([data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"]) {{
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  width: 44px !important; min-width: 44px !important; height: auto !important; align-self: stretch !important;
+  padding: 0 !important; margin: 0 !important; border-radius: 0 !important;
+  border-inline-start: 1px solid var(--pp-line) !important; color: var(--pp-ink) !important;
+}}
+.stApp [data-testid="stNumberInputContainer"] button:is([data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"]):hover:not(:disabled) {{
+  background: var(--pp-sunken) !important;
+}}
+.stApp [data-testid="stNumberInputContainer"] button:is([data-testid="stNumberInputStepDown"], [data-testid="stNumberInputStepUp"]):disabled {{ opacity: .4 !important; }}
+.stApp [data-testid="stNumberInputContainer"] button svg {{ width: 16px !important; height: 16px !important; }}
+.stApp [data-testid="stNumberInputContainer"] button:focus-visible {{ outline-offset: -2px !important; }}
+/* Select: text and the arrow / clear icons share one centred row */
+.stApp div[data-baseweb="select"] > div {{ display: flex !important; align-items: center !important; padding-inline: 4px 8px !important; }}
+.stApp div[data-baseweb="select"] svg {{ flex: 0 0 auto; width: 20px; height: 20px; color: var(--pp-muted) !important; }}
+/* The (?) help icon stays on the label's line */
+.stApp [data-testid="stWidgetLabel"] {{ display: flex !important; align-items: center !important; gap: 6px; }}
+.stApp [data-testid="stWidgetLabel"] [data-testid="stTooltipIcon"] {{ display: inline-flex; align-items: center; margin: 0 !important; }}
+/* A button placed in a row beside fields matches the field height, so both line up */
+.stApp [data-testid="stHorizontalBlock"]:has(:is(input, [data-baseweb="select"])) > [data-testid="stColumn"] [data-testid^="stBaseButton-"] {{
+  min-height: var(--pp-field-h) !important;
+}}
+/* File picker: the Browse button sits centred in its drop area */
+.stApp [data-testid="stFileUploaderDropzone"] {{
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  border: 1px dashed var(--pp-line-strong) !important; border-radius: var(--pp-r-control) !important; background: var(--pp-sunken) !important;
+}}
+.stApp [data-testid="stFileUploaderDropzone"] [data-testid^="stBaseButton-"] {{ min-height: 40px; margin: 0 !important; }}
+
 /* Dropdown menus */
 div[data-baseweb="popover"] :is(ul, [role="listbox"]), [data-testid="stSelectboxVirtualDropdown"], [role="listbox"] {{
   background: var(--pp-surface) !important; border: 1px solid var(--pp-line) !important; border-radius: var(--pp-r-control);
@@ -204,6 +263,15 @@ div[data-baseweb="popover"] :is(ul, [role="listbox"]), [data-testid="stSelectbox
   background: var(--pp-primary-hover) !important; border-color: var(--pp-primary-hover) !important;
 }}
 .stApp [data-testid^="stBaseButton-"]:disabled {{ opacity: .5 !important; cursor: not-allowed; }}
+/* Permanent account deletion is the one red action */
+.stApp .st-key-delete_account_actions [data-testid="stBaseButton-primaryFormSubmit"] {{
+  background: var(--pp-danger) !important; border-color: var(--pp-danger) !important;
+}}
+.stApp .st-key-delete_account_actions [data-testid="stBaseButton-primaryFormSubmit"] :is(p, span) {{
+  color: var(--pp-surface) !important; -webkit-text-fill-color: var(--pp-surface) !important;
+}}
+.stApp .st-key-delete_account_actions [data-testid="stBaseButton-primaryFormSubmit"]:hover {{ filter: brightness(.92); }}
+.stApp .st-key-open_delete_account [data-testid^="stBaseButton-"] :is(p, span) {{ color: var(--pp-danger) !important; -webkit-text-fill-color: var(--pp-danger) !important; }}
 .stApp :is(button, input, textarea, a, [role="radio"], [role="checkbox"]):focus-visible {{
   outline: 2px solid var(--pp-primary) !important; outline-offset: 2px !important;
 }}
@@ -378,7 +446,7 @@ div[data-baseweb="tooltip"] *, [data-testid="stTooltipContent"] * {{ color: var(
 
 /* ---------- Small screens ---------- */
 @media (max-width: 640px) {{
-  .block-container, [data-testid="stMainBlockContainer"] {{ padding: 1.25rem .75rem 2rem !important; }}
+  .block-container, [data-testid="stMainBlockContainer"] {{ padding: calc(var(--pp-top-bar) + 12px) .75rem 2rem !important; }}
   [data-testid="stForm"], .st-key-patient_card {{ padding: 16px !important; }}
   .st-key-auth_card, .st-key-registration_card {{ padding: 20px 16px !important; margin-top: 8px; }}
   [data-testid="stHorizontalBlock"]:has(.brand) {{ padding: 8px 10px; }}
@@ -388,7 +456,20 @@ div[data-baseweb="tooltip"] *, [data-testid="stTooltipContent"] * {{ color: var(
   .score {{ font-size: 2.5rem; }}
 }}
 @media (prefers-reduced-motion: reduce) {{ * {{ transition: none !important; animation: none !important; }} }}
+
+/* ---------- Dialogs ----------
+   Streamlit renders dialogs outside .stApp, so page rules did not reach them (dark text on a
+   dark panel, white Cancel button in dark mode). Every page rule is applied to dialogs too. */
+[data-testid="stDialog"] [role="dialog"] :is(p, li, label, span, [data-testid="stMarkdownContainer"]) {{ color: var(--pp-ink); font-family: var(--pp-font); }}
+[data-testid="stDialog"] [role="dialog"] [data-testid="stVerticalBlockBorderWrapper"] {{
+  background: var(--pp-sunken) !important; border: 1px solid var(--pp-line) !important; border-radius: var(--pp-r-control) !important;
+}}
+[data-testid="stDialog"] [role="dialog"] [data-testid="stVerticalBlockBorderWrapper"] strong {{ color: var(--pp-ink) !important; font-weight: 650; }}
+[data-testid="stDialog"] [role="dialog"] button[aria-label="Close"] {{ color: var(--pp-muted) !important; }}
+[data-testid="stDialog"] [role="dialog"] button[aria-label="Close"]:hover {{ color: var(--pp-ink) !important; background: var(--pp-sunken) !important; }}
 """
+    # Apply every page rule to dialogs as well.
+    return sheet.replace(".stApp ", ':is(.stApp, [data-testid="stDialog"]) ')
 
 
 def inject(st):

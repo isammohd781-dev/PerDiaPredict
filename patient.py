@@ -12,6 +12,11 @@ def render(app):
         app[public[page]]()
         app['render_footer']()
         return
+    if page == 'delete_account' and not st.session_state.get('user'):
+        # Public web page for account deletion (no sign-in header).
+        app['render_delete_account_page']()
+        app['render_footer']()
+        return
     app['render_header']()
     nav = st.columns(3)
     for col, label, destination in zip(nav, [app['field_text']('nav_screening'), app['field_text']('nav_reports'), app['field_text']('nav_care')], ['main','patient_history','patient_care']):
@@ -23,6 +28,8 @@ def render(app):
         app['render_patient_history_page']()
     elif page == 'profile_edit':
         app['render_profile_edit_page']()
+    elif page == 'delete_account':
+        app['render_delete_account_page']()
     else:
         app['render_main_app']()
     app['render_footer']()

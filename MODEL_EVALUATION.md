@@ -1,62 +1,62 @@
-# تقرير تقييم نموذج PerdiaPredict
+# PerdiaPredict model evaluation report
 
-إصدار النموذج: `PP-grouped-2026-09-30-v1`. النموذج المختار: Random Forest، 300 شجرة. العتبة ثابتة 0.5.
+Model version: `PP-grouped-2026-09-30-v1`. Selected model: Random Forest, 300 trees. Fixed threshold 0.5.
 
-## النتائج الفعلية على الاختبار المحجوز
+## Actual results on the held-out test set
 
-| المقياس | النتيجة |
+| Metric | Result |
 |---|---:|
-| عدد السجلات | 50 |
-| الدقة Accuracy | 92.00% (46/50) |
-| فاصل الثقة التقريبي 95% للدقة | 81.2%–96.8% |
-| الحساسية Recall | 97.14% (34/35) |
-| النوعية Specificity | 80.00% (12/15) |
+| Records | 50 |
+| Accuracy | 92.00% (46/50) |
+| Approximate 95% confidence interval for accuracy | 81.2%–96.8% |
+| Sensitivity (recall) | 97.14% (34/35) |
+| Specificity | 80.00% (12/15) |
 | Precision | 91.89% |
 | F1 | 0.9444 |
-| ROC AUC باستخدام الاحتمالات | 0.9638 |
-| Brier، الأقل أفضل | 0.0732 |
-| Log loss، الأقل أفضل | 0.2320 |
+| ROC AUC from probabilities | 0.9638 |
+| Brier (lower is better) | 0.0732 |
+| Log loss (lower is better) | 0.2320 |
 
-34 إيجابية صحيحة، 12 سلبية صحيحة، 3 إيجابيات خاطئة، وحالة إيجابية واحدة لم يكتشفها النموذج.
+34 true positives, 12 true negatives, 3 false positives, and one positive case the model missed.
 
-## طريقة العمل
+## Method
 
-الملف الأصلي 520 صفًا، منها 269 صفًا مكررًا بالكامل. بقيت 251 ملاحظة مختلفة و242 مجموعة مختلفة للمدخلات العشرة المستخدمة. هذه ليست أعداد مرضى مستقلين مؤكدة؛ الملف لا يحتوي معرفات مرضى.
+The original file has 520 rows, of which 269 are exact duplicates. 251 distinct observations remained, forming 242 distinct groups of the ten inputs used. These are not confirmed counts of independent patients; the file contains no patient identifiers.
 
-حذفنا تكرار الصفوف الكامل ثم جمعنا المدخلات العشرة المتطابقة في المجموعة نفسها. التقسيم الخارجي StratifiedGroupKFold من خمس مجموعات، shuffle وseed=42؛ أول مجموعة هي الاختبار النهائي (50)، والباقي للتطوير (201). لا توجد مجموعة مشتركة بين التدريب والاختبار. مقارنة النماذج تمت بتقييم جماعي من خمس طيات داخل التطوير (seed=23). المعايرة sigmoid تستخدم ثلاث طيات جماعية إضافية (seed=71). معالجة العمر داخل pipeline وتُدرَّب في كل طية منفصلة. اخترنا أقل Brier في التطوير، مع log loss لكسر التعادل، قبل حساب الاختبار النهائي. لم نغيّر العتبة أو البذرة وفق نتيجة الاختبار.
+We removed exact duplicate rows, then grouped identical ten-input combinations together. The outer split is StratifiedGroupKFold with five folds, shuffle and seed=42; the first fold is the final test set (50) and the rest is for development (201). No group is shared between training and test. Models were compared with five-fold grouped validation inside development (seed=23). Sigmoid calibration uses three additional grouped folds (seed=71). Age processing is inside the pipeline and fitted separately in each fold. We chose the lowest development Brier, with log loss as tie-breaker, before computing the final test. The threshold and seed were not changed based on the test result.
 
-| النموذج | دقة التحقق داخل التطوير | Brier | Log loss |
+| Model | Development validation accuracy | Brier | Log loss |
 |---|---:|---:|---:|
 | forest | 90.55% | 0.0674 | 0.2267 |
 | forest_sigmoid | 91.04% | 0.0699 | 0.2392 |
 | logistic | 88.06% | 0.0906 | 0.2847 |
 
-المعايرة لم تحسّن معيار اختيار الاحتمالات؛ لذلك الإصدار المرفق يستخدم Random Forest المباشر. لا ندّعي أنه معاير طبيًا. Brier يجمع جودة التمييز والاحتمال ولا يثبت المعايرة وحده.
+Calibration did not improve the probability selection criterion, so the shipped version uses the plain Random Forest. We do not claim it is medically calibrated. Brier combines discrimination and probability quality and does not prove calibration on its own.
 
 ![Exploratory reliability](reliability.png)
 
-المنحنى استكشافي بسبب صغر الاختبار. الاحتمال المعروض ليس دقة النموذج 92%، ولا نسبة مؤكدة لإصابة فرد بعينه. عينة البيانات منتقاة من مستشفى واحد في Sylhet، بنغلاديش، ولا تمثل انتشار السكري في عموم السكان. حذف التكرار يغيّر وزن السجلات ونسبة الفئات. يلزم اختبار خارجي بمعلومات مرضى مستقلة ونتائج مخبرية، ومراجعة المعايرة، قبل الاعتماد السريري. لا يثبت هذا الاختبار التعميم إلى بلد آخر أو تقدير نوع السكري أو خطر الإصابة المستقبلي.
+The curve is exploratory because the test set is small. The displayed probability is not the model's 92% accuracy, nor a confirmed chance that a specific individual has diabetes. The data sample comes from a single hospital in Sylhet, Bangladesh, and does not represent diabetes prevalence in the general population. Removing duplicates changes record weights and class balance. External testing with independent patient information and laboratory results, and a calibration review, are required before clinical use. This test does not demonstrate generalisation to another country, estimation of diabetes type, or future risk.
 
-الميزات العشر مأخوذة من النظام السابق؛ اختيارها التاريخي قد استخدم كامل البيانات، لذلك هذا اختبار محجوز في عملية إعادة التدريب الحالية، وليس دراسة سريرية مستقلة تمامًا. لا يمكن تأكيد دقة النموذج القديم لأن تقسيمه الأصلي غير محفوظ. لا ندّعي تحسنًا مقاسًا على النموذج القديم.
+The ten features come from the previous system; their historical selection may have used the full dataset, so this is a held-out test within the current retraining, not a fully independent clinical study. The accuracy of the old model cannot be confirmed because its original split was not kept. We do not claim a measured improvement over the old model.
 
-## التعديلات في البرنامج
+## Program changes
 
-- حذف ضرب النسبة في عامل عدد الأعراض وحذف إعطاء 0% تلقائيًا عند غيابها.
-- النسبة مباشرة من pipeline الذي أُجري عليه التقييم أعلاه. حفظنا نسخة التطوير المختبرة ولم نُعد تدريبها على الاختبار.
-- لا نستبدل العمر المفقود بعمر 40 ولا نستبدل الجنس غير المدعوم تلقائيًا بذكر. النطاق التشغيلي للعمر 16–85، حسب نطاق التدريب. الاختبار البحثي شمل جميع السجلات المحجوزة حتى إن كان العمر خارج نطاق التدريب؛ التطبيق يرفض تقدير هذه الحالات.
-- حفظ إصدار النموذج وطريقة الاحتمال والعتبة مع التقرير. عند اختلاف الإصدار، لا نفسّر فرق النسب كتغيّر في صحة المريض.
-- الحفاظ على تعديل الملف الشخصي والسجل وتجميع التقارير، والتسجيل فقط عند إجراء فحص ناجح أو إعادة محاولة حفظه.
-- النموذج يستخدم الميزات العشر في metadata فقط. السكر المخبري والأسئلة الإضافية مفيدة للتقرير لكنها لا تغيّر الاحتمال في هذا النموذج؛ لا يجوز ادعاء غير ذلك.
+- Removed multiplying the percentage by a symptom-count factor and removed the automatic 0% when no symptoms are present.
+- The percentage comes directly from the pipeline evaluated above. The tested development model was saved and was not retrained on the test set.
+- Missing age is not replaced with 40, and an unsupported gender is not automatically replaced with male. The operating age range is 16–85, matching the training range. The research test included all held-out records even if age was outside the training range; the app refuses to estimate such cases.
+- The model version, probability method and threshold are saved with the report. When versions differ, a difference in percentages is not interpreted as a change in the patient's health.
+- Profile editing, history and report aggregation were kept, and saving happens only after a successful screening or a retry of that save.
+- The model uses only the ten features in the metadata. Laboratory glucose and the extra questions are useful for the report but do not change the probability in this model; nothing should claim otherwise.
 
-## التحقق والحدود
+## Verification and limits
 
-نجح تطابق احتمالات التطبيق مع نتائج الاختبار، وفحص رفض المدخلات غير المدعومة، وعدم فرض الصفر، وحماية مقارنة الإصدارات. نجحت اختبارات حفظ الفحص ومنع التكرار وعزل سجل المرضى وتوليد PDF. تم فحص syntax لجميع الملفات. لم يُختبر تشغيل واجهة Streamlit بالكامل في هذه البيئة لعدم توفر الحزمة.
+App probabilities matched the test results, rejection of unsupported inputs worked, zero is not forced, and version comparison protection works. Tests for saving a screening, preventing duplicates, isolating patient history and generating PDFs passed. All files were syntax-checked. The full Streamlit interface was not run in that environment because the package was not available.
 
-## المصادر
+## Sources
 
-- UCI، Islam et al. (2020)، DOI: 10.24432/C5VG8H، Early Stage Diabetes Risk Prediction، ترخيص CC BY 4.0: https://archive.ics.uci.edu/dataset/529/early+stage+diabetes+risk+prediction+dataset
-- scikit-learn، Probability calibration: https://scikit-learn.org/stable/modules/calibration.html
-- scikit-learn، Common pitfalls: https://scikit-learn.org/stable/common_pitfalls.html
-- NIDDK، Diabetes Tests & Diagnosis: https://www.niddk.nih.gov/health-information/diabetes/overview/tests-diagnosis
+- UCI, Islam et al. (2020), DOI: 10.24432/C5VG8H, Early Stage Diabetes Risk Prediction, CC BY 4.0 licence: https://archive.ics.uci.edu/dataset/529/early+stage+diabetes+risk+prediction+dataset
+- scikit-learn, Probability calibration: https://scikit-learn.org/stable/modules/calibration.html
+- scikit-learn, Common pitfalls: https://scikit-learn.org/stable/common_pitfalls.html
+- NIDDK, Diabetes Tests & Diagnosis: https://www.niddk.nih.gov/health-information/diabetes/overview/tests-diagnosis
 
-الإنترنت استخدم لتدقيق منهجية التقييم ومصدر البيانات، وليس لإضافة حالات تدريب غير موثقة أو رفع النسبة يدويًا.
+The internet was used to check the evaluation method and the data source, not to add undocumented training cases or raise the percentage manually.

@@ -308,9 +308,10 @@ def doctor_auth_page(page, go_to, countries):
         go_to("doctor_login")
     if page == "doctor_login":
         st.title("Doctor sign in")
-        with st.form("doctor_login_form"):
-            address = st.text_input("Email", max_chars=254, placeholder="name@hospital.org", autocomplete="email")
-            password = st.text_input("Password", type="password", max_chars=128, placeholder="••••••••", autocomplete="current-password")
+        # Sign-in fields start empty: no browser autofill, and cleared after each attempt.
+        with st.form("doctor_login_form", clear_on_submit=True):
+            address = st.text_input("Email", max_chars=254, placeholder="name@hospital.org", autocomplete="off")
+            password = st.text_input("Password", type="password", max_chars=128, placeholder="••••••••", autocomplete="new-password")
             submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
         if submitted:
             doctor, error = login_doctor(address, password)
@@ -318,7 +319,7 @@ def doctor_auth_page(page, go_to, countries):
                 st.error(error)
             else:
                 # Clear previous role-specific patient reports and cached PDFs.
-                retained = {k: st.session_state[k] for k in ("lang", "dark_mode") if k in st.session_state}
+                retained = {k: st.session_state[k] for k in ("lang", "dark_mode", "_splash_seen") if k in st.session_state}
                 for key in list(st.session_state.keys()):
                     del st.session_state[key]
                 st.session_state.update(retained)
