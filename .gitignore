@@ -20,3 +20,17 @@ policy_settings.toml
 .env
 .env.*
 perdiapredict.db
+
+# Local runtime and personal files that must never be published
+*secrets*.txt
+*.xlsx
+*.pdf
+*.log
+uploads/
+private_data/
+documents.db
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

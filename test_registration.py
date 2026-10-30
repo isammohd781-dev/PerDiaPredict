@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory() as temp:
     assert ns['_build_birth_date'](31,4,2000) is None
     assert ns['_build_birth_date'](1,1,2100) is None
     def register(email='patient@example.com',**changes):
-        args=dict(first_name='  Esam   Ali ',last_name='Mohamed',email=email,birth_date=date(2000,1,1),password='Secret123',gender='Male',marital_status='single',diabetes_type='not_sure',country='Uganda',dial_code='+256',phone='0771234567')
+        args=dict(first_name='  Sample   Test ',last_name='Patient',email=email,birth_date=date(2000,1,1),password='Secret123',gender='Male',marital_status='single',diabetes_type='not_sure',country='Uganda',dial_code='+256',phone='0771234567')
         args.update(changes)
         return ns['create_user'](**args)
     assert register()==(True,None)
@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory() as temp:
     assert register('bad',password='Secret123')==(False,'reg_email_invalid')
     assert register('bad@example.com',first_name='123')==(False,'reg_fill_all')
     user,status=ns['authenticate'](' PATIENT@EXAMPLE.COM ','Secret123')
-    assert status=='ok' and user['first_name']=='Esam Ali'
+    assert status=='ok' and user['first_name']=='Sample Test'
     first_id=user['patient_id']
     assert first_id==date.today().strftime('%y%m%d')+'01'
     with ThreadPoolExecutor(max_workers=3) as pool:
@@ -91,7 +91,7 @@ ui.update(auth_card=lambda *a,**kw:nullcontext(),tr=lambda key:key,edit_text=lam
           month_label=lambda x:x,diabetes_type_label=lambda x:x,registration_text=lambda n:str(n),
           COUNTRY_DIAL_CODES=[('🇺🇬','Uganda','+256')],render_support_card=lambda:None)
 exec(compile(ast.Module(body=[render],type_ignores=[]),'registration_ui','exec'),ui)
-values=dict(reg_first='Esam',reg_last='Mohamed',reg_email='test@example.com',reg_gender='Male',
+values=dict(reg_first='Sample',reg_last='Patient',reg_email='test@example.com',reg_gender='Male',
             reg_marital='single',reg_year=2000,reg_month=1,reg_day=1,reg_diabetes_type='not_sure',
             reg_country=('🇺🇬','Uganda','+256'),reg_phone='+256771234567',reg_pw='Secret123',reg_pw2='Secret123',reg_accept=True)
 ui['st']=FakeStreamlit({});ui['create_user']=lambda *a:(_ for _ in ()).throw(AssertionError('Invalid input saved'))
