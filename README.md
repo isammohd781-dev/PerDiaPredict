@@ -24,7 +24,7 @@ fonts/  logo.png                  report fonts (with licences) and the logo
 tests/                            automated checks (run tests/run_checks.py)
 docs/                             setup, security, store readiness, model evaluation and change log
 scripts/                          one-app Windows launchers
-deploy/  Dockerfile               nginx HTTPS template and container build
+deploy/  Dockerfile  render.yaml  Render deployment (all three apps in one service) and nginx templates
 ```
 
 ## Admin password
@@ -49,6 +49,7 @@ Tests use temporary synthetic accounts. `tests/test_inference.py` also checks th
 ## More
 
 - `docs/START_HERE.md` and `docs/SEPARATE_PAGES.md`: installation, ports, moving data
+- `docs/DEPLOY_RENDER.md`: deploying on Render (free plan is for testing only)
 - `docs/STORE_READINESS.md`: App Store / Google Play checklist (account deletion link: `?account=delete`)
 - `docs/MODEL_EVALUATION.md`: how the model was trained and tested
 - `docs/TEN_LANGUAGE_STATUS.md`: translation coverage

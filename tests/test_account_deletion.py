@@ -30,7 +30,7 @@ for n in tree.body:
 store = {"lock": threading.RLock(), "mtime": None, "rows": []}
 logged = []
 ns.update(_accounts_store=lambda: store, log_action=lambda *a: logged.append(a), care=care,
-          account_deletion=account_deletion, BASE_DIR=temp, HISTORY_DB=os.path.join(temp, "patient_history.db"),
+          account_deletion=account_deletion, BASE_DIR=temp, DATA_DIR=temp, HISTORY_DB=os.path.join(temp, "patient_history.db"),
           ACCOUNTS_FILE=os.path.join(temp, "accounts.xlsx"), DB_FILE=os.path.join(temp, "old.db"),
           SAVE_FILE_XLSX=os.path.join(temp, "saved_reports.xlsx"), AUDIT_LOG_FILE=os.path.join(temp, "audit_log.xlsx"))
 module = ast.Module(body=[n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names], type_ignores=[])

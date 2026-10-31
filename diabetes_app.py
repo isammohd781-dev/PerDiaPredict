@@ -53,10 +53,14 @@ portal_runtime.expire_idle(APP_ROLE)
 # Files / configuration
 # ---------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Runtime data (accounts, reports, databases, photos). On a server, point PERDIA_DATA_DIR at a
+# persistent disk; locally it defaults to the project folder as before.
+DATA_DIR = os.environ.get("PERDIA_DATA_DIR") or BASE_DIR
+os.makedirs(DATA_DIR, exist_ok=True)
 MODEL_PATH = os.path.join(BASE_DIR, "model", "diabetes_model.pkl")
 COLUMNS_PATH = os.path.join(BASE_DIR, "model", "feature_columns.pkl")
-SAVE_FILE_XLSX = os.path.join(BASE_DIR, "saved_reports.xlsx")
-AUDIT_LOG_FILE = os.path.join(BASE_DIR, "audit_log.xlsx")
+SAVE_FILE_XLSX = os.path.join(DATA_DIR, "saved_reports.xlsx")
+AUDIT_LOG_FILE = os.path.join(DATA_DIR, "audit_log.xlsx")
 LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
 
 
@@ -632,7 +636,7 @@ def profile_photo_bytes(user):
     name = user.get("profile_photo", "")
     if not name or os.path.basename(name) != name:
         return None
-    path = os.path.join(BASE_DIR, "profile_photos", name)
+    path = os.path.join(DATA_DIR, "profile_photos", name)
     try:
         with open(path, "rb") as photo:
             return photo.read()
@@ -646,9 +650,9 @@ def commit_profile_changes(changes):
     photo_data = changes.pop("photo_data", None)
     photo_name = changes.pop("photo_name", None)
     if photo_data is not None:
-        os.makedirs(os.path.join(BASE_DIR, "profile_photos"), exist_ok=True)
+        os.makedirs(os.path.join(DATA_DIR, "profile_photos"), exist_ok=True)
         photo_name = hashlib.sha256(photo_data).hexdigest() + ".png"
-        target = os.path.join(BASE_DIR, "profile_photos", photo_name)
+        target = os.path.join(DATA_DIR, "profile_photos", photo_name)
         with open(target + ".tmp", "wb") as out:
             out.write(photo_data)
         os.replace(target + ".tmp", target)
@@ -918,8 +922,8 @@ GLUCOSE_RANGE = {"mg/dL": (20.0, 1000.0), "mmol/L": (1.1, 55.0)}
 # =============================================================================
 # Accounts database (Excel: accounts.xlsx)
 # =============================================================================
-ACCOUNTS_FILE = os.path.join(BASE_DIR, "accounts.xlsx")
-DB_FILE = os.path.join(BASE_DIR, "perdiapredict.db")
+ACCOUNTS_FILE = os.path.join(DATA_DIR, "accounts.xlsx")
+DB_FILE = os.path.join(DATA_DIR, "perdiapredict.db")
 PBKDF2_ITERATIONS = 260_000
 MIN_PASSWORD_LEN = 8
 MAX_FAILED_LOGINS = 5
@@ -1407,7 +1411,7 @@ def delete_patient_account(email: str, password: str):
             account_deletion.purge_legacy_sqlite(DB_FILE, email)
             rows = _load_rows()
             remaining = [r for r in rows if r["email"] != email]
-            account_deletion.remove_photo(os.path.join(BASE_DIR, "profile_photos"), row.get("profile_photo", ""),
+            account_deletion.remove_photo(os.path.join(DATA_DIR, "profile_photos"), row.get("profile_photo", ""),
                                           {r.get("profile_photo") for r in remaining})
             _save_rows(remaining)
         except Exception:
@@ -2873,7 +2877,7 @@ def save_report_to_excel(report: dict):
 # =============================================================================
 
 # Patient history: immutable assessments scoped to the signed-in account.
-HISTORY_DB = os.path.join(BASE_DIR, "patient_history.db")
+HISTORY_DB = os.path.join(DATA_DIR, "patient_history.db")
 
 
 def history_text(en, ar):

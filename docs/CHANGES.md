@@ -1,3 +1,8 @@
+# Render deployment — 2026-10-31
+- One Docker service runs the patient (/), doctor (/doctor/) and admin (/admin/) apps behind nginx, so all three share the same data. Files: render.yaml, Dockerfile, deploy/render-start.sh, deploy/nginx-render.conf; guide in docs/DEPLOY_RENDER.md.
+- New setting PERDIA_DATA_DIR: runtime data (accounts, reports, databases, photos) can live on a persistent disk. Locally it still defaults to the project folder.
+- render.yaml is set to the free plan for testing (no disk, data is lost on restart). The disk block is ready to enable on a paid plan.
+
 # Tidier project layout — 2026-10-31
 - Fewer files at the top level: documentation moved to docs/, tests to tests/, the model and its data to model/, the one-app launchers to scripts/, and the two extra settings templates to .streamlit/. START_ALL.bat, README.md and the app code stay at the top.
 - Paths updated in the app, launchers and tests. Run tests with `python tests/run_checks.py`. Docker images exclude tests, docs and scripts.

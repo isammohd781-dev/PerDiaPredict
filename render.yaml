@@ -1,0 +1,23 @@
+# Render Blueprint: one web service running the patient, doctor and admin apps.
+# Patient: https://<service>.onrender.com/   Doctor: /doctor/   Admin: /admin/
+#
+# FREE PLAN = TESTING ONLY: there is no persistent disk, so every account, report and doctor
+# is deleted whenever the service restarts, redeploys or wakes from sleep. Do not use it for
+# real patients. To keep data: change plan to a paid type (2 GB RAM recommended for the three
+# apps) and remove the # in front of the disk lines below.
+services:
+  - type: web
+    name: perdiapredict
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PERDIA_ADMIN_PASSWORD
+        sync: false            # Render asks for it when the Blueprint is created
+      - key: PERDIA_DATA_DIR
+        value: /var/data
+    # disk:
+    #   name: perdiapredict-data
+    #   mountPath: /var/data
+    #   sizeGB: 1

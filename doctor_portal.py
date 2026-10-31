@@ -10,7 +10,7 @@ import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
-CARE_DB = os.environ.get("PERDIA_CARE_DB", os.path.join(os.path.dirname(os.path.abspath(__file__)), "care_team.db"))
+CARE_DB = os.environ.get("PERDIA_CARE_DB", os.path.join(os.environ.get("PERDIA_DATA_DIR") or os.path.dirname(os.path.abspath(__file__)), "care_team.db"))
 
 
 def now():
