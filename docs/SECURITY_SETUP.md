@@ -20,7 +20,7 @@ Activity: choose current care country, then a patient. After verification, only 
 ## Local test configuration
 
 1. Retain your project files, accounts and databases. Add `disclosure_access.py` and replace `admin_dashboard.py` and `diabetes_app.py` from this package.
-2. Merge the example keys from `disclosure_secrets.example.toml` into a private `.streamlit/secrets.toml`. Never upload the actual secrets file, patient data or databases to public GitHub.
+2. Merge the example keys from `.streamlit/disclosure_secrets.example.toml` into a private `.streamlit/secrets.toml`. Never upload the actual secrets file, patient data or databases to public GitHub.
 3. Set a long, unique DISCLOSURE_PASSWORD locally. No working password is shipped in this package.
 4. For a software test, an authorized tester can register a permit for a synthetic patient. Use their exact patient ID, email and current country. Mark it explicitly as a synthetic test in `authority`, `request_reference`, `approved_by`, and `purpose`. Set `medical_approved` to true only for that authorized synthetic test, and set a short future UTC expiration. This test flag is not medical approval for real data.
 5. Restart the application. Select the patient in Reports or Activity and enter the custodial password and permit reference.

@@ -1,15 +1,20 @@
 """Real entry scripts: independent roles, shared consented follow-up, no cross-role navigation."""
+import os as _os, sys as _sys
+from pathlib import Path as _Path
+ROOT_DIR = _Path(__file__).resolve().parent.parent  # project folder; tests live in tests/
+_sys.path.insert(0, str(ROOT_DIR)); _sys.path.insert(1, str(_Path(__file__).resolve().parent)); _os.chdir(ROOT_DIR)
 from pathlib import Path
 from types import SimpleNamespace
 import os,sys,tempfile,shutil,hashlib
 import pandas as pd
-ROOT=Path(__file__).resolve().parent
+ROOT=ROOT_DIR
 with tempfile.TemporaryDirectory() as temp:
     root=Path(temp)
     for p in ROOT.iterdir():
         if p.suffix in ('.py','.pkl','.json','.png'):
             shutil.copy2(p,root/p.name)
     (root/'fonts').symlink_to(ROOT/'fonts',target_is_directory=True)
+    (root/'model').symlink_to(ROOT/'model',target_is_directory=True)
     os.environ['PERDIA_ADMIN_PASSWORD']='SyntheticAdminTest123'
     os.environ['PERDIA_CARE_DB']=str(root/'care_team.db')
     sys.path.insert(0,str(root))

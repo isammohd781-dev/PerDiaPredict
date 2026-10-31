@@ -1,6 +1,6 @@
 # Running the separate-pages version
 
-Start with START_ALL.bat, or START_PATIENT.bat, START_DOCTOR.bat or START_ADMIN.bat. Instructions and links are in SEPARATE_PAGES.md.
+Start with START_ALL.bat, or scripts/START_PATIENT.bat, scripts/START_DOCTOR.bat or scripts/START_ADMIN.bat. Instructions and links are in SEPARATE_PAGES.md.
 
 # Running the clean version
 

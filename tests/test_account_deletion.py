@@ -1,4 +1,8 @@
 """Account deletion removes every record of one patient, keeps others intact, and never reuses the ID."""
+import os as _os, sys as _sys
+from pathlib import Path as _Path
+ROOT_DIR = _Path(__file__).resolve().parent.parent  # project folder; tests live in tests/
+_sys.path.insert(0, str(ROOT_DIR)); _sys.path.insert(1, str(_Path(__file__).resolve().parent)); _os.chdir(ROOT_DIR)
 import ast, calendar, hashlib, hmac, json, os, re, secrets, sqlite3, tempfile, threading, unicodedata
 from contextlib import closing, contextmanager
 from datetime import date, datetime, timedelta
@@ -10,7 +14,7 @@ os.environ["PERDIA_CARE_DB"] = os.path.join(temp, "care_team.db")
 import account_deletion
 import doctor_portal as care
 
-source = Path(__file__).resolve().with_name("diabetes_app.py").read_text()
+source = (ROOT_DIR/"diabetes_app.py").read_text()
 tree = ast.parse(source)
 names = {"normalize_email", "normalize_person_name", "valid_person_name", "normalize_registration_phone",
          "hash_password", "verify_password", "_cell_text", "_rows_from_sheet", "_save_rows", "_import_old_sqlite",

@@ -33,7 +33,7 @@ We removed exact duplicate rows, then grouped identical ten-input combinations t
 
 Calibration did not improve the probability selection criterion, so the shipped version uses the plain Random Forest. We do not claim it is medically calibrated. Brier combines discrimination and probability quality and does not prove calibration on its own.
 
-![Exploratory reliability](reliability.png)
+![Exploratory reliability](../model/reliability.png)
 
 The curve is exploratory because the test set is small. The displayed probability is not the model's 92% accuracy, nor a confirmed chance that a specific individual has diabetes. The data sample comes from a single hospital in Sylhet, Bangladesh, and does not represent diabetes prevalence in the general population. Removing duplicates changes record weights and class balance. External testing with independent patient information and laboratory results, and a calibration review, are required before clinical use. This test does not demonstrate generalisation to another country, estimation of diabetes type, or future risk.
 

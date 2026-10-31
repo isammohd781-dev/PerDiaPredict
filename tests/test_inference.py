@@ -1,9 +1,13 @@
 """Run: python test_inference.py. No patient files are read or written."""
+import os as _os, sys as _sys
+from pathlib import Path as _Path
+ROOT_DIR = _Path(__file__).resolve().parent.parent  # project folder; tests live in tests/
+_sys.path.insert(0, str(ROOT_DIR)); _sys.path.insert(1, str(_Path(__file__).resolve().parent)); _os.chdir(ROOT_DIR)
 from pathlib import Path
 import ast,json
 import numpy as np,pandas as pd
 from screening_model import load_screening_artifacts,predict_screening
-root=Path(__file__).resolve().parent
+root=ROOT_DIR/'model'
 model,features,meta=load_screening_artifacts(root/'diabetes_model.pkl',root/'feature_columns.pkl')
 df=pd.read_csv(root/'diabetes_data_upload.csv').drop_duplicates().reset_index(drop=True)
 test=pd.read_csv(root/'heldout_predictions.csv')

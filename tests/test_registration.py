@@ -1,10 +1,14 @@
+import os as _os, sys as _sys
+from pathlib import Path as _Path
+ROOT_DIR = _Path(__file__).resolve().parent.parent  # project folder; tests live in tests/
+_sys.path.insert(0, str(ROOT_DIR)); _sys.path.insert(1, str(_Path(__file__).resolve().parent)); _os.chdir(ROOT_DIR)
 import ast, calendar, hashlib, hmac, os, re, secrets, sqlite3, tempfile, threading, unicodedata
 from contextlib import closing
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
-source=Path(__file__).resolve().with_name('diabetes_app.py').read_text()
+source=(ROOT_DIR/'diabetes_app.py').read_text()
 tree=ast.parse(source)
 names={'normalize_email','normalize_person_name','valid_person_name','normalize_registration_phone','hash_password','verify_password','_cell_text','_rows_from_sheet','_save_rows','_import_old_sqlite','_load_rows','_update_account','create_user','authenticate','_authenticate_locked','generate_patient_id','_build_birth_date','age_from_birth_date'}
 module=ast.Module(body=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in names],type_ignores=[])

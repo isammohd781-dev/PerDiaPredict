@@ -1,4 +1,8 @@
 """Policy navigation with anonymous and signed-in sessions, in five languages."""
+import os as _os, sys as _sys
+from pathlib import Path as _Path
+ROOT_DIR = _Path(__file__).resolve().parent.parent  # project folder; tests live in tests/
+_sys.path.insert(0, str(ROOT_DIR)); _sys.path.insert(1, str(_Path(__file__).resolve().parent)); _os.chdir(ROOT_DIR)
 from pathlib import Path
 import sys
 sys.path.insert(0,str(Path('test_ui_deps').resolve()))

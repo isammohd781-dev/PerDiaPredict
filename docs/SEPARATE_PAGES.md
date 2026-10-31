@@ -4,9 +4,9 @@ This version is built on the attached PerdiaPredict-improved.zip and keeps its f
 
 | Page | Page file | Windows launcher | Local link |
 |---|---|---|---|
-| Patient | patient.py | START_PATIENT.bat | http://127.0.0.1:8501/ |
-| Doctor | doctor.py | START_DOCTOR.bat | http://127.0.0.1:8502/ |
-| Administration | admin.py | START_ADMIN.bat | http://127.0.0.1:8503/ |
+| Patient | patient.py | scripts/START_PATIENT.bat | http://127.0.0.1:8501/ |
+| Doctor | doctor.py | scripts/START_DOCTOR.bat | http://127.0.0.1:8502/ |
+| Administration | admin.py | scripts/START_ADMIN.bat | http://127.0.0.1:8503/ |
 
 ## Running
 

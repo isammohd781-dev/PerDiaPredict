@@ -1,43 +1,55 @@
-# Independent portal applications
-
-Run `python launch.py all` (Python 3.11–3.13), or double-click START_ALL.bat on Windows. Patient: port 8501; Doctor: 8502; Administration: 8503. Each portal has its own entry file and Streamlit session. All three share the same project data directory. See SEPARATE_PAGES.md for startup, migration and permissions.
-
 # PerdiaPredict
-Development Streamlit application for educational diabetes risk screening.
 
-## Local setup
-Use Python 3.12 or 3.13. Extract this release into a NEW folder to begin with empty data. Do not merge the old folder or copy its databases, XLSX files, profile photos or secrets into this release.
+Educational diabetes risk screening built with Streamlit. Three separate apps share one data folder:
 
-Windows PowerShell:
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m streamlit run diabetes_app.py
+| App | Port | Start on Windows |
+|---|---|---|
+| Patient | 8501 | `START_ALL.bat` (all three) or `scripts/START_PATIENT.bat` |
+| Doctor | 8502 | `scripts/START_DOCTOR.bat` |
+| Administration | 8503 | `scripts/START_ADMIN.bat` |
+
+Or from a terminal: `python launch.py all` (Python 3.11–3.13). The first run creates `.venv` and installs `requirements.txt`.
+
+This is not a medical device. It does not diagnose diabetes and is not clinically validated.
+
+## Project layout
+
 ```
-If activation is unavailable, use `.\.venv\Scripts\python.exe` directly for the pip and Streamlit commands.
+patient.py, doctor.py, admin.py   entry point of each app
+diabetes_app.py                   shared app logic and screens
+*.py (other)                      features: accounts, doctor portal, policies, reports, theme, translations
+model/                            trained model, metadata, training data and train_model.py
+fonts/  logo.png                  report fonts (with licences) and the logo
+.streamlit/                       config.toml and *.example.toml settings templates
+tests/                            automated checks (run tests/run_checks.py)
+docs/                             setup, security, store readiness, model evaluation and change log
+scripts/                          one-app Windows launchers
+deploy/  Dockerfile               nginx HTTPS template and container build
+```
 
-All runtime records are created automatically as needed. No patient accounts, doctor accounts, reports, consent links, notes, audit events or active disclosure permits are bundled.
+## Admin password
 
-## Admin configuration
-Copy `.streamlit/secrets.example.toml` to `.streamlit/secrets.toml`. Set ADMIN_PASSWORD to a new private password. Admin access is disabled until a password is configured; there is no built-in admin password. Set DISCLOSURE_PASSWORD independently (at least 16 characters) only when configuring restricted reports/activity access. Keep root settings above permit tables. Read SECURITY_SETUP.md and GROUP_ACCESS_SETUP.md before configuring any permit.
-Environment alternatives include PERDIA_ADMIN_PASSWORD and PERDIA_DISCLOSURE_PASSWORD.
-Private secrets and runtime data are excluded by the supplied git/Docker ignore rules.
+Copy `.streamlit/secrets.example.toml` to `.streamlit/secrets.toml` and set `ADMIN_PASSWORD` to your own private password. Admin access stays disabled until it is set; there is no default password. On a server, use the `PERDIA_ADMIN_PASSWORD` environment variable instead. Restricted report access (`DISCLOSURE_PASSWORD`, at least 16 characters) is optional; see `docs/SECURITY_SETUP.md` and `docs/GROUP_ACCESS_SETUP.md`. The other templates (`disclosure_secrets.example.toml`, `policy_settings.example.toml`) are in `.streamlit/` too.
 
-## Starting again
-Register a new patient through the application. Register a new doctor, approve the doctor in Admin / Doctors after reviewing the submitted details, then sign in as the doctor. Obtain the doctor's generated follow-up code from their dashboard. A patient enters that code, presses Enter and uses Connect to view the doctor, then gives consent and confirms the follow-up request. The doctor accepts the request to obtain access.
-No pre-created demo doctor is included.
+Secrets and all runtime data (accounts, reports, databases, photos) are created locally and excluded by `.gitignore`. No accounts or records are included.
+
+## First use
+
+Register a patient. Register a doctor, approve them in Admin → Doctors, then sign in as the doctor and copy their follow-up code. The patient enters the code, connects, gives consent and sends the request; the doctor accepts it.
 
 ## Tests
+
 ```powershell
 python -m pip install -r requirements-dev.txt
-python run_checks.py
+python tests/run_checks.py
 ```
-Tests use temporary synthetic accounts, records and adapters. test_inference.py additionally verifies the actual bundled model against the supplied held-out predictions. Generated test PDFs are placed in tmp/.
 
-## Assets and limitations
-Keep the trained model, feature columns, model_metadata.json, logo, fonts and font license files together. Scaling is already inside the model pipeline, so a separate age_scaler.pkl is unnecessary.
-Training data, train_model.py, held-out evaluation and MODEL_EVALUATION.md are retained for reproducibility; they are not patient account records entered in this application.
-The model supports ages 16 to 85. It is not clinically validated and does not diagnose diabetes. Model probabilities are preserved; an all-No screening is not artificially forced to zero.
-Read TEN_LANGUAGE_STATUS.md for actual translation coverage. Some newer workflows and five additional policy-body translations remain incomplete.
-App access restrictions do not encrypt files at rest or prevent the code/machine owner from bypassing them. Deployment approvals and production controls remain outside this prototype review.
+Tests use temporary synthetic accounts. `tests/test_inference.py` also checks the bundled model against the held-out predictions in `model/`.
+
+## More
+
+- `docs/START_HERE.md` and `docs/SEPARATE_PAGES.md`: installation, ports, moving data
+- `docs/STORE_READINESS.md`: App Store / Google Play checklist (account deletion link: `?account=delete`)
+- `docs/MODEL_EVALUATION.md`: how the model was trained and tested
+- `docs/TEN_LANGUAGE_STATUS.md`: translation coverage
+- `docs/CHANGES.md`: change log

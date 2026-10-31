@@ -1,3 +1,7 @@
+# Tidier project layout — 2026-10-31
+- Fewer files at the top level: documentation moved to docs/, tests to tests/, the model and its data to model/, the one-app launchers to scripts/, and the two extra settings templates to .streamlit/. START_ALL.bat, README.md and the app code stay at the top.
+- Paths updated in the app, launchers and tests. Run tests with `python tests/run_checks.py`. Docker images exclude tests, docs and scripts.
+
 # Account deletion, store requirements and field buttons — 2026-10-30
 
 ## Account deletion
@@ -29,7 +33,7 @@
 - Every signed-in session (patient, doctor and admin) ends exactly 15 minutes after sign-in, even while the person is active. A browser timer signs out on screen at that moment without a click, and the server enforces the same limit on any later request. This replaces the previous 30-minute inactivity rule. Change SESSION_MINUTES in portal_runtime.py to adjust.
 - The browser Back button never returns to a signed-in page. While signed in, Back ends the session and opens the sign-in page (patient, doctor) or the admin password page; language and theme are kept. Pages restored from the browser's back/forward cache are reloaded the same way.
 - Sign-in fields (patient, doctor, admin, account deletion) ask the browser not to autofill, and are cleared after every attempt.
-- New test_session_expiry.py (added to run_checks.py).
+- New test_session_expiry.py (added to tests/run_checks.py).
 
 ## Admin setup
 - When the admin password is missing, the admin page now says if the settings file was saved as secrets.toml.toml / secrets.toml.txt (Windows hides extensions), or if secrets.toml exists but ADMIN_PASSWORD is empty.
@@ -38,8 +42,8 @@
 - launch.py detects a .venv without pip (left by an interrupted first run), repairs it, or rebuilds the environment. Data files are never touched.
 
 ## Tests
-- New test_account_deletion.py (added to run_checks.py); it passed together with test_registration.py and test_doctor_portal.py.
-- UI tests need Streamlit, which could not be installed in the review environment. Run `python run_checks.py` locally.
+- New test_account_deletion.py (added to tests/run_checks.py); it passed together with test_registration.py and test_doctor_portal.py.
+- UI tests need Streamlit, which could not be installed in the review environment. Run `python tests/run_checks.py` locally.
 
 ---
 

@@ -53,8 +53,8 @@ portal_runtime.expire_idle(APP_ROLE)
 # Files / configuration
 # ---------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "diabetes_model.pkl")
-COLUMNS_PATH = os.path.join(BASE_DIR, "feature_columns.pkl")
+MODEL_PATH = os.path.join(BASE_DIR, "model", "diabetes_model.pkl")
+COLUMNS_PATH = os.path.join(BASE_DIR, "model", "feature_columns.pkl")
 SAVE_FILE_XLSX = os.path.join(BASE_DIR, "saved_reports.xlsx")
 AUDIT_LOG_FILE = os.path.join(BASE_DIR, "audit_log.xlsx")
 LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
