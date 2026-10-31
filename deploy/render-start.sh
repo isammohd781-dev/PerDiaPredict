@@ -22,9 +22,14 @@ common="--server.address=127.0.0.1 --server.headless=true"
 run_as_app streamlit run patient.py --server.port=8501 $common &
 run_as_app streamlit run doctor.py  --server.port=8502 --server.baseUrlPath=doctor $common &
 run_as_app streamlit run admin.py   --server.port=8503 --server.baseUrlPath=admin  $common &
-run_as_app nginx -e /dev/stderr -c /tmp/nginx.conf -g 'daemon off;' &
+# Check the configuration first so any mistake is printed clearly in the Render logs.
+nginx -e stderr -t -c /tmp/nginx.conf
+nginx -e stderr -c /tmp/nginx.conf -g 'daemon off;' &
+echo "PerdiaPredict: nginx listening on port $PORT (patient /, doctor /doctor/, admin /admin/)" >&2
 
-# If any process stops, stop the container so the platform restarts it cleanly.
-wait -n 2>/dev/null || wait
-echo "A PerdiaPredict process stopped; exiting so the platform restarts the service." >&2
+# If any process stops (an app or nginx), stop the container so the platform restarts it.
+set +e
+wait -n
+status=$?
+echo "A PerdiaPredict process stopped (exit $status); exiting so the platform restarts the service." >&2
 exit 1
